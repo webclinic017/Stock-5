@@ -369,7 +369,7 @@ def change_dict_score_weight(dict_score, a_weight=[]):
 def backtest_multiple(loop_indicator=1):
     setting = {
         # general = Non changeable through one run
-        "start_date": "20200101",
+        "start_date": "20100101",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",

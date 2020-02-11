@@ -910,4 +910,4 @@ else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
 
 
 def today():
-    return str(pd.datetime.now().date()).replace("-", "")
+    return str(datetime.now().date()).replace("-", "")
