@@ -1138,7 +1138,7 @@ def read(a_path=[], step=-1):  # if step is -1, read feather first
 
     # reorder dict if nessesary to read csv first
     dict_final = {}
-    for key in list(dict_format)[::-1]:
+    for key in list(dict_format)[::step]:
         dict_final[key] = dict_format[key]
 
     # iterate over and read
@@ -1150,8 +1150,8 @@ def read(a_path=[], step=-1):  # if step is -1, read feather first
         try:
             df = function(**kwargs)
             return df
-        except:
-            pass
+        except Exception as e:
+            print(format, e)
 
     print("DB READ File Not Exist!", a_path[0])
     return pd.DataFrame()
@@ -1379,9 +1379,9 @@ def check_tushare_upto_date():
         return False
 
 
-def preload(load="asset"):
+def preload(load="asset", step=1):
     dict_result = {}
-    df_listing = get_ts_code() if load == "asset" else get_trade_date(start_date="20000101")
+    df_listing = get_ts_code()[::step] if load == "asset" else get_trade_date(start_date="20000101")[::step]
     key = "ts_code" if load == "asset" else "trade_date"
     func = get_asset if load == "asset" else get_date
 
@@ -1475,26 +1475,14 @@ def std(xs):
 if __name__ == '__main__':
     try:
         # update_all_in_one(big_update=False)
-        # update_all_in_one(False)
+        #
         # TODO add concept
         # update_custom_index(big_update=True)
 
         pr = cProfile.Profile()
         pr.enable()
+        update_all_in_one(False)
 
-        big_update = False
-
-        # update_cj_index_000001_SH()
-        # 3.3. DATE - BASE
-        # update_date_base(start_date="19990104", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide
-        print("what")
-        # 3.4. DATE - TREND
-        # Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=big_update)  # big: override - small: override
-
-        # 4.1. CUSTOM - INDEX
-        # update_custom_index(big_update=big_update)
-
-        # df.to_csv("test.csv")
         pr.disable()
         pr.print_stats(sort='file')
 

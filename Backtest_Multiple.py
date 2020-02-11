@@ -16,7 +16,6 @@ import Backtest_Util
 import copy
 import cProfile
 import threading
-import msvcrt
 from numba import njit
 from numba import jit
 
@@ -417,7 +416,7 @@ def backtest_multiple(loop_indicator=1):
         "p_add_position": False,
         # "p_stop_lose": 0.5,  # sell stock if comp_gain < 0.5 times of initial value
         # "p_stop_win": 100,  # sell stock if comp_gain > 100 times of initial value
-        "p_compare": [["I", "CJ000001.SH"], ["I", "000001.SH"], ["I", "399001.SZ"], ["I", "399006.SZ"]],  # compare portfolio against other performance
+        "p_compare": [],  # ["I", "CJ000001.SH"], ["I", "000001.SH"], ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
     # ascending True= small, False is big
