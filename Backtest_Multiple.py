@@ -73,6 +73,9 @@ def backtest_once(settings=[{}]):
             print("BREAK loop")
             Util.sound("break.mp3")
             time.sleep(3)
+            # adjust date if loop was break
+            for setting in settings:
+                setting["end_date"] = today
             break
 
         # initialize df_date
