@@ -745,8 +745,9 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     if not big_update:
 
         try:
-            df_saved = get_stock_market_all().reset_index()
+            df_saved = get_stock_market_all()
             last_saved_date = df_saved.index[len(df_saved) - 1]
+            df_saved = df_saved.reset_index()
             print(last_saved_date)
 
             if last_saved_date == last_trade_date:
@@ -1151,7 +1152,7 @@ def read(a_path=[], step=-1):  # if step is -1, read feather first
             df = function(**kwargs)
             return df
         except Exception as e:
-            print(format, e)
+            print("read error", format, e)
 
     print("DB READ File Not Exist!", a_path[0])
     return pd.DataFrame()
@@ -1477,6 +1478,7 @@ if __name__ == '__main__':
         # update_all_in_one(big_update=False)
         #
         # TODO add concept
+        # TODO invalid continuation of bye when storing asset, DB read error
         # update_custom_index(big_update=True)
 
         pr = cProfile.Profile()

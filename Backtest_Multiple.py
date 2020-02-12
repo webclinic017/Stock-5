@@ -320,6 +320,7 @@ def backtest_once(settings=[{}]):
     # 10 STEP CREATE REPORT AND BACKTEST OVERVIEW
     a_summary_overview = []
     a_summary_setting = []
+    Util.sound("saving.mp3")
     for setting, setting_count, portfolio in zip(settings, range(0, len(settings)), a_portfolios):
         try:
             now = mytime.time()
@@ -371,7 +372,7 @@ def change_dict_score_weight(dict_score, a_weight=[]):
 def backtest_multiple(loop_indicator=1):
     setting = {
         # general = Non changeable through one run
-        "start_date": "20100101",
+        "start_date": "20200201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -416,17 +417,18 @@ def backtest_multiple(loop_indicator=1):
         "p_add_position": False,
         # "p_stop_lose": 0.5,  # sell stock if comp_gain < 0.5 times of initial value
         # "p_stop_win": 100,  # sell stock if comp_gain > 100 times of initial value
-        "p_compare": [],  # ["I", "CJ000001.SH"], ["I", "000001.SH"], ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
+        "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
     # ascending True= small, False is big
     s_weight_matrix = {
         # "candle_net_pos": [False, 0.1, 0.5],
-        "pct_chg": [False, 0.2, 1],  # very important
-        "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
+        # "pct_chg": [False, 0.2, 1],  # very important
+        # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
         # "turnover_rate": [True, 0.1, 0.5],
-        "ivola": [True, 0.4, 1],  # seems important
-        "trend": [False, 0.3, 1],  # very important for this strategy
+        # "ivola": [True, 0.4, 1],  # seems important
+        "trend2": [False, 1, 1],  # very important for this strategy
+        "pgain2": [True, 1, 1],  # very important for this strategy
     }
 
     # TODO add rsi and trend to all assets
@@ -440,10 +442,10 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
 
     a_columns = [["total_mv", True, 0.05, 1], ["p5", False, 0.15, 1], ["pct_chg", False, 0.25, 1], ["trend", False, 0.25, 1], ["pjump_up", False, 0.05, 1], ["ivola", True, 0.05, 1], ["candle_net_pos", False, 0.15, 1]]  #
-    a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["candle_net_pos", False, 1, 1], ["pjump_up", False, 1, 1], ["ivola", True, 1, 1], ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["turnover_rate", True, 1, 1], ["pb", True, 1, 1], ["total_mv", 1, 1]]  #
+    a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["trend2", False, 1, 1], ["trend10", False, 1, 1], ["candle_net_pos", False, 1, 1], ["candle_net_pos5", False, 1, 1], ["pjump_up", False, 1, 1], ["pjump_up10", False, 1, 1], ["ivola", True, 1, 1], ["ivola5", True, 1, 1],
+                 ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     for label1, label2 in combinations(a_columns, 2):
-
         for label1_true in [True, False]:
             for label2_true in [True, False]:
                 setting_copy = copy.deepcopy(setting)
@@ -454,6 +456,7 @@ def backtest_multiple(loop_indicator=1):
                     label2[0]: [label2_true, 1, 1]
                 }
 
+                setting_copy = copy.deepcopy(setting)
                 setting_copy["s_weight_matrix"] = s_weight_matrix
                 a_settings.append(setting_copy)
                 print(s_weight_matrix)

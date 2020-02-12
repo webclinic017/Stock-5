@@ -623,7 +623,8 @@ def to_csv_feather(df, a_path, encoding='', index=False, reset_index=True, drop=
 
     try:
         df.to_feather(a_path[1])
-    except:
+    except Exception as e:
+        print("save feather error")
         traceback.print_exc()
 
 

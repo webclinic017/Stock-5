@@ -9,6 +9,7 @@ import Util
 from datetime import datetime
 from numba import njit
 from numba import jit
+from pathlib import Path
 
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
@@ -186,23 +187,22 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     now = print_and_time(setting_count=setting_count, phase="Step6", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # write portfolio
-    portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"]) + ".xlsx"
-    portfolio_writer = pd.ExcelWriter(portfolio_path, engine='openpyxl')
-    df_port_overview.to_excel(portfolio_writer, sheet_name="Overview", index=False)
-    df_trade_h.to_excel(portfolio_writer, sheet_name="Trade_History", index=False, encoding='utf-8_sig')
-    df_port_h.to_excel(portfolio_writer, sheet_name="Portfolio_History", index=False, encoding='utf-8_sig')
-    df_port_c_pct_chg.to_excel(portfolio_writer, sheet_name="Pct_Chg", index=True, encoding='utf-8_sig')
-    df_port_c_comp_chg.to_excel(portfolio_writer, sheet_name="Comp_Chg", index=True, encoding='utf-8_sig')
+    portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
+    Path(portfolio_path).mkdir(parents=True, exist_ok=True)
+
+    df_port_overview.to_csv(portfolio_path + "/overview.csv", index=False, encoding='utf-8_sig')
+    df_trade_h.to_csv(portfolio_path + "/trade_h.csv", index=False, encoding='utf-8_sig')
+    df_port_h.to_csv(portfolio_path + "/port_h.csv", index=False, encoding='utf-8_sig')
+    df_port_c_pct_chg.to_csv(portfolio_path + "/pct_chg.csv", index=True, encoding='utf-8_sig')
+    df_port_c_comp_chg.to_csv(portfolio_path + "/comp_chg.csv", index=True, encoding='utf-8_sig')
     df_setting = pd.DataFrame(setting, index=[0])
-    df_setting.to_excel(portfolio_writer, sheet_name="Setting", index=False, encoding='utf-8_sig')
+    df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
 
     now = print_and_time(setting_count=setting_count, phase="Step7", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
-
-    Util.pd_writer_save(portfolio_writer, portfolio_path)
 
     return [df_trade_h, df_port_overview, df_setting]
 
