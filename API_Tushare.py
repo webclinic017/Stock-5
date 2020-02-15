@@ -109,4 +109,6 @@ def my_fund_basic(market="E", fields="ts_code,name,fund_type,list_date,delist_da
 
 
 if __name__ == '__main__':
+    df = my_pro_bar(ts_code="000002.SZ", asset="E", freq="60min", start_date="2019-09-01", end_date="2019-09-01")
+    print(df)
     pass

@@ -382,8 +382,8 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
 
     for rolling_freq in traceback_freq_big[::-1]:
         # Util.column_add_mean(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
-        Util.add_pgain(df, rolling_freq, complete_new_update=complete_new_update)
-        Util.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)
+        Util.add_pgain(df, rolling_freq, complete_new_update=complete_new_update)  # past gain includes today = today +yesterday comp_gain
+        Util.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
     Setup_date_trend_once(a_all=[1] + c_rolling_freqs(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_ops(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
@@ -740,7 +740,7 @@ def update_date_Oth_analysis_market_D(freq, market="CN"):  # TODO add it to all 
 
 def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
     # check if big update and if the a previous saved file exists
-    last_saved_date = "19990101"
+    last_saved_date = "19990104"
     last_trade_date = get_last_trade_date("D")
     if not big_update:
 
@@ -765,6 +765,7 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     a_result = []
     df_sh_index = get_asset(ts_code="000001.SH", asset="I", freq=freq, market="CN")
     df_sh_index = df_sh_index.loc[int(last_saved_date):int(last_trade_date)]
+    df_sh_index = df_sh_index.loc[df_sh_index.index > int(last_saved_date)]  #exclude last saved date from update
     print(df_sh_index)
 
     # loop through all trade dates and add them together
@@ -1058,7 +1059,7 @@ def Setup_date_trend_once(minmax=0.5, market="CN", close_label="close", index_la
         df[pct_chg_tomorrow_column] = df[pct_chg_column].shift(-1)
 
     for i in a_all:  # RSI 1
-        if i == 1:
+        if i == 1:  #TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
             df[market_suffix + "rsi1"] = 0.0
             op_func = dict_ops[op_sign]
             df.loc[op_func(df["pct_chg" + index_label], 0.0), market_suffix + "rsi1"] = 1.0
@@ -1480,10 +1481,13 @@ if __name__ == '__main__':
         # TODO add concept
         # TODO invalid continuation of bye when storing asset, DB read error
         # update_custom_index(big_update=True)
-
+        big_update = False
         pr = cProfile.Profile()
         pr.enable()
-        update_all_in_one(False)
+        # update_all_in_one(False)
+        a_steps = [1, -1] if big_update else [1, -1]
+        multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)  # big: smart decide - small: smart decide
+
 
         pr.disable()
         pr.print_stats(sort='file')

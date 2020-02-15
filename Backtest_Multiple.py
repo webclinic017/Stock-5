@@ -16,6 +16,8 @@ import Backtest_Util
 import copy
 import cProfile
 import threading
+
+import matplotlib
 from numba import njit
 from numba import jit
 
@@ -65,6 +67,7 @@ def backtest_once(settings=[{}]):
 
     # 0.4 PREPARATION- INITIALIZE Changeables for the loop
     a_portfolios = [{"a_port_h": [], "a_trade_h": []} for _ in settings]
+    dict_min_hold_counter = {x: 0 for x in range(0, len(settings))}
 
     # Main Loop
     for today, tomorrow in zip(trade_dates["trade_date"], trade_dates["trade_date"].shift(-1).fillna(-1).astype(int)):
@@ -99,19 +102,25 @@ def backtest_once(settings=[{}]):
         for setting, setting_count, portfolio in zip(settings, range(0, len(settings)), a_portfolios):
             print()
             print()
-            print(f"{setting_count} : START: TODAY EVENING=ANALYZE=> {today}. TOMORROW MORNING=TRADE/ACTION=> {tomorrow}")
-
+            print()
             a_time = []
             now = mytime.time()
+
+
             setting["id"] = datetime.now().strftime('%Y%m%d%H%M%S')
 
             p_maxsize = setting["p_maxsize"]
             p_feedbackday = setting["p_feedbackday"]
             market_trend = df_stock_market_all.at[int(today), setting["trend"]] if setting["trend"] else 1
             df_today_portfolio = portfolio["a_port_h"][-1] if len(portfolio["a_port_h"]) > 0 else pd.DataFrame(columns=Util.c_port_h_label())  # today portfolio shall be modified based on yesterdays portfolio
+            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"TODAY EVENING ANALYZE=> {today}. TOMORROW MORNING TRADE=> {tomorrow}", df_today=df_today, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize,
+                                               a_time=a_time, prev_time=now)
 
             # 1.1 FILTER  IPO
-            df_today_mod = df_today[df_today["period"] > setting["f_ipo"]]  # df_today mod can be modified
+            # 6.3 PORTFOLIO BUY FILTER:TECHNICAL
+            df_today_mod = df_today.copy()
+            for query_string in setting["f_query"]:
+                df_today_mod.query(query_string, inplace=True)
 
             # 1.1 FILTER  GROUP
             if setting["f_groups"] == Util.c_groups_dict(assets):  # focus all groups = default df_date_today
@@ -140,12 +149,20 @@ def backtest_once(settings=[{}]):
                 p_feedbackday = 60
                 print("give any feedback")
 
+
             # 6.2 PORTFOLIO SELL EXECUTE trade_h
-            if market_trend >= 0.7:  # if tomorrow trend is good, consider min_holdday
-                df_helper = df_today_portfolio[df_today_portfolio["hold_days"] >= setting["p_min_holdday"]]
-                a_sellable_assets = df_helper.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
-            else:  # if tomorrow trend is bad, sell no matter min_holdday
-                a_sellable_assets = df_today_portfolio.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
+            if dict_min_hold_counter[setting_count] == setting["p_min_holdday"]:  # sell all port folios together on every min_hold_day
+                print("yes sellableday")
+                if market_trend >= 0.7:  # if tomorrow trend is good, consider min_holdday
+                    df_helper = df_today_portfolio[df_today_portfolio["hold_days"] >= setting["p_min_holdday"]]
+                    a_sellable_assets = df_helper.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
+                else:  # if tomorrow trend is bad, sell no matter min_holdday
+                    a_sellable_assets = df_today_portfolio.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
+
+                dict_min_hold_counter[setting_count] = 0
+            else:
+                a_sellable_assets = []
+                dict_min_hold_counter[setting_count] = dict_min_hold_counter[setting_count] + 1
 
             sellcondition_proxy = True
             a_unsold_assets = []
@@ -169,7 +186,7 @@ def backtest_once(settings=[{}]):
             now = Backtest_Util.print_and_time(setting_count=setting_count, phase="SELL EXECUTE ", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 6.4 PORTFOLIO HOLD = unsellable and unsold stocks
-            df_today_portfolio = Backtest_Util.hold_port_h_for_tomorrow(df_today_portfolio, df_tomorrow, tomorrow)
+            df_today_portfolio = Backtest_Util.hold_port_h_for_tomorrow(df_today_portfolio, df_tomorrow, tomorrow, setting_count)
             [portfolio["a_trade_h"].append([tomorrow, "hold", row["name"], index, row["hold_days"] + 1, row["buyout_price"], float("nan"), row["comp_chg"], row["rank_final"], row["buy_imp"]])
              for index, row in df_today_portfolio.iterrows()]
             now = Backtest_Util.print_and_time(setting_count=setting_count, phase="HOLD EXECUTE", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
@@ -177,21 +194,8 @@ def backtest_once(settings=[{}]):
             # PORTFOLIO BUY BEGIN
             if len(df_today_portfolio) != p_maxsize and int(market_trend) >= 0.7:
 
-                # 6.3 PORTFOLIO BUY FILTER:TECHNICAL
-                if setting["f_ma"]:
-                    print(setting_count, today, "BEFORE FILTER MA", len(df_today_mod))
-                    ma_condition = True
-                    for key, value in setting["f_ma"].items():
-                        if value:
-                            ma_condition = ma_condition & (df_today_mod["close"] > df_today_mod[key])
-                        else:
-                            ma_condition = ma_condition & (df_today_mod["close"] < df_today_mod[key])
-                    df_today_mod = df_today_mod[ma_condition]
-                    print(setting_count, today, "AFTER FILTER MA", len(df_today_mod))
-
                 # 6.4 PORTFOLIO BUY SCORE/RANK
                 dict_group_instance_weight = Util.c_group_score_weight()
-
                 for column, a_weight in setting["s_weight_matrix"].items():
                     # column use group rank
                     if a_weight[2] != 1:
@@ -370,9 +374,9 @@ def change_dict_score_weight(dict_score, a_weight=[]):
 
 
 def backtest_multiple(loop_indicator=1):
-    setting = {
+    setting_base = {
         # general = Non changeable through one run
-        "start_date": "20200201",
+        "start_date": "20100201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -387,56 +391,46 @@ def backtest_multiple(loop_indicator=1):
 
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
-        "f_ipo": 240,  # only consider stocks above that period. New IPO stocks less than a year not considered
         "f_groups": {},  # {} empty means focus on all groups, {"industry_L1": ["医疗设备","blablabla"]} means from over group, focus on that
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        # "f_percentile_min": 0.0,
-        # "f_percentile_max": 10, #can improve code speed
-        "f_ma": {},  # False is better. {}: no filter means all stocks. True: close > ma, False: close < ma. e.g. "close_m5":False. In general, False is better
+        "f_query": ['period > 240'],  # ,"trend > 0.2"
+        "s_weight_matrix": {  # ascending True= small, False is big
 
-        # buy filter = Remove
+            # "pct_chg": [False, 0.2, 1],  # very important
+            # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
+            # "turnover_rate": [True, 0.1, 0.5],
+            # "ivola": [True, 0.4, 1],  # seems important
+            "trend": [False, 100, 1],  # very important for this strategy
+            "pct_chg": [True, 5, 1],  # very important for this strategy
+            "pgain2": [True, 3, 1],  # very important for this strategy
+            "pgain5": [True, 2, 1],  # very important for this strategy
+            # "pgain10": [True, 3, 1],  # very important for this strategy
+            # "pgain20": [True, 2, 1],  # very important for this strategy
+            # "pgain60": [True, 1, 1],  # very important for this strategy
+            # "pgain240": [True, 1, 1],  # very important for this strategy
+            # "candle_net_pos": [True, 0.1, 1],
+        },
 
-        # buy sort
-
-        "s_weight_matrix": {},
         # bool: ascending True= small, False is big
         # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
         # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
         # int: random_weight: random number spread to be added to asset # TODO add small random weight to each
 
         # portfolio
-
         # "p_trading_fee": 0.0002,  # 1==100%
-        # "p_money": 10000,
         "p_maxsize": 12,  # not too low, otherwise volatility too big
         "p_min_holdday": 0,  # 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
-        # "p_max_holdday": 100000,
         "p_feedbackday": 60,
         "p_weight": False,
-        # "p_rebalance": False,
         "p_add_position": False,
-        # "p_stop_lose": 0.5,  # sell stock if comp_gain < 0.5 times of initial value
-        # "p_stop_win": 100,  # sell stock if comp_gain > 100 times of initial value
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # ascending True= small, False is big
-    s_weight_matrix = {
-        # "candle_net_pos": [False, 0.1, 0.5],
-        # "pct_chg": [False, 0.2, 1],  # very important
-        # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
-        # "turnover_rate": [True, 0.1, 0.5],
-        # "ivola": [True, 0.4, 1],  # seems important
-        "trend2": [False, 1, 1],  # very important for this strategy
-        "pgain2": [True, 1, 1],  # very important for this strategy
-    }
-
     # TODO add rsi and trend to all assets
-    setting["s_weight_matrix"] = s_weight_matrix
-
     # setting that depend on other seetings. DO NOT CHANGE
-    if setting["f_groups"] == {}:
-        setting["f_groups"] = Util.c_groups_dict(setting["assets"])
+    if setting_base["f_groups"] == {}:
+        setting_base["f_groups"] = Util.c_groups_dict(setting_base["assets"])
+
 
     # Initialize setting array
     a_settings = []
@@ -444,22 +438,25 @@ def backtest_multiple(loop_indicator=1):
     a_columns = [["total_mv", True, 0.05, 1], ["p5", False, 0.15, 1], ["pct_chg", False, 0.25, 1], ["trend", False, 0.25, 1], ["pjump_up", False, 0.05, 1], ["ivola", True, 0.05, 1], ["candle_net_pos", False, 0.15, 1]]  #
     a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["trend2", False, 1, 1], ["trend10", False, 1, 1], ["candle_net_pos", False, 1, 1], ["candle_net_pos5", False, 1, 1], ["pjump_up", False, 1, 1], ["pjump_up10", False, 1, 1], ["ivola", True, 1, 1], ["ivola5", True, 1, 1],
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
+    a_columns = [["trend", False, 1, 1]]  #
 
-    for label1, label2 in combinations(a_columns, 2):
-        for label1_true in [True, False]:
-            for label2_true in [True, False]:
-                setting_copy = copy.deepcopy(setting)
-
-                print(label1, label1_true)
-                s_weight_matrix = {
-                    label1[0]: [label1_true, 1, 1],
-                    label2[0]: [label2_true, 1, 1]
-                }
-
-                setting_copy = copy.deepcopy(setting)
-                setting_copy["s_weight_matrix"] = s_weight_matrix
-                a_settings.append(setting_copy)
-                print(s_weight_matrix)
+    # for a_columns in [["candle_net_pos",True,1,1],["total_mv",True,1,1],["turnover_rate_pct2",True,1,1],["ps_ttm",False,1,1],["ivola5",True,1,1]]:
+    for f_query in ["创业板", "主板", "中小板"]:
+        setting_copy = copy.deepcopy(setting_base)
+        s_weight_matrix = {  # ascending True= small, False is big
+            # "pct_chg": [False, 0.2, 1],  # very important
+            # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
+            # "turnover_rate": [True, 0.1, 0.5],
+            # "ivola": [True, 0.4, 1],  # seems important
+            "trend": [False, 100, 1],  # very important for this strategy
+            "pct_chg": [True, 5, 1],  # very important for this strategy
+            "pgain2": [True, 3, 1],  # very important for this strategy
+            "pgain5": [True, 2, 1],  # very important for this strategy
+        }
+        setting_copy["s_weight_matrix"] = s_weight_matrix
+        setting_copy["f_query"].append(f"exchange == {f_query}")
+        a_settings.append(setting_copy)
+        print(setting_copy["s_weight_matrix"])
 
     print("Total Settings:", len(a_settings))
     backtest_once(settings=a_settings)
@@ -471,7 +468,10 @@ if __name__ == '__main__':
         pr = cProfile.Profile()
         pr.enable()
 
+
+
         backtest_multiple(5)
+
 
         pr.disable()
         # pr.print_stats(sort='file')

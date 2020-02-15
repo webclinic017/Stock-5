@@ -70,8 +70,7 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     df_port_c_helper_imp = df_trade_h[(df_trade_h["trade_type"] == "sell")]
     df_port_c = df_port_c_helper_real.drop("buyout_price", 1).groupby("trade_date").agg("mean")
 
-    df_port_c["portfolio_size_real"] = df_port_c_helper_real[["trade_date"]].groupby("trade_date").size()
-    df_port_c["portfolio_size_imp"] = df_port_c_helper_imp[["trade_date"]].groupby("trade_date").size()
+    df_port_c["portfolio_size"] = df_port_h[["trade_date"]].groupby("trade_date").size()
     df_port_c["comp_chg"] = Util.column_add_comp_chg(df_port_c["pct_chg"])
 
     now = print_and_time(setting_count=setting_count, phase="Step2", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
@@ -82,11 +81,12 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
         df_port_c["comp_chg_" + competitor[1]] = Util.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
     # df_port_c add trend2,10,20,60,240
+
     a_current_trend_label = []
     for i in current_trend:  # do not add trend1 since it does not exist
         a_current_trend_label.append(f"market_trend{i}")
-    df_port_c = pd.merge(left=df_port_c, right=df_stock_market_all[a_current_trend_label], on="trade_date", sort=False)
-
+    df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
+    print("port c after merge", df_port_c)
     now = print_and_time(setting_count=setting_count, phase="Step3", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # tab_overview
@@ -113,12 +113,14 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     df_port_overview["end_date"] = setting["end_date"]
 
     # portfolio strategy specific overview
-    df_port_overview.at[0, "period"] = len(df_port_c)
-    df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["portfolio_size_real"] == 0]) / len(df_port_c))
+    period = len(df_trade_h.groupby("trade_date"))
+    df_port_overview.at[0, "period"] = period
+    df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["portfolio_size"] == 0]) / len(df_port_c))
     df_port_overview.at[0, "beta"] = Util.calculate_beta(df_port_c["pct_chg"], df_port_c["pct_chg" + beta_against])
-    df_port_overview.at[0, "winrate"] = len(df_port_c[(df_port_c["tomorrow_pct_chg"] >= 0) & (df_port_c["tomorrow_pct_chg"].notna())]) / len(df_port_c["tomorrow_pct_chg"].notna())
+    # df_port_overview.at[0, "winrate"] = len(df_port_c[(df_port_c["tomorrow_pct_chg"] >= 0) & (df_port_c["tomorrow_pct_chg"].notna())]) / len(df_port_c["tomorrow_pct_chg"].notna())
+    df_port_overview.at[0, "winrate"] = len(df_port_c.loc[df_port_c["pct_chg"] > 0]) / len(df_port_c.loc[df_port_c["pct_chg"].notna()])
 
-    df_port_overview.at[0, "pct_chg_mean"] = df_port_c["pct_chg"].mean()
+    df_port_overview.at[0, "pct_chg_mean"] = sum((df_port_c["pct_chg"]).dropna()) / period
     df_port_overview.at[0, "pct_chg_std"] = df_port_c["pct_chg"].std()
 
     try:
@@ -181,8 +183,8 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = ["market_trend" + str(x) for x in current_trend if x != 1]
-    df_port_c_pct_chg = df_port_c[["portfolio_size_real", "portfolio_size_imp", "rank_final", "pct_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
-    df_port_c_comp_chg = df_port_c[["portfolio_size_real", "portfolio_size_imp", "rank_final", "comp_chg"] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
+    df_port_c_pct_chg = df_port_c[["portfolio_size", "rank_final", "pct_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
+    df_port_c_comp_chg = df_port_c[["portfolio_size", "rank_final", "comp_chg"] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     now = print_and_time(setting_count=setting_count, phase="Step6", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
@@ -199,7 +201,7 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
 
     now = print_and_time(setting_count=setting_count, phase="Step7", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
-
+    print("setting is", setting["s_weight_matrix"])
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
@@ -208,7 +210,7 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
 
 
 # returns a portfolio for tomorrow
-def hold_port_h_for_tomorrow(df_today_portfolios, df_date_tomorrow, trade_date_tomorrow):
+def hold_port_h_for_tomorrow(df_today_portfolios, df_date_tomorrow, trade_date_tomorrow, setting_count):
     # port_h
     if df_today_portfolios.empty:
         return df_today_portfolios
@@ -246,7 +248,7 @@ def hold_port_h_for_tomorrow(df_today_portfolios, df_date_tomorrow, trade_date_t
     # print out
 
     for ts_code, hold_count in zip(df_result.index, range(len(df_result.index))):
-        print(f"{hold_count} : hold {ts_code}")
+        print(f"{setting_count}: {hold_count} hold {ts_code}")
 
     return df_result
 

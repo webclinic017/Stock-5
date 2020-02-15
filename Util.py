@@ -349,14 +349,14 @@ def column_check_duplicates(df, column_name):
 
 
 # add from =input, add_to =output
-def column_add_mean(df, trading_days, add_from, complete_new_update=True):
-    add_to = add_from + str(trading_days)
+def column_add_mean(df, rolling_freq, add_from, complete_new_update=True):
+    add_to = add_from + str(rolling_freq)
     add_column(df, add_to, add_from, 1)
 
     if complete_new_update:
-        df[add_to] = df[add_from].rolling(trading_days).mean()
+        df[add_to] = df[add_from].rolling(rolling_freq).mean()
     else:
-        fast_add_rolling(df=df, add_from=add_from, add_to=add_to, rolling_freq=trading_days, func=pd.Series.mean)
+        fast_add_rolling(df=df, add_from=add_from, add_to=add_to, rolling_freq=rolling_freq, func=pd.Series.mean)
 
 
 def column_add_std(df, trading_days, add_from, complete_new_update=True):
@@ -556,7 +556,13 @@ def groups_dict_to_string_iterable(dict_groups: dict):
     for key, dict_value in dict_groups.items():
 
         if type(dict_value) == list or type(dict_value) == dict:
-            a_string_helper = [str(x) for x in dict_value]  # Prevents error if bool is in dict_value array
+            a_string_helper = []
+            for x in dict_value:
+                if callable(x):
+                    a_string_helper.append(str(x.__name__))
+                else:
+                    a_string_helper.append(str(x))
+            # a_string_helper = groups_dict_to_string_iterable  # Prevents error if bool is in dict_value array
             result = result + str(key) + ": [" + ', '.join(a_string_helper) + "], "
         elif type(dict_value) == str:
             result = result + str(key) + ": " + str(dict_value) + ", "
@@ -606,7 +612,7 @@ def a_path(path: str = ""):
     return [x for x in [path + ".csv", path + ".feather"]]
 
 
-def to_csv_feather(df, a_path, encoding='', index=False, reset_index=True, drop=True):  # utf-8_sig
+def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True):  # utf-8_sig
     if reset_index:
         df.reset_index(drop=drop, inplace=True)
     else:
@@ -626,6 +632,21 @@ def to_csv_feather(df, a_path, encoding='', index=False, reset_index=True, drop=
     except Exception as e:
         print("save feather error")
         traceback.print_exc()
+
+
+def to_excel(path, dict_df):
+    for i in range(0, 10):
+        try:
+            portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
+            for key, df in dict_df.items():
+                df.to_excel(portfolio_writer, sheet_name=key, index=True, encoding='utf-8_sig')
+            portfolio_writer.save()
+            return
+        except Exception as e:
+            close_file(path)
+            sound("close_excel.mp3")
+            print(e)
+            time.sleep(10)
 
 
 def pd_writer_save(pd_writer, path):
@@ -686,6 +707,13 @@ def c_freqs():
 
 def c_rolling_freqs():
     return [2, 5, 10, 20, 60, 240]
+    # return [2, 5, 10, 20, 65, 260]
+
+
+def c_rolling_freqs_fibonacci():
+    return [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]
+
+
 
 
 def c_panda_rolling_op():
@@ -719,8 +747,8 @@ def c_industry_level():
 
 
 def c_ops():
-    # return {"plus": operator.add, "minus": operator.sub, "prod": operator.mul, "gt": operator.gt, "lt": operator.lt}
-    return {"gt": operator.gt, "lt": operator.lt}
+    # return { "prod": operator.mul, "gt": operator.gt, "lt": operator.lt}
+    return {"plus": operator.add, "minus": operator.sub, "gt": operator.gt, "lt": operator.lt}
 
 
 def c_candle():
@@ -912,3 +940,10 @@ else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
 
 def today():
     return str(datetime.now().date()).replace("-", "")
+
+
+def plot_autocorrelation(series):
+    from pandas.plotting import autocorrelation_plot
+    from matplotlib import pyplot
+    autocorrelation_plot(series)
+    pyplot.show()
