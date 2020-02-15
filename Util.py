@@ -623,6 +623,9 @@ def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=Tr
             df.to_csv(a_path[0], index=index, encoding=encoding)
             break
         except:
+            folder = "/".join(a_path[0].rsplit("/")[:-1])
+            if not os.path.exists(folder):
+                os.makedirs(folder)
             close_file(a_path[0])
             traceback.print_exc()
             time.sleep(10)
