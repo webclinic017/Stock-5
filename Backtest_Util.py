@@ -44,8 +44,14 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     for day, info in dict_trade_h.items():
         for trade_type, a_trade_context in info.items():
             for single_trade in a_trade_context:
-                trade_h_helper.append({"trade_date": day, "trade_type": trade_type, **single_trade})
+                helper_dict = {"trade_date": day, "trade_type": trade_type, **single_trade}
+                if helper_dict["name"] == np.nan or helper_dict["name"] == float("nan"):
+                    print("error")
+                    Util.sound("error.mp3")
+                    print(helper_dict)
+                trade_h_helper.append(helper_dict)
     df_trade_h = pd.DataFrame(data=trade_h_helper, columns=trade_h_helper[-1].keys())
+
 
     # use trade date on all stock market to see which day was not traded
     df_merge_helper = df_stock_market_all.reset_index(inplace=False, drop=False)
@@ -62,13 +68,16 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
         raise ValueError
 
     df_port_c = df_trade_h.groupby("trade_date").agg("mean")
+    df_port_c["port_pearson"] = df_trade_h.groupby("trade_date").apply(lambda x: x["rank_final"].corr(x["pct_chg"]))
     df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
-    df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: df_trade_h.loc[x.last_valid_index(), "port_cash"])
-    df_port_c["port_value"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").sum()["value_close"]
+    df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: df_trade_h.at[x.last_valid_index(), "port_cash"])
     df_port_c["buy"] = df_trade_h[df_trade_h["trade_type"].isin(["buy"])].groupby("trade_date").size()
     df_port_c["hold"] = df_trade_h[df_trade_h["trade_type"].isin(["hold"])].groupby("trade_date").size()
     df_port_c["sell"] = df_trade_h[df_trade_h["trade_type"].isin(["sell"])].groupby("trade_date").size()
-    df_port_c["comp_chg"] = Util.column_add_comp_chg(df_port_c["pct_chg"])
+    df_port_c["port_close"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").sum()["value_close"]
+    df_port_c["all_close"] = df_port_c["port_close"] + df_port_c["port_cash"]
+    df_port_c["all_pct_chg"] = df_port_c["all_close"].pct_change().fillna(0) + 1
+    df_port_c["all_comp_chg"] = df_port_c["all_pct_chg"].cumprod()
 
 
     # add competitor
@@ -82,7 +91,6 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     for i in current_trend:  # do not add trend1 since it does not exist
         a_current_trend_label.append(f"market_trend{i}")
     df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
-    print("port c after merge", df_port_c)
 
     # tab_overview
     df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[])
@@ -95,8 +103,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     duration = (end_time_date - backtest_start_time).seconds
     duration, Duration_rest = divmod(duration, 60)
 
-    df_port_c["tomorrow_pct_chg"] = df_port_c["pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
-
+    df_port_c["tomorrow_pct_chg"] = df_port_c["all_pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
 
     # general overview setting
     df_port_overview["SDate"] = day
@@ -110,24 +117,28 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     period = len(df_trade_h.groupby("trade_date"))
     df_port_overview.at[0, "period"] = period
     df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
-    df_port_overview.at[0, "beta"] = Util.calculate_beta(df_port_c["pct_chg"], df_port_c["pct_chg" + beta_against])
+
 
     # TODO add rank final and comp chg pearson
-    df_port_overview.at[0, "single_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
-    df_port_overview.at[0, "port_winrate"] = len(df_port_c.loc[df_port_c["pct_chg"] > 1]) / len(df_port_c)
+    df_port_overview.at[0, "asset_hold"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "hold_days"].mean()
+    df_port_overview.at[0, "asset_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
+    df_port_overview.at[0, "all_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
 
-    df_port_overview.at[0, "single_pct_chg_mean"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()
-    df_port_overview.at[0, "port_pct_chg_mean"] = df_port_c["pct_chg"].mean()
+    df_port_overview.at[0, "asset_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()
+    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()
 
-    df_port_overview.at[0, "single_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
-    df_port_overview.at[0, "port_pct_chg_std"] = df_port_c["pct_chg"].std()
+    df_port_overview.at[0, "asset_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
+    df_port_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
 
     try:
-        df_port_overview.at[0, "comp_chg"] = df_port_c.at[df_port_c["comp_chg"].last_valid_index(), "comp_chg"]
+        df_port_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
     except:
-        df_port_overview.at[0, "comp_chg"] = float("nan")
+        df_port_overview.at[0, "all_comp_chg"] = float("nan")
+    df_port_overview.at[0, "port_beta"] = Util.calculate_beta(df_port_c["all_pct_chg"], df_port_c["pct_chg" + beta_against])
+    df_port_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
+    df_port_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
 
-    df_port_overview.at[0, "buy_impossible"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy") & (df_trade_h["comp_chg"] == 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
+
 
     for trade_type in ["buy", "sell", "hold"]:
         try:
@@ -181,7 +192,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = ["market_trend" + str(x) for x in current_trend if x != 1]
-    df_port_c = df_port_c[["port_size", "port_cash", "port_value", "buy", "hold", "sell", "rank_final", "pct_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg"] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
+    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])

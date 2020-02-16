@@ -172,7 +172,7 @@ def backtest_once(settings=[{}]):
                             dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value
 
                             dict_trade_h[tomorrow]["sell"].append(
-                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"] + 1, "buyout_price": dict_trade["buyout_price"],
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"], "buyout_price": dict_trade["buyout_price"],
                                  "today_open": tomorrow_open, "today_close": np.nan, "sold_price": tomorrow_open, "pct_chg": tomorrow_open / dict_trade["today_close"],
                                  "comp_chg": tomorrow_open / dict_trade["buyout_price"], "shares": shares, "value_open": realized_value, "value_close": np.nan, "port_cash": dict_capital[setting_count]["cash"]})
 
@@ -276,8 +276,9 @@ def backtest_once(settings=[{}]):
                     value_open = share * buy_open
                     value_close = share * buy_close
                     dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open
+
                     dict_trade_h[tomorrow]["buy"].append(
-                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 1, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
                          "comp_chg": buy_pct_chg_comp_chg, "shares": share, "value_open": value_open,
                          "value_close": value_close, "port_cash": dict_capital[setting_count]["cash"]})
 
@@ -355,7 +356,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20200201",
+        "start_date": "20150201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -397,7 +398,7 @@ def backtest_multiple(loop_indicator=1):
         "p_capital": 50000,  # start capital
         # "p_trading_fee": 0.0002,  # 1==100%
         "p_maxsize": 12,  # not too low, otherwise volatility too big
-        "p_min_holdday": 0,  # Start consider sell. 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
+        "p_min_holdday": 1,  # Start consider sell. 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_holdday": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
         "p_weight": False,
@@ -412,8 +413,8 @@ def backtest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for max_hold in [2]:
-        for p_keep in ["winner"]:
+    for max_hold in [1, 2, 3, 5, 8]:
+        for p_keep in [False, "winner", "loser"]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight_matrix = {  # ascending True= small, False is big
                 # "pct_chg": [False, 0.2, 1],  # very important
@@ -444,7 +445,7 @@ if __name__ == '__main__':
         backtest_multiple(5)
 
         pr.disable()
-        # pr.print_stats(sort='file')
+        pr.print_stats(sort='file')
 
         pass
     except Exception as e:

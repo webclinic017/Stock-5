@@ -1433,11 +1433,13 @@ def update_all_in_one(big_update=False):
         update_general_trade_date(freq, big_update=big_update)  # big: override - small: override
 
     # 2.1. ASSET - FUNDAMENTALS
-    update_assets_E_D_Fun(start_date="00000000", end_date=today(), step=1, big_update=big_update)  # big: override - small: skip
-    update_assets_E_W_pledge_stat(start_date="00000000", step=1, big_update=big_update)  # big: override - small: skip
+    # update_assets_E_D_Fun(start_date="00000000", end_date=today(), step=1, big_update=big_update)  # big: override - small: skip
+    # update_assets_E_W_pledge_stat(start_date="00000000", step=1, big_update=big_update)  # big: override - small: skip
+    a_steps = [1, 2, 3, 5, 11, -1, -2, -3, -7]
+    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": big_update}, a_steps=a_steps)
+    multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": big_update}, a_steps=a_steps)
 
     # 2.2. ASSET - DF
-    a_steps = [1, 2, 3, 5, 11, -1, -2, -3, -7]
     multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)
     multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)  # big: smart decide - small: smart decide
 
@@ -1484,9 +1486,7 @@ if __name__ == '__main__':
         big_update = False
         pr = cProfile.Profile()
         pr.enable()
-        # update_all_in_one(False)
-        a_steps = [1, -1] if big_update else [1, -1]
-        multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)  # big: smart decide - small: smart decide
+        update_all_in_one(False)
 
 
         pr.disable()
