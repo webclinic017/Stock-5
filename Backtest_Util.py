@@ -15,7 +15,7 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
-def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all, backtest_start_time, setting_count):
+def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
     current_trend = Util.c_rolling_freqs()
     beta_against = "_000001.SH"
 
@@ -40,54 +40,49 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     # create trade_h and port_h from array
     # everything under this line has integer as index
     # everything above this line has ts_code and trade_date as index
-    df_trade_h = pd.DataFrame(data=a_trade_h, columns=Util.c_trade_h_label())
-    df_port_h = pd.concat(objs=a_port_h, ignore_index=True, sort=False)
+    trade_h_helper = []
+    for day, info in dict_trade_h.items():
+        for trade_type, a_trade_context in info.items():
+            for single_trade in a_trade_context:
+                trade_h_helper.append({"trade_date": day, "trade_type": trade_type, **single_trade})
+    df_trade_h = pd.DataFrame(data=trade_h_helper, columns=trade_h_helper[-1].keys())
 
     # use trade date on all stock market to see which day was not traded
     df_merge_helper = df_stock_market_all.reset_index(inplace=False, drop=False)
     df_merge_helper = df_merge_helper.loc[df_merge_helper["trade_date"].between(int(setting["start_date"]), int(setting["end_date"])), "trade_date"]
     next_trade_date = DB.get_next_trade_date(freq="D")
-    # df_merge_helper=pd.Series(data=df_merge_helper.index.array+[int(next_trade_date)],name="trade_date")
     df_merge_helper = df_merge_helper.append(pd.Series(data=int(next_trade_date), index=[0]), ignore_index=False)  # before merge_ add future trade date as proxy
     df_merge_helper = df_merge_helper.rename("trade_date")
 
     # merge
     df_trade_h = pd.merge(df_merge_helper, df_trade_h, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
-    df_port_h = pd.merge(df_merge_helper, df_port_h, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
-
-    now = print_and_time(setting_count=setting_count, phase="Step1", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     if np.nan in df_trade_h["ts_code"] or float("nan") in df_trade_h:
         print("file has nan ts_codes")
         raise ValueError
 
-    # df_port_c
-    # df_port_h.loc[:, df_port_h.columns != "ts_code"] = df_port_h.loc[:, df_port_h.columns != "ts_code"].infer_objects()
-
-    df_port_c_helper_real = df_trade_h[(df_trade_h["trade_type"] == "sell") & (df_trade_h["buy_imp"] == 0)]
-    df_port_c_helper_real["pct_chg"] = (df_port_c_helper_real["comp_chg"] - 1) * 100
-
-    df_port_c_helper_imp = df_trade_h[(df_trade_h["trade_type"] == "sell")]
-    df_port_c = df_port_c_helper_real.drop("buyout_price", 1).groupby("trade_date").agg("mean")
-
-    df_port_c["portfolio_size"] = df_port_h[["trade_date"]].groupby("trade_date").size()
+    df_port_c = df_trade_h.groupby("trade_date").agg("mean")
+    df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
+    df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: df_trade_h.loc[x.last_valid_index(), "port_cash"])
+    df_port_c["port_value"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").sum()["value_close"]
+    df_port_c["buy"] = df_trade_h[df_trade_h["trade_type"].isin(["buy"])].groupby("trade_date").size()
+    df_port_c["hold"] = df_trade_h[df_trade_h["trade_type"].isin(["hold"])].groupby("trade_date").size()
+    df_port_c["sell"] = df_trade_h[df_trade_h["trade_type"].isin(["sell"])].groupby("trade_date").size()
     df_port_c["comp_chg"] = Util.column_add_comp_chg(df_port_c["pct_chg"])
 
-    now = print_and_time(setting_count=setting_count, phase="Step2", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
         df_port_c["comp_chg_" + competitor[1]] = Util.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
-    # df_port_c add trend2,10,20,60,240
 
+    # df_port_c add trend2,10,20,60,240
     a_current_trend_label = []
     for i in current_trend:  # do not add trend1 since it does not exist
         a_current_trend_label.append(f"market_trend{i}")
     df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
     print("port c after merge", df_port_c)
-    now = print_and_time(setting_count=setting_count, phase="Step3", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # tab_overview
     df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[])
@@ -102,7 +97,6 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
 
     df_port_c["tomorrow_pct_chg"] = df_port_c["pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
 
-    now = print_and_time(setting_count=setting_count, phase="Step4", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # general overview setting
     df_port_overview["SDate"] = day
@@ -115,13 +109,18 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
     # portfolio strategy specific overview
     period = len(df_trade_h.groupby("trade_date"))
     df_port_overview.at[0, "period"] = period
-    df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["portfolio_size"] == 0]) / len(df_port_c))
+    df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
     df_port_overview.at[0, "beta"] = Util.calculate_beta(df_port_c["pct_chg"], df_port_c["pct_chg" + beta_against])
-    # df_port_overview.at[0, "winrate"] = len(df_port_c[(df_port_c["tomorrow_pct_chg"] >= 0) & (df_port_c["tomorrow_pct_chg"].notna())]) / len(df_port_c["tomorrow_pct_chg"].notna())
-    df_port_overview.at[0, "winrate"] = len(df_port_c.loc[df_port_c["pct_chg"] > 0]) / len(df_port_c.loc[df_port_c["pct_chg"].notna()])
 
-    df_port_overview.at[0, "pct_chg_mean"] = sum((df_port_c["pct_chg"]).dropna()) / period
-    df_port_overview.at[0, "pct_chg_std"] = df_port_c["pct_chg"].std()
+    # TODO add rank final and comp chg pearson
+    df_port_overview.at[0, "single_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
+    df_port_overview.at[0, "port_winrate"] = len(df_port_c.loc[df_port_c["pct_chg"] > 1]) / len(df_port_c)
+
+    df_port_overview.at[0, "single_pct_chg_mean"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()
+    df_port_overview.at[0, "port_pct_chg_mean"] = df_port_c["pct_chg"].mean()
+
+    df_port_overview.at[0, "single_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
+    df_port_overview.at[0, "port_pct_chg_std"] = df_port_c["pct_chg"].std()
 
     try:
         df_port_overview.at[0, "comp_chg"] = df_port_c.at[df_port_c["comp_chg"].last_valid_index(), "comp_chg"]
@@ -136,7 +135,6 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
         except:
             df_port_overview.at[0, f"{trade_type}_count"] = float("nan")
 
-    now = print_and_time(setting_count=setting_count, phase="Step5", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
 
     # overview win rate and pct_chg mean
     condition_trade = df_port_c["tomorrow_pct_chg"].notna()
@@ -183,10 +181,7 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = ["market_trend" + str(x) for x in current_trend if x != 1]
-    df_port_c_pct_chg = df_port_c[["portfolio_size", "rank_final", "pct_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
-    df_port_c_comp_chg = df_port_c[["portfolio_size", "rank_final", "comp_chg"] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
-
-    now = print_and_time(setting_count=setting_count, phase="Step6", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
+    df_port_c = df_port_c[["port_size", "port_cash", "port_value", "buy", "hold", "sell", "rank_final", "pct_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg"] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
@@ -194,13 +189,10 @@ def report_portfolio(setting_original, a_port_h, a_trade_h, df_stock_market_all,
 
     df_port_overview.to_csv(portfolio_path + "/overview.csv", index=False, encoding='utf-8_sig')
     df_trade_h.to_csv(portfolio_path + "/trade_h.csv", index=False, encoding='utf-8_sig')
-    df_port_h.to_csv(portfolio_path + "/port_h.csv", index=False, encoding='utf-8_sig')
-    df_port_c_pct_chg.to_csv(portfolio_path + "/pct_chg.csv", index=True, encoding='utf-8_sig')
-    df_port_c_comp_chg.to_csv(portfolio_path + "/comp_chg.csv", index=True, encoding='utf-8_sig')
+    df_port_c.to_csv(portfolio_path + "/chart.csv", index=True, encoding='utf-8_sig')
     df_setting = pd.DataFrame(setting, index=[0])
     df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
 
-    now = print_and_time(setting_count=setting_count, phase="Step7", df_today=pd.DataFrame(), df_tomorrow=pd.DataFrame(), df_today_portfolios=pd.DataFrame(), p_maxsize=30, a_time=a_time, prev_time=now)
     print("setting is", setting["s_weight_matrix"])
     print("=" * 50)
     [print(string) for string in a_time]
@@ -298,10 +290,11 @@ def try_select(select_from_df, select_size, select_by):
         print("ERROR. less than portfolio p_max_size", e)
 
 
-def print_and_time(setting_count, phase, df_today, df_tomorrow, df_today_portfolios, p_maxsize, a_time, prev_time):
-    print(f"{setting_count} : {phase} df_today {len(df_today)} df_tomorrow {len(df_tomorrow)} port {len(df_today_portfolios)} space {p_maxsize - len(df_today_portfolios)}")
+def print_and_time(setting_count, phase, dict_trade_h_hold, dict_trade_h_buy, dict_trade_h_sell, p_maxsize, a_time, prev_time):
+    # print(f"{setting_count} : {phase} hold {len(dict_trade_h_hold)} bought {len(dict_trade_h_buy)} sold {len(dict_trade_h_sell)} space {p_maxsize - (len(dict_trade_h_hold)+len(dict_trade_h_buy))}")
+    print(f"{setting_count} : hold " + '{0: <5}'.format(len(dict_trade_h_hold)) + 'buy {0: <5}'.format(len(dict_trade_h_buy)) + 'sell {0: <5}'.format(len(dict_trade_h_sell)) + 'space {0: <5}'.format(p_maxsize - (len(dict_trade_h_hold) + len(dict_trade_h_buy))))
     now = mytime.time()
-    a_time.append(f"{phase}: {now - prev_time}")
+    a_time.append('{0: <25}'.format(phase) + f": {now - prev_time}")
     return now
 
 

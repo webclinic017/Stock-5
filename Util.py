@@ -885,12 +885,8 @@ def c_groups_bad_industry_L3_instance():
     return result
 
 
-def c_port_h_label():
-    return ["trade_date", "name", "pct_chg", "comp_chg", "buyout_price", "hold_days", "buy_imp"]  # "ts_code",
-
-
 def c_trade_h_label():
-    return ["trade_date", "trade_type", "name", "ts_code", "hold_days", "buyout_price", "sold_price", "comp_chg", "rank_final", "buy_imp"]
+    return ["trade_date", "trade_type", "reason", "ts_code", "name", "hold_days", "buyout_price", "sold_price", "shares", "value", "pct_chg", "comp_chg", "rank_final", "buy_imp", "assets_value", "cash"]
 
 
 def c_folder_root():

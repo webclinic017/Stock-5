@@ -59,18 +59,20 @@ def backtest_once(settings=[{}]):
     assets = settings[0]["assets"]
 
     # 0.3 PREPARATION- INITIALIZE Iterables derived from Setting
-    trade_dates = DB.get_trade_date(start_date=start_date, end_date=end_date, freq=freq)
+    df_trade_dates = DB.get_trade_date(start_date=start_date, end_date=end_date, freq=freq)
+
     df_stock_market_all = DB.get_stock_market_all(market)
     df_group_instance_all = DB.get_group_instance_all(assets=["E"])
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
 
     # 0.4 PREPARATION- INITIALIZE Changeables for the loop
-    a_portfolios = [{"a_port_h": [], "a_trade_h": []} for _ in settings]
-    dict_min_hold_counter = {x: 0 for x in range(0, len(settings))}
+    a_dict_trade_h = [{df_trade_dates.at[0, "trade_date"]: {"sell": [], "hold": [], "buy": []}} for _ in settings]  # trade history for each setting
+    dict_capital = {setting_count: {"cash": settings[0]["p_capital"]} for setting_count in range(0, len(settings))}  # only used in iteration, saved in trade_h
 
     # Main Loop
-    for today, tomorrow in zip(trade_dates["trade_date"], trade_dates["trade_date"].shift(-1).fillna(-1).astype(int)):
+    for today, tomorrow in zip(df_trade_dates["trade_date"], df_trade_dates["trade_date"].shift(-1).fillna(-1).astype(int)):
+
         if break_loop:
             print("BREAK loop")
             Util.sound("break.mp3")
@@ -82,58 +84,38 @@ def backtest_once(settings=[{}]):
 
         # initialize df_date
         if tomorrow == -1:
-            # if tomorrow==-1:
             print("last day reached")
             tomorrow = int(DB.get_next_trade_date(freq=freq))
             df_today = df_today_accelerator
             df_tomorrow = df_today_accelerator.copy()
             df_tomorrow[["open", "high", "low", "close", "pct_chg"]] = np.nan
-
         else:
-            # df_atomorrow = DB.get_date(trade_date=atomorrow, assets=assets, freq="D", market=market)
             df_tomorrow = DB.get_date(trade_date=tomorrow, assets=assets, freq="D", market=market)
             df_today = DB.get_date(trade_date=today, assets=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
-
-            # df_tomorrow_accelerator = df_atomorrow
             df_today_accelerator = df_tomorrow
             dict_weight_accelerator = {}
 
         # FOR EACH DAY LOOP OVER SETTING N
-        for setting, setting_count, portfolio in zip(settings, range(0, len(settings)), a_portfolios):
-            print()
-            print()
-            print()
+        for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
+            print("\n" * 3)
             a_time = []
             now = mytime.time()
-
-
             setting["id"] = datetime.now().strftime('%Y%m%d%H%M%S')
 
             p_maxsize = setting["p_maxsize"]
             p_feedbackday = setting["p_feedbackday"]
             market_trend = df_stock_market_all.at[int(today), setting["trend"]] if setting["trend"] else 1
-            df_today_portfolio = portfolio["a_port_h"][-1] if len(portfolio["a_port_h"]) > 0 else pd.DataFrame(columns=Util.c_port_h_label())  # today portfolio shall be modified based on yesterdays portfolio
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"TODAY EVENING ANALYZE=> {today}. TOMORROW MORNING TRADE=> {tomorrow}", df_today=df_today, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize,
-                                               a_time=a_time, prev_time=now)
 
-            # 1.1 FILTER  IPO
-            # 6.3 PORTFOLIO BUY FILTER:TECHNICAL
-            df_today_mod = df_today.copy()
-            for query_string in setting["f_query"]:
+            dict_trade_h[tomorrow] = {"sell": [], "hold": [], "buy": []}
+            print('{0: <26}'.format("TODAY EVENING ANALYZE") + f"{today} stocks {len(df_today)}")
+            print('{0: <26}'.format("TOMORROW MORNING TRADE") + f"{tomorrow} stocks {len(df_tomorrow)}")
+            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"INIT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+
+            # 1.1 FILTER
+            df_today_mod = df_today[df_today["period"] > 240]
+            for query_string in setting["f_query"]:  # very slow and expensive for small operation because parsing the string takes long
                 df_today_mod.query(query_string, inplace=True)
-
-            # 1.1 FILTER  GROUP
-            if setting["f_groups"] == Util.c_groups_dict(assets):  # focus all groups = default df_date_today
-                pass
-            else:  # some groups are filtered out
-                group_boolean = True
-                for column, instance_array in setting["f_groups"].items():
-                    print(setting_count, today, "FOCUS on group", column, instance_array)
-                    group_boolean = group_boolean & df_today_mod[column].isin(instance_array)
-
-                # put boolean mask on df_today_mod
-                df_today_mod = df_today_mod[group_boolean]
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase="META AND BASIC FILTER", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 2 ECONOMY
 
@@ -149,50 +131,70 @@ def backtest_once(settings=[{}]):
                 p_feedbackday = 60
                 print("give any feedback")
 
+            # 6.2 PORTFOLIO SELL SELECT
+            setting_keep = setting["p_keep"]
+            hold_count = 1
+            sold_count = 1
+            for trade_type, a_trade_content in dict_trade_h[today].items():  # NOTE here today means today morning trade
+                if trade_type != "sell":  # == in ["hold","buy"]. stocks that kept for 1 night
+                    for dict_trade in a_trade_content:
 
-            # 6.2 PORTFOLIO SELL EXECUTE trade_h
-            if dict_min_hold_counter[setting_count] == setting["p_min_holdday"]:  # sell all port folios together on every min_hold_day
-                print("yes sellableday")
-                if market_trend >= 0.7:  # if tomorrow trend is good, consider min_holdday
-                    df_helper = df_today_portfolio[df_today_portfolio["hold_days"] >= setting["p_min_holdday"]]
-                    a_sellable_assets = df_helper.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
-                else:  # if tomorrow trend is bad, sell no matter min_holdday
-                    a_sellable_assets = df_today_portfolio.index.to_numpy()  # to_numpy is IMPORTANT, otherwise bug
+                        # sell decision
+                        ts_code = dict_trade["ts_code"]
+                        sell = False
 
-                dict_min_hold_counter[setting_count] = 0
-            else:
-                a_sellable_assets = []
-                dict_min_hold_counter[setting_count] = dict_min_hold_counter[setting_count] + 1
+                        if dict_trade["hold_days"] >= setting["p_min_holdday"]:  # sellable = consider sell
+                            if dict_trade["hold_days"] >= setting["p_max_holdday"]:  # must sell
+                                sell = True
+                                reason = "max_hold"
+                            elif (setting_keep == "winner" and dict_trade["comp_chg"] < 1) or (setting_keep == "loser" and dict_trade["comp_chg"] > 1):
+                                sell = True
+                                reason = f"not {setting_keep}"
+                            else:
+                                reason = f"is {setting_keep}"
+                        else:
+                            reason = f"min_hold"
 
-            sellcondition_proxy = True
-            a_unsold_assets = []
-            for (index, row), sold_counter in zip(df_today_portfolio.iterrows(), range(len(df_today_portfolio))):  # for each stock in portoflio
-                if index in a_sellable_assets:  # sellable
-                    if sellcondition_proxy:
-                        try:  # stock trades tomorrow and sold
-                            sell_price = df_tomorrow.at[index, "open"]  # IMPORTANT, use the day TOMORROW  price to sell
-                            portfolio["a_trade_h"].append([tomorrow, "sell", row["name"], index, row["hold_days"] + 1, row["buyout_price"], sell_price, sell_price / row["buyout_price"], row["rank_final"], row["buy_imp"]])
-                            print(setting_count, ": ", sold_counter, "sold", index)
-                        except Exception as e:  # stock not trading tomorrow
-                            a_unsold_assets.append(index)
-                            print(setting_count, ": ", len(a_unsold_assets), "unsold", index)
-                            pass
-                    else:  # condition proxy pass
-                        pass
-                else:  # not sellable
-                    a_unsold_assets.append(index)
+                        try:
+                            tomorrow_open = df_tomorrow.at[ts_code, "open"]
+                            tomorrow_close = df_tomorrow.at[ts_code, "close"]
+                        except:  # tomorrow 停牌 and no information
+                            tomorrow_open = dict_trade["today_close"]
+                            tomorrow_close = dict_trade["today_close"]
 
-            df_today_portfolio = df_today_portfolio[df_today_portfolio.index.isin(a_unsold_assets)]
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase="SELL EXECUTE ", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                            sell = False
+                            reason = reason + " not trading"
+                            print("probably 停牌", ts_code)
 
-            # 6.4 PORTFOLIO HOLD = unsellable and unsold stocks
-            df_today_portfolio = Backtest_Util.hold_port_h_for_tomorrow(df_today_portfolio, df_tomorrow, tomorrow, setting_count)
-            [portfolio["a_trade_h"].append([tomorrow, "hold", row["name"], index, row["hold_days"] + 1, row["buyout_price"], float("nan"), row["comp_chg"], row["rank_final"], row["buy_imp"]])
-             for index, row in df_today_portfolio.iterrows()]
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase="HOLD EXECUTE", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                        if sell:  # Execute sell
+                            shares = dict_trade["shares"]
+                            realized_value = tomorrow_open * shares
+                            dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value
+
+                            dict_trade_h[tomorrow]["sell"].append(
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"] + 1, "buyout_price": dict_trade["buyout_price"],
+                                 "today_open": tomorrow_open, "today_close": np.nan, "sold_price": tomorrow_open, "pct_chg": tomorrow_open / dict_trade["today_close"],
+                                 "comp_chg": tomorrow_open / dict_trade["buyout_price"], "shares": shares, "value_open": realized_value, "value_close": np.nan, "port_cash": dict_capital[setting_count]["cash"]})
+
+                        else:  # Execute hold
+                            dict_trade_h[tomorrow]["hold"].append(
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"] + 1, "buyout_price": dict_trade["buyout_price"],
+                                 "today_open": tomorrow_open, "today_close": tomorrow_close, "sold_price": np.nan, "pct_chg": tomorrow_close / dict_trade["today_close"],
+                                 "comp_chg": tomorrow_close / dict_trade["buyout_price"], "shares": dict_trade["shares"], "value_open": tomorrow_open * dict_trade["shares"], "value_close": tomorrow_close * dict_trade["shares"], "port_cash": dict_capital[setting_count]["cash"]})
+
+                        # print out
+                        if sell:
+                            print(f"{setting_count} : " + '{0: <19}'.format("") + '{0: <9}'.format(f"sell {sold_count}"), (f"{ts_code}"))
+                            sold_count = sold_count + 1
+                        else:
+                            print(f"{setting_count} : " + '{0: <0}'.format("") + '{0: <9}'.format(f"hold {hold_count}"), (f"{ts_code}"))
+                            hold_count = hold_count + 1
+
+            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"SELL AND HOLD", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # PORTFOLIO BUY BEGIN
-            if len(df_today_portfolio) != p_maxsize and int(market_trend) >= 0.7:
+            buyable_size = p_maxsize - len(dict_trade_h[tomorrow]["hold"])
+            if buyable_size > 0 and int(market_trend) >= 0.7:
 
                 # 6.4 PORTFOLIO BUY SCORE/RANK
                 dict_group_instance_weight = Util.c_group_score_weight()
@@ -238,27 +240,15 @@ def backtest_once(settings=[{}]):
                 # 4. Create Rank Final = indicator1+indicator2+indicator3
                 df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
                                                   for column, a_weight in setting["s_weight_matrix"].items()])  # if final rank is na, nsmallest will not select anyway
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase="BUY FINAL RANK", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
-
-                # 6.2 PORTFOLIO BUY FILTER: GET PERCENTILE
-                # try:
-                #     percentfile_column_name = setting["f_percentile_column"]
-                #     helper_column = np.array(df_today_mod[percentfile_column_name])
-                #     percentile_between = np.nanpercentile(a=helper_column, q=[setting["f_percentile_min"], setting["f_percentile_max"]], overwrite_input=True)
-                #     # print(setting_count, ": ", "BUY PERCENTILE", len(df_today_mod), ":", setting["f_percentile_column"], setting["f_percentile_min"], setting["f_percentile_max"], "translates to", percentile_between)
-                #     df_today_mod = df_today_mod[df_today_mod[percentfile_column_name].between(percentile_between[0], percentile_between[1])]
-                # except Exception as e:
-                #     print("ERROR select percentile")
+                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
+                                                   prev_time=now)
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 1
-                df_select = Backtest_Util.try_select(select_from_df=df_today_mod, select_size=(p_maxsize - len(df_today_portfolio)) * 3, select_by=setting["f_percentile_column"])
+                df_select = Backtest_Util.try_select(select_from_df=df_today_mod, select_size=buyable_size * 3, select_by=setting["f_percentile_column"])
+
                 # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
-
                 # df_select = df_select[~df_select["ts_code"].isin(df_today_portfolio["ts_code"])]
-                df_select = df_select[~df_select.index.isin(df_today_portfolio.index)]
-
-                # 6.7 Stocks that open and close price are not the same
-                # condition_open_close = df_select["high"]!=df_select["low"]
+                df_select = df_select[~df_select.index.isin([trade_info["ts_code"] for trade_info in dict_trade_h[tomorrow]["hold"]])]
 
                 # 6.7 PORTFOLIO BUY SELECT TOMORROW: select Stocks that really TRADES
                 df_select_tomorrow = df_tomorrow[df_tomorrow.index.isin(df_select.index)]
@@ -267,43 +257,33 @@ def backtest_once(settings=[{}]):
                 df_select_tomorrow[["rank_final"]] = df_today_mod[["rank_final"]]
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 2
-                df_select_tomorrow = Backtest_Util.try_select(select_from_df=df_select_tomorrow, select_size=p_maxsize - len(df_today_portfolio), select_by=setting["f_percentile_column"])
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase="BUY SELECT", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                df_select_tomorrow = Backtest_Util.try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by=setting["f_percentile_column"])
+                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY SELECT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
-                # 6.9 BUY WEIGHT: # TODO weight vs score, buy good vs buy none
-                # if trend >0.7, add weight
-                # the market_trend weight = portfolio/cash ratio
+                # 6.11 BUY EXECUTE:
+                current_capital = dict_capital[setting_count]["cash"]
+                single_purchase = round(current_capital / buyable_size, 1)
+                for (ts_code, row), hold_count in zip(df_select_tomorrow.iterrows(), range(1, len(df_select_tomorrow) + 1)):
+                    # 6.9 BUY WEIGHT: # TODO weight vs score, buy good vs buy none
+                    # if trend >0.7, add weight
+                    # the market_trend weight = portfolio/cash ratio
 
-                # carry calculated score to df_select_tomorrow, so that socre are visible when buy
+                    buy_open = row["open"]
+                    buy_close = row["close"]
+                    buy_pct_chg_comp_chg = buy_close / buy_open
+                    buy_imp = int((row["open"] == row["close"]))
+                    share = single_purchase // buy_open
+                    value_open = share * buy_open
+                    value_close = share * buy_close
+                    dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open
+                    dict_trade_h[tomorrow]["buy"].append(
+                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                         "comp_chg": buy_pct_chg_comp_chg, "shares": share, "value_open": value_open,
+                         "value_close": value_close, "port_cash": dict_capital[setting_count]["cash"]})
 
-                # 6.10 BUY EXECUTE port_h: They are selected, traded stocks for tomorrow
-                if not df_select_tomorrow.empty:  # buy nothing
-                    # df_select_tomorrow.rename(mapper={"close":"buyout_price"},inplace=True)
-                    df_select_tomorrow["trade_date"] = tomorrow
-                    df_select_tomorrow["hold_days"] = 0
-                    df_select_tomorrow["comp_chg"] = df_select_tomorrow["close"] / df_select_tomorrow["open"]  # Important BUY AT OPEN, not CLOSE
-                    df_select_tomorrow["pct_chg"] = ((df_select_tomorrow["close"] / df_select_tomorrow["open"]) - 1) * 100
-                    df_select_tomorrow["buy_imp"] = ((df_select_tomorrow["open"] == df_select_tomorrow["close"])).astype(int)
-                    df_select_tomorrow["buyout_price"] = df_select_tomorrow["open"]
-                    # df_select_tomorrow = df_select_tomorrow[ [ Util.c_trade_h_label() not in ["sold_price","trade_type"] ]]
-                    # df_select_tomorrow = df_select_tomorrow[Util.c_port_h_label() + ["rank_final"]]
-                    # df_select_tomorrow.drop(labels=[x for x in df_select_tomorrow.columns if x not in Util.c_port_h_label() + ["rank_final"]],axis=1, inplace=True)
-                    now = Backtest_Util.print_and_time(setting_count=setting_count, phase="BUY EXECUTE 0", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                    print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
 
-                    if df_today_portfolio.empty:  # speed up append process if today portfolio was empty
-                        df_today_portfolio = df_select_tomorrow[Util.c_port_h_label() + ["rank_final"]]
-                    else:
-                        # df_today_portfolio = df_today_portfolio.append(df_select_tomorrow[Util.c_port_h_label() + ["rank_final"]], sort=False, ignore_index=True)  # expensive
-                        df_today_portfolio = pd.concat(objs=[df_today_portfolio, df_select_tomorrow], join="inner", sort=False, ignore_index=False)
-                        # df_today_portfolio.set_index(keys="ts_code",drop=True,inplace=True)
-
-                    [print(setting_count, ": ", count, "bought", ts_code) for ts_code, count in zip(df_select_tomorrow.index, range(0, len(df_select_tomorrow)))]
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase="BUY EXECUTE 1", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
-
-                # trade_h: They are selected, traded stocks for tomorrow
-                [portfolio["a_trade_h"].append([tomorrow, "buy", row["name"], index, 0, row["buyout_price"], float("nan"), row["comp_chg"], row["rank_final"], row["buy_imp"]])
-                 for index, row in df_select_tomorrow.iterrows()]
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase="BUY EXECUTE 2", df_today=df_today_mod, df_tomorrow=df_tomorrow, df_today_portfolios=df_today_portfolio, p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
 
             else:  # to not buy today
@@ -311,9 +291,6 @@ def backtest_once(settings=[{}]):
                     print("not buying today because no trend")
                 else:
                     print("not buying today because no space")
-
-            # 6.9 PORTFOLIO UPDATE: HISTORY
-            portfolio["a_port_h"].append(df_today_portfolio)
 
             # 7 PRINT TIME
             if setting["print_log"]:
@@ -325,10 +302,10 @@ def backtest_once(settings=[{}]):
     a_summary_overview = []
     a_summary_setting = []
     Util.sound("saving.mp3")
-    for setting, setting_count, portfolio in zip(settings, range(0, len(settings)), a_portfolios):
+    for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
         try:
             now = mytime.time()
-            df_trade_h, df_portfolio_overview, df_setting = Backtest_Util.report_portfolio(setting, portfolio["a_port_h"], portfolio["a_trade_h"], df_stock_market_all, backtest_start_time, setting_count=setting_count)
+            df_trade_h, df_portfolio_overview, df_setting = Backtest_Util.report_portfolio(setting_original=setting, dict_trade_h=dict_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)
             print("REPORT PORTFOLIO TIME:", mytime.time() - now)
 
             a_summary_overview.append(df_portfolio_overview.head(1))
@@ -374,9 +351,11 @@ def change_dict_score_weight(dict_score, a_weight=[]):
 
 
 def backtest_multiple(loop_indicator=1):
+    # Initialize setting array
+    a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20100201",
+        "start_date": "20200201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -391,11 +370,9 @@ def backtest_multiple(loop_indicator=1):
 
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
-        "f_groups": {},  # {} empty means focus on all groups, {"industry_L1": ["医疗设备","blablabla"]} means from over group, focus on that
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query": ['period > 240'],  # ,"trend > 0.2"
+        "f_query": [],  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
         "s_weight_matrix": {  # ascending True= small, False is big
-
             # "pct_chg": [False, 0.2, 1],  # very important
             # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
             # "turnover_rate": [True, 0.1, 0.5],
@@ -417,46 +394,42 @@ def backtest_multiple(loop_indicator=1):
         # int: random_weight: random number spread to be added to asset # TODO add small random weight to each
 
         # portfolio
+        "p_capital": 50000,  # start capital
         # "p_trading_fee": 0.0002,  # 1==100%
         "p_maxsize": 12,  # not too low, otherwise volatility too big
-        "p_min_holdday": 0,  # 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
+        "p_min_holdday": 0,  # Start consider sell. 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
+        "p_max_holdday": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
         "p_weight": False,
+        "p_keep": False,  # options False, "winner","loser"
         "p_add_position": False,
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # TODO add rsi and trend to all assets
-    # setting that depend on other seetings. DO NOT CHANGE
-    if setting_base["f_groups"] == {}:
-        setting_base["f_groups"] = Util.c_groups_dict(setting_base["assets"])
-
-
-    # Initialize setting array
-    a_settings = []
-
+    # temp
     a_columns = [["total_mv", True, 0.05, 1], ["p5", False, 0.15, 1], ["pct_chg", False, 0.25, 1], ["trend", False, 0.25, 1], ["pjump_up", False, 0.05, 1], ["ivola", True, 0.05, 1], ["candle_net_pos", False, 0.15, 1]]  #
     a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["trend2", False, 1, 1], ["trend10", False, 1, 1], ["candle_net_pos", False, 1, 1], ["candle_net_pos5", False, 1, 1], ["pjump_up", False, 1, 1], ["pjump_up10", False, 1, 1], ["ivola", True, 1, 1], ["ivola5", True, 1, 1],
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
-    a_columns = [["trend", False, 1, 1]]  #
 
-    # for a_columns in [["candle_net_pos",True,1,1],["total_mv",True,1,1],["turnover_rate_pct2",True,1,1],["ps_ttm",False,1,1],["ivola5",True,1,1]]:
-    for f_query in ["创业板", "主板", "中小板"]:
-        setting_copy = copy.deepcopy(setting_base)
-        s_weight_matrix = {  # ascending True= small, False is big
-            # "pct_chg": [False, 0.2, 1],  # very important
-            # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
-            # "turnover_rate": [True, 0.1, 0.5],
-            # "ivola": [True, 0.4, 1],  # seems important
-            "trend": [False, 100, 1],  # very important for this strategy
-            "pct_chg": [True, 5, 1],  # very important for this strategy
-            "pgain2": [True, 3, 1],  # very important for this strategy
-            "pgain5": [True, 2, 1],  # very important for this strategy
-        }
-        setting_copy["s_weight_matrix"] = s_weight_matrix
-        setting_copy["f_query"].append(f"exchange == {f_query}")
-        a_settings.append(setting_copy)
-        print(setting_copy["s_weight_matrix"])
+    # settings creation
+    for max_hold in [2]:
+        for p_keep in ["winner"]:
+            setting_copy = copy.deepcopy(setting_base)
+            s_weight_matrix = {  # ascending True= small, False is big
+                # "pct_chg": [False, 0.2, 1],  # very important
+                # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
+                # "turnover_rate": [True, 0.1, 0.5],
+                # "ivola": [True, 0.4, 1],  # seems important
+                "trend": [False, 100, 1],  # very important for this strategy
+                "pct_chg": [True, 5, 1],  # very important for this strategy
+                "pgain2": [True, 3, 1],  # very important for this strategy
+                "pgain5": [True, 2, 1],  # very important for this strategy
+            }
+            setting_copy["s_weight_matrix"] = s_weight_matrix
+            setting_copy["p_keep"] = p_keep
+            setting_copy["p_max_holdday"] = max_hold
+            a_settings.append(setting_copy)
+            print(setting_copy["s_weight_matrix"])
 
     print("Total Settings:", len(a_settings))
     backtest_once(settings=a_settings)
@@ -468,10 +441,7 @@ if __name__ == '__main__':
         pr = cProfile.Profile()
         pr.enable()
 
-
-
         backtest_multiple(5)
-
 
         pr.disable()
         # pr.print_stats(sort='file')
