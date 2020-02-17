@@ -28,6 +28,32 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
+def fibonacci(n):
+    if n < 0:
+        print("Incorrect input")
+    # First Fibonacci number is 0
+    elif n == 1:
+        return 1
+    # Second Fibonacci number is 1
+    elif n == 2:
+        return 1
+    else:
+        return fibonacci(n - 1) + fibonacci(n - 2)
+
+
+def fibonacci_array(n):
+    a_result = []
+    for i in range(1, n + 1):
+        a_result.append(fibonacci(i))
+    return a_result
+
+
+def fibonacci_weight(n):
+    array = fibonacci_array(n)
+    array = [x / sum(array) for x in array]
+    return array
+
+
 def empty_asset_Tushare(asset="E"):
     if (asset == "E"):
         return pd.DataFrame(columns=["ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol"])
@@ -612,7 +638,7 @@ def a_path(path: str = ""):
     return [x for x in [path + ".csv", path + ".feather"]]
 
 
-def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True):  # utf-8_sig
+def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False):  # utf-8_sig
     if reset_index:
         df.reset_index(drop=drop, inplace=True)
     else:
@@ -630,11 +656,12 @@ def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=Tr
             traceback.print_exc()
             time.sleep(10)
 
-    try:
-        df.to_feather(a_path[1])
-    except Exception as e:
-        print("save feather error")
-        traceback.print_exc()
+    if not skip_feather:
+        try:
+            df.to_feather(a_path[1])
+        except Exception as e:
+            print("save feather error")
+            traceback.print_exc()
 
 
 def to_excel(path, dict_df):

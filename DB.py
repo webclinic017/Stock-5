@@ -1187,6 +1187,13 @@ def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
     return df
 
 
+def get_file(path):
+    try:  # if there is an existing history
+        df = pd.read_csv(path)
+    except:  # if there is no existing history
+        df = pd.DataFrame()
+    return df
+
 def get_group_instance(group_instance="asset_E", market="CN"):
     df = read(Util.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance))
     return df

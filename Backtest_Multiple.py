@@ -43,15 +43,13 @@ def backtest_once(settings=[{}]):
     # Assume all sell at start of day keeps yesterdays close price
     # Assume all buy at start of day will be accounted for todays pcg_chg
 
-    break_detector = threading.Thread(target=get_input, daemon=True)
-    break_detector.start()
-
     # 0 PREPARATION
     # 0.1 PREPARATION- META
     backtest_start_time = datetime.now()
+    break_detector = threading.Thread(target=get_input, daemon=True)
+    break_detector.start()
 
     # 0.2 PREPARATION- SETTING = static values that NEVER CHANGE during the loop
-    # non changeable for the same period = Strategies that share the same meta info can be put together into one run
     start_date = settings[0]["start_date"]
     end_date = settings[0]["end_date"]
     freq = settings[0]["freq"]
@@ -60,7 +58,6 @@ def backtest_once(settings=[{}]):
 
     # 0.3 PREPARATION- INITIALIZE Iterables derived from Setting
     df_trade_dates = DB.get_trade_date(start_date=start_date, end_date=end_date, freq=freq)
-
     df_stock_market_all = DB.get_stock_market_all(market)
     df_group_instance_all = DB.get_group_instance_all(assets=["E"])
     last_simulated_date = df_stock_market_all.index[-1]
@@ -76,7 +73,7 @@ def backtest_once(settings=[{}]):
         if break_loop:
             print("BREAK loop")
             Util.sound("break.mp3")
-            time.sleep(3)
+            time.sleep(5)
             # adjust date if loop was break
             for setting in settings:
                 setting["end_date"] = today
@@ -118,33 +115,30 @@ def backtest_once(settings=[{}]):
             now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 2 ECONOMY
-
             # 3 FINANCIAL MARKET
-
             # 6 PORTFOLIO = ASSET BALANCING, EFFICIENT FRONTIER, LEAST BETA #TODO
-
             # 6.1 PORTFOLIO FEEDBACK = Analysis for performance feedback mechanism
             if p_feedbackday > 0:  # not yet to feedback
                 p_feedbackday = p_feedbackday - 1
             else:  # feedback day
                 # TODO add feedback
                 p_feedbackday = 60
-                print("give any feedback")
 
             # 6.2 PORTFOLIO SELL SELECT
             setting_keep = setting["p_keep"]
             hold_count = 1
-            sold_count = 1
+            sell_count = 1
             for trade_type, a_trade_content in dict_trade_h[today].items():  # NOTE here today means today morning trade
-                if trade_type != "sell":  # == in ["hold","buy"]. stocks that kept for 1 night
+                if trade_type != "sell":  # == in ["hold","buy"]. last day stocks that was kept for over night
                     for dict_trade in a_trade_content:
 
                         # sell decision
                         ts_code = dict_trade["ts_code"]
+                        hold_day_overnight = dict_trade["hold_days"] + 1  # simulates the night when deciding to sell tomorrow
                         sell = False
 
-                        if dict_trade["hold_days"] >= setting["p_min_holdday"]:  # sellable = consider sell
-                            if dict_trade["hold_days"] >= setting["p_max_holdday"]:  # must sell
+                        if hold_day_overnight >= setting["p_min_holdday"]:  # sellable = consider sell
+                            if hold_day_overnight >= setting["p_max_holdday"]:  # must sell
                                 sell = True
                                 reason = "max_hold"
                             elif (setting_keep == "winner" and dict_trade["comp_chg"] < 1) or (setting_keep == "loser" and dict_trade["comp_chg"] > 1):
@@ -169,23 +163,24 @@ def backtest_once(settings=[{}]):
                         if sell:  # Execute sell
                             shares = dict_trade["shares"]
                             realized_value = tomorrow_open * shares
-                            dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value
+                            fee = setting["p_fee"] * realized_value
+                            dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value - fee
 
                             dict_trade_h[tomorrow]["sell"].append(
-                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"], "buyout_price": dict_trade["buyout_price"],
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
                                  "today_open": tomorrow_open, "today_close": np.nan, "sold_price": tomorrow_open, "pct_chg": tomorrow_open / dict_trade["today_close"],
                                  "comp_chg": tomorrow_open / dict_trade["buyout_price"], "shares": shares, "value_open": realized_value, "value_close": np.nan, "port_cash": dict_capital[setting_count]["cash"]})
 
                         else:  # Execute hold
                             dict_trade_h[tomorrow]["hold"].append(
-                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": dict_trade["hold_days"] + 1, "buyout_price": dict_trade["buyout_price"],
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
                                  "today_open": tomorrow_open, "today_close": tomorrow_close, "sold_price": np.nan, "pct_chg": tomorrow_close / dict_trade["today_close"],
                                  "comp_chg": tomorrow_close / dict_trade["buyout_price"], "shares": dict_trade["shares"], "value_open": tomorrow_open * dict_trade["shares"], "value_close": tomorrow_close * dict_trade["shares"], "port_cash": dict_capital[setting_count]["cash"]})
 
                         # print out
                         if sell:
-                            print(f"{setting_count} : " + '{0: <19}'.format("") + '{0: <9}'.format(f"sell {sold_count}"), (f"{ts_code}"))
-                            sold_count = sold_count + 1
+                            print(f"{setting_count} : " + '{0: <19}'.format("") + '{0: <9}'.format(f"sell {sell_count}"), (f"{ts_code}"))
+                            sell_count = sell_count + 1
                         else:
                             print(f"{setting_count} : " + '{0: <0}'.format("") + '{0: <9}'.format(f"hold {hold_count}"), (f"{ts_code}"))
                             hold_count = hold_count + 1
@@ -198,7 +193,7 @@ def backtest_once(settings=[{}]):
 
                 # 6.4 PORTFOLIO BUY SCORE/RANK
                 dict_group_instance_weight = Util.c_group_score_weight()
-                for column, a_weight in setting["s_weight_matrix"].items():
+                for column, a_weight in setting["s_weight1"].items():
                     # column use group rank
                     if a_weight[2] != 1:
 
@@ -239,30 +234,46 @@ def backtest_once(settings=[{}]):
 
                 # 4. Create Rank Final = indicator1+indicator2+indicator3
                 df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
-                                                  for column, a_weight in setting["s_weight_matrix"].items()])  # if final rank is na, nsmallest will not select anyway
+                                                  for column, a_weight in setting["s_weight1"].items()])  # if final rank is na, nsmallest will not select anyway
                 now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
                                                    prev_time=now)
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 1
-                df_select = Backtest_Util.try_select(select_from_df=df_today_mod, select_size=buyable_size * 3, select_by=setting["f_percentile_column"])
+                for i in range(1, len(df_today_mod) + 1):
+                    df_select = Backtest_Util.try_select(select_from_df=df_today_mod, select_size=buyable_size * 3 * i, select_by=setting["f_percentile_column"])
 
-                # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
-                # df_select = df_select[~df_select["ts_code"].isin(df_today_portfolio["ts_code"])]
-                df_select = df_select[~df_select.index.isin([trade_info["ts_code"] for trade_info in dict_trade_h[tomorrow]["hold"]])]
+                    # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
+                    df_select = df_select[~df_select.index.isin([trade_info["ts_code"] for trade_info in dict_trade_h[tomorrow]["hold"]])]
 
-                # 6.7 PORTFOLIO BUY SELECT TOMORROW: select Stocks that really TRADES
-                df_select_tomorrow = df_tomorrow[df_tomorrow.index.isin(df_select.index)]
+                    # 6.7 PORTFOLIO BUY SELECT TOMORROW: select Stocks that really TRADES
+                    df_select_tomorrow = df_tomorrow[df_tomorrow.index.isin(df_select.index)]
+
+                    if len(df_select_tomorrow) > buyable_size:
+                        break
+                    else:
+                        print(f"selection failed, reselect {i}")
+                else:
+                    Util.sound("error.mp3")
+                    print("Error, should not happend")
 
                 # carry final rank, otherwise the second select will not be able to select
-                df_select_tomorrow[["rank_final"]] = df_today_mod[["rank_final"]]
+                df_select_tomorrow["rank_final"] = df_today_mod["rank_final"]
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 2
                 df_select_tomorrow = Backtest_Util.try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by=setting["f_percentile_column"])
                 now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY SELECT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
                 # 6.11 BUY EXECUTE:
+                p_fee = setting["p_fee"]
                 current_capital = dict_capital[setting_count]["cash"]
-                single_purchase = round(current_capital / buyable_size, 1)
+                if setting["p_proportion"] == "prop":
+                    df_select_tomorrow["reserved_capital"] = (df_select_tomorrow["rank_final"].sum() / df_select_tomorrow["rank_final"])
+                    df_select_tomorrow["reserved_capital"] = current_capital * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
+                elif setting["p_proportion"] == "fibo":
+                    df_select_tomorrow["reserved_capital"] = current_capital * pd.Series(data=Util.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
+                else:
+                    df_select_tomorrow["reserved_capital"] = current_capital / buyable_size
+
                 for (ts_code, row), hold_count in zip(df_select_tomorrow.iterrows(), range(1, len(df_select_tomorrow) + 1)):
                     # 6.9 BUY WEIGHT: # TODO weight vs score, buy good vs buy none
                     # if trend >0.7, add weight
@@ -272,14 +283,15 @@ def backtest_once(settings=[{}]):
                     buy_close = row["close"]
                     buy_pct_chg_comp_chg = buy_close / buy_open
                     buy_imp = int((row["open"] == row["close"]))
-                    share = single_purchase // buy_open
-                    value_open = share * buy_open
-                    value_close = share * buy_close
-                    dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open
+                    shares = row["reserved_capital"] // buy_open
+                    value_open = shares * buy_open
+                    value_close = shares * buy_close
+                    fee = p_fee * value_open
+                    dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open - fee
 
                     dict_trade_h[tomorrow]["buy"].append(
-                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 1, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
-                         "comp_chg": buy_pct_chg_comp_chg, "shares": share, "value_open": value_open,
+                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                         "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
                          "value_close": value_close, "port_cash": dict_capital[setting_count]["cash"]})
 
                     print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
@@ -300,17 +312,16 @@ def backtest_once(settings=[{}]):
                 print("=" * 50)
 
     # 10 STEP CREATE REPORT AND BACKTEST OVERVIEW
-    a_summary_overview = []
-    a_summary_setting = []
+
+    a_summary_merge = []
     Util.sound("saving.mp3")
     for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
         try:
             now = mytime.time()
             df_trade_h, df_portfolio_overview, df_setting = Backtest_Util.report_portfolio(setting_original=setting, dict_trade_h=dict_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)
             print("REPORT PORTFOLIO TIME:", mytime.time() - now)
+            a_summary_merge.append(pd.merge(left=df_portfolio_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False))
 
-            a_summary_overview.append(df_portfolio_overview.head(1))
-            a_summary_setting.append(df_setting)
 
             # sendmail
             if setting["send_mail"]:
@@ -324,22 +335,14 @@ def backtest_once(settings=[{}]):
             print("summarizing ERROR:", e)
             traceback.print_exc()
 
-    # read saved backtest summary
-    path_summary = "Market/CN/Backtest_Multiple/Backtest_Summary.xlsx"
-    summary_writer = pd.ExcelWriter(path_summary, engine='xlsxwriter')
-    try:  # if there is an existing history
-        xls = pd.ExcelFile(path_summary)
-        df_overview_h = pd.read_excel(xls, sheet_name="Overview")
-        df_setting_h = pd.read_excel(xls, sheet_name="Setting")
-    except:  # if there is no existing history
-        df_overview_h, df_setting_h = pd.DataFrame(), pd.DataFrame()
+    path = Util.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
+    df_h = DB.get_file(path[0])
+    print("df_h", df_h)
+    df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
+    print("df_h", df_h)
+    df_backtest_summ = df_backtest_summ.append(df_h, sort=False)
+    Util.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
 
-    df_summary_overview_new = pd.concat(a_summary_overview[::-1] + [df_overview_h], sort=False, ignore_index=True)
-    df_summary_setting_new = pd.concat(a_summary_setting[::-1] + [df_setting_h], sort=False, ignore_index=True)
-    df_summary_overview_new.to_excel(summary_writer, sheet_name="Overview", index=False, encoding='utf-8_sig')
-    df_summary_setting_new.to_excel(summary_writer, sheet_name="Setting", index=False, encoding='utf-8_sig')
-
-    Util.pd_writer_save(summary_writer, path_summary)
     return
 
 
@@ -356,7 +359,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20150201",
+        "start_date": "20180201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -373,7 +376,8 @@ def backtest_multiple(loop_indicator=1):
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
         "f_query": [],  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
-        "s_weight_matrix": {  # ascending True= small, False is big
+
+        "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important
             # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
             # "turnover_rate": [True, 0.1, 0.5],
@@ -388,20 +392,22 @@ def backtest_multiple(loop_indicator=1):
             # "pgain240": [True, 1, 1],  # very important for this strategy
             # "candle_net_pos": [True, 0.1, 1],
         },
-
+        "s_weight2": {  # ascending True= small, False is big
+            "trend": [False, 100, 1],  # very important for this strategy
+        },
         # bool: ascending True= small, False is big
         # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
         # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
         # int: random_weight: random number spread to be added to asset # TODO add small random weight to each
 
         # portfolio
-        "p_capital": 50000,  # start capital
-        # "p_trading_fee": 0.0002,  # 1==100%
+        "p_capital": 10000,  # start capital
+        "p_fee": 0.0000,  # 1==100%
         "p_maxsize": 12,  # not too low, otherwise volatility too big
-        "p_min_holdday": 1,  # Start consider sell. 0 means trade on next day, aka T+1， = Hold stock for 1 night， 1 means hold for 2 nights. Preferably 0,1,2 for day trading
+        "p_min_holdday": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_holdday": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
-        "p_weight": False,
+        "p_proportion": False,  # False = evenly weighted, "prop" = Score propotional weighted #fiboTODO Add fibonacci proportion
         "p_keep": False,  # options False, "winner","loser"
         "p_add_position": False,
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
@@ -413,24 +419,22 @@ def backtest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for max_hold in [1, 2, 3, 5, 8]:
-        for p_keep in [False, "winner", "loser"]:
-            setting_copy = copy.deepcopy(setting_base)
-            s_weight_matrix = {  # ascending True= small, False is big
-                # "pct_chg": [False, 0.2, 1],  # very important
-                # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
-                # "turnover_rate": [True, 0.1, 0.5],
-                # "ivola": [True, 0.4, 1],  # seems important
-                "trend": [False, 100, 1],  # very important for this strategy
-                "pct_chg": [True, 5, 1],  # very important for this strategy
-                "pgain2": [True, 3, 1],  # very important for this strategy
-                "pgain5": [True, 2, 1],  # very important for this strategy
-            }
-            setting_copy["s_weight_matrix"] = s_weight_matrix
-            setting_copy["p_keep"] = p_keep
-            setting_copy["p_max_holdday"] = max_hold
-            a_settings.append(setting_copy)
-            print(setting_copy["s_weight_matrix"])
+    for p_maxsize in [2, 5, 8, 12, 20]:
+        for p_keep in [False]:
+            for p_proportion in ["fibo"]:
+                setting_copy = copy.deepcopy(setting_base)
+                s_weight1 = {  # ascending True= small, False is big
+                    "trend": [False, 100, 1],  # very important for this strategy
+                    "pct_chg": [True, 5, 1],  # very important for this strategy
+                    "pgain2": [True, 3, 1],  # very important for this strategy
+                    "pgain5": [True, 2, 1],  # very important for this strategy
+                }
+                setting_copy["s_weight1"] = s_weight1
+                setting_copy["p_keep"] = p_keep
+                setting_copy["p_proportion"] = p_proportion
+                setting_copy["p_maxsize"] = p_maxsize
+                a_settings.append(setting_copy)
+                print(setting_copy["s_weight1"])
 
     print("Total Settings:", len(a_settings))
     backtest_once(settings=a_settings)
@@ -445,7 +449,7 @@ if __name__ == '__main__':
         backtest_multiple(5)
 
         pr.disable()
-        pr.print_stats(sort='file')
+        # pr.print_stats(sort='file')
 
         pass
     except Exception as e:

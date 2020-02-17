@@ -25,7 +25,8 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     # deep copy setting
     setting = copy.deepcopy(setting_original)
     p_compare = setting["p_compare"]
-    s_weight_matrix = setting["s_weight_matrix"]
+    s_weight1 = setting["s_weight1"]
+    s_weight2 = setting["s_weight2"]
 
     # convertes dict in dict to string
     for key, value in setting.items():
@@ -44,12 +45,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     for day, info in dict_trade_h.items():
         for trade_type, a_trade_context in info.items():
             for single_trade in a_trade_context:
-                helper_dict = {"trade_date": day, "trade_type": trade_type, **single_trade}
-                if helper_dict["name"] == np.nan or helper_dict["name"] == float("nan"):
-                    print("error")
-                    Util.sound("error.mp3")
-                    print(helper_dict)
-                trade_h_helper.append(helper_dict)
+                trade_h_helper.append({"trade_date": day, "trade_type": trade_type, **single_trade})
     df_trade_h = pd.DataFrame(data=trade_h_helper, columns=trade_h_helper[-1].keys())
 
 
@@ -70,7 +66,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_port_c = df_trade_h.groupby("trade_date").agg("mean")
     df_port_c["port_pearson"] = df_trade_h.groupby("trade_date").apply(lambda x: x["rank_final"].corr(x["pct_chg"]))
     df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
-    df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: df_trade_h.at[x.last_valid_index(), "port_cash"])
+    df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: x.at[x.last_valid_index(), "port_cash"])
     df_port_c["buy"] = df_trade_h[df_trade_h["trade_type"].isin(["buy"])].groupby("trade_date").size()
     df_port_c["hold"] = df_trade_h[df_trade_h["trade_type"].isin(["hold"])].groupby("trade_date").size()
     df_port_c["sell"] = df_trade_h[df_trade_h["trade_type"].isin(["sell"])].groupby("trade_date").size()
@@ -85,7 +81,6 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
         df_port_c["comp_chg_" + competitor[1]] = Util.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
-
     # df_port_c add trend2,10,20,60,240
     a_current_trend_label = []
     for i in current_trend:  # do not add trend1 since it does not exist
@@ -93,19 +88,12 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
 
     # tab_overview
-    df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[])
-    df_port_overview = df_port_overview.astype(object)
-
-    # create ID
+    df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
     end_time_date = datetime.now()
     day = end_time_date.strftime('%Y/%m/%d')
     time = end_time_date.strftime('%H:%M:%S')
     duration = (end_time_date - backtest_start_time).seconds
     duration, Duration_rest = divmod(duration, 60)
-
-    df_port_c["tomorrow_pct_chg"] = df_port_c["all_pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
-
-    # general overview setting
     df_port_overview["SDate"] = day
     df_port_overview["STime"] = time
     df_port_overview["SDuration"] = str(duration) + ":" + str(Duration_rest)
@@ -114,12 +102,11 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_port_overview["end_date"] = setting["end_date"]
 
     # portfolio strategy specific overview
+    df_port_c["tomorrow_pct_chg"] = df_port_c["all_pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
     period = len(df_trade_h.groupby("trade_date"))
     df_port_overview.at[0, "period"] = period
     df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
 
-
-    # TODO add rank final and comp chg pearson
     df_port_overview.at[0, "asset_hold"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "hold_days"].mean()
     df_port_overview.at[0, "asset_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
     df_port_overview.at[0, "all_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
@@ -134,17 +121,19 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
         df_port_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
     except:
         df_port_overview.at[0, "all_comp_chg"] = float("nan")
+
     df_port_overview.at[0, "port_beta"] = Util.calculate_beta(df_port_c["all_pct_chg"], df_port_c["pct_chg" + beta_against])
     df_port_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
     df_port_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
-
-
 
     for trade_type in ["buy", "sell", "hold"]:
         try:
             df_port_overview.at[0, f"{trade_type}_count"] = df_trade_h["trade_type"].value_counts()[trade_type]
         except:
             df_port_overview.at[0, f"{trade_type}_count"] = float("nan")
+
+    for lower_year, upper_year in [(20000101, 20050101), (20050101, 20100101), (20100101, 20150101), (20150101, 20200101)]:
+        df_port_overview.at[0, f"all_pct_chg{upper_year}"] = df_port_c.loc[(df_port_c.index > lower_year) & (df_port_c.index < upper_year), "all_pct_chg"].mean()
 
 
     # overview win rate and pct_chg mean
@@ -160,7 +149,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
                 pass
 
     # overview indicator combination
-    for column, a_weight in s_weight_matrix.items():
+    for column, a_weight in s_weight1.items():
         df_port_overview[column + "_ascending"] = a_weight[0]
         df_port_overview[column + "_indicator_weight"] = a_weight[1]
         df_port_overview[column + "_asset_weight"] = a_weight[2]
@@ -204,7 +193,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_setting = pd.DataFrame(setting, index=[0])
     df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
 
-    print("setting is", setting["s_weight_matrix"])
+    print("setting is", setting["s_weight1"])
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
