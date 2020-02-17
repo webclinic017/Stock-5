@@ -26,10 +26,10 @@ def create_gif(ts_code="000002.SZ"):
     imageio.mimsave(output_file, images, duration=0.005)
 
 
-def support_resistance_once(window=1000, rolling_freq=240, ts_code="000002.SZ"):
+def support_resistance_once(window=1000, rolling_freq=20, ts_code="000002.SZ", step=5):
     def support_resistance_acc(df, freq, max_rs, s_minmax, adj_start_date, end_date):
         # with bins, we can find clustered resistance
-        s_occurence_bins = s_minmax.value_counts(bins=2000)
+        s_occurence_bins = s_minmax.value_counts(bins=100)
         counter = 1
         for index, value in s_occurence_bins.iteritems():
             if counter <= max_rs:
@@ -40,7 +40,8 @@ def support_resistance_once(window=1000, rolling_freq=240, ts_code="000002.SZ"):
                 break
 
     # 1 to 6 means 5 resistance freq with each 2 pieces
-    dict_rs = {int(round(window / 5) * i): 2 for i in range(1, 6)}
+    dict_rs = {int(round(window / (2 ** i))): 4 for i in range(0, 6)}
+    print(dict_rs)
 
     # calculate all min max for acceleration used for later simulation
     df_asset = DB.get_asset(ts_code=ts_code)
@@ -54,7 +55,7 @@ def support_resistance_once(window=1000, rolling_freq=240, ts_code="000002.SZ"):
             df_asset[f"rs{freq}_{i}"] = 0
 
     # iterate over past data as window
-    for row in range(1000, len(df_asset)):
+    for row in range(1000, len(df_asset), step):
         start_date = df_asset.index[row]
         end_date = df_asset.index[row + window]
         df_partcial = df_asset.loc[start_date: end_date]
@@ -62,7 +63,18 @@ def support_resistance_once(window=1000, rolling_freq=240, ts_code="000002.SZ"):
 
         for freq, max_rs in dict_rs.items():
             adj_start = df_asset.index[row + window - freq]
-            s_minmax = s_minall.loc[adj_start:end_date].append(s_maxall.loc[adj_start:end_date])
+            s_minmax = (s_minall.loc[adj_start:end_date]).append(s_maxall.loc[adj_start:end_date])
+            # if freq==500:
+            #     s_minmax.reset_index(inplace=True, drop=True)
+            #     s_minmax.plot(legend=False)
+            #     plt.show()
+            #     plt.close()
+            #
+            #     df_partcial.reset_index(inplace=True, drop=True)
+            #     df_partcial.plot(legend=False)
+            #     plt.show()
+            #     plt.close()
+
             support_resistance_acc(df=df_partcial, freq=freq, max_rs=max_rs, s_minmax=s_minmax, adj_start_date=adj_start, end_date=end_date)
 
         # plot graph and save it
@@ -81,7 +93,7 @@ def support_resistance_once(window=1000, rolling_freq=240, ts_code="000002.SZ"):
 def support_resistance_multiple(step=1):
     df_ts_code = DB.get_ts_code()[::step]
     for ts_code in df_ts_code["ts_code"]:
-        support_resistance_once(ts_code=ts_code)
+        support_resistance_once(ts_code=ts_code, step=5)
         create_gif(ts_code=ts_code)
 
 
