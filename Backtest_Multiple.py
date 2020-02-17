@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import time as mytime
 import math
-import talib
+# import talib
 import time
 import DB
 from itertools import combinations
