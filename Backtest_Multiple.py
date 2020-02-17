@@ -125,40 +125,48 @@ def backtest_once(settings=[{}]):
                 p_feedbackday = 60
 
             # 6.2 PORTFOLIO SELL SELECT
-            setting_keep = setting["p_keep"]
+            p_winner_abv = setting["p_winner_abv"]
+            p_loser_und = setting["p_loser_und"]
             hold_count = 1
             sell_count = 1
             for trade_type, a_trade_content in dict_trade_h[today].items():  # NOTE here today means today morning trade
                 if trade_type != "sell":  # == in ["hold","buy"]. last day stocks that was kept for over night
                     for dict_trade in a_trade_content:
 
-                        # sell decision
+                        # sell meta
                         ts_code = dict_trade["ts_code"]
-                        hold_day_overnight = dict_trade["hold_days"] + 1  # simulates the night when deciding to sell tomorrow
+                        hold_day_overnight = dict_trade["T+"] + 1  # simulates the night when deciding to sell tomorrow
                         sell = False
 
-                        if hold_day_overnight >= setting["p_min_holdday"]:  # sellable = consider sell
-                            if hold_day_overnight >= setting["p_max_holdday"]:  # must sell
+                        # sell decision
+                        if hold_day_overnight >= setting["p_min_T+"]:  # sellable = consider sell
+                            if hold_day_overnight >= setting["p_max_T+"]:  # must sell
                                 sell = True
-                                reason = "max_hold"
-                            elif (setting_keep == "winner" and dict_trade["comp_chg"] < 1) or (setting_keep == "loser" and dict_trade["comp_chg"] > 1):
-                                sell = True
-                                reason = f"not {setting_keep}"
+                                reason = f"> T+{hold_day_overnight}"
+                            elif p_winner_abv:
+                                if dict_trade["comp_chg"] > p_winner_abv:
+                                    sell = True
+                                    reason = f"sell winner comp_chg above {p_winner_abv}"
+                            elif p_loser_und:
+                                if dict_trade["comp_chg"] < p_loser_und:
+                                    sell = True
+                                    reason = f"sell loser comp_chg under {p_loser_und}"
                             else:
-                                reason = f"is {setting_keep}"
+                                reason = f"sellable - but no"
                         else:
-                            reason = f"min_hold"
+                            reason = f"< T+{hold_day_overnight}"
 
+                        # try to get tomorrow price. if not ,then not trading
                         try:
                             tomorrow_open = df_tomorrow.at[ts_code, "open"]
                             tomorrow_close = df_tomorrow.at[ts_code, "close"]
                         except:  # tomorrow 停牌 and no information
                             tomorrow_open = dict_trade["today_close"]
                             tomorrow_close = dict_trade["today_close"]
-
                             sell = False
-                            reason = reason + " not trading"
+                            reason = reason + "- not trading"
                             print("probably 停牌", ts_code)
+
 
                         if sell:  # Execute sell
                             shares = dict_trade["shares"]
@@ -167,13 +175,13 @@ def backtest_once(settings=[{}]):
                             dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value - fee
 
                             dict_trade_h[tomorrow]["sell"].append(
-                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "T+": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
                                  "today_open": tomorrow_open, "today_close": np.nan, "sold_price": tomorrow_open, "pct_chg": tomorrow_open / dict_trade["today_close"],
                                  "comp_chg": tomorrow_open / dict_trade["buyout_price"], "shares": shares, "value_open": realized_value, "value_close": np.nan, "port_cash": dict_capital[setting_count]["cash"]})
 
                         else:  # Execute hold
                             dict_trade_h[tomorrow]["hold"].append(
-                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "hold_days": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
+                                {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "T+": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
                                  "today_open": tomorrow_open, "today_close": tomorrow_close, "sold_price": np.nan, "pct_chg": tomorrow_close / dict_trade["today_close"],
                                  "comp_chg": tomorrow_close / dict_trade["buyout_price"], "shares": dict_trade["shares"], "value_open": tomorrow_open * dict_trade["shares"], "value_close": tomorrow_close * dict_trade["shares"], "port_cash": dict_capital[setting_count]["cash"]})
 
@@ -290,7 +298,7 @@ def backtest_once(settings=[{}]):
                     dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open - fee
 
                     dict_trade_h[tomorrow]["buy"].append(
-                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "hold_days": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "T+": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
                          "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
                          "value_close": value_close, "port_cash": dict_capital[setting_count]["cash"]})
 
@@ -337,9 +345,7 @@ def backtest_once(settings=[{}]):
 
     path = Util.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
     df_h = DB.get_file(path[0])
-    print("df_h", df_h)
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
-    print("df_h", df_h)
     df_backtest_summ = df_backtest_summ.append(df_h, sort=False)
     Util.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
 
@@ -359,7 +365,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20180201",
+        "start_date": "20000101",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -404,11 +410,12 @@ def backtest_multiple(loop_indicator=1):
         "p_capital": 10000,  # start capital
         "p_fee": 0.0000,  # 1==100%
         "p_maxsize": 12,  # not too low, otherwise volatility too big
-        "p_min_holdday": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
-        "p_max_holdday": 1,  # MUST sell no matter what.
+        "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
+        "p_max_T+": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
         "p_proportion": False,  # False = evenly weighted, "prop" = Score propotional weighted #fiboTODO Add fibonacci proportion
-        "p_keep": False,  # options False, "winner","loser"
+        "p_winner_abv": False,  # options False, >1. e.g. 1.2 means if one stock gained 20%, sell
+        "p_loser_und": False,  # options False, <1. e.g. 0.8 means if one stocks gained -20%, sell
         "p_add_position": False,
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
@@ -419,9 +426,8 @@ def backtest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for p_maxsize in [2, 5, 8, 12, 20]:
-        for p_keep in [False]:
-            for p_proportion in ["fibo"]:
+    for p_maxsize in [2, 5, 8, 12]:
+        for p_proportion in [False]:
                 setting_copy = copy.deepcopy(setting_base)
                 s_weight1 = {  # ascending True= small, False is big
                     "trend": [False, 100, 1],  # very important for this strategy
@@ -430,7 +436,6 @@ def backtest_multiple(loop_indicator=1):
                     "pgain5": [True, 2, 1],  # very important for this strategy
                 }
                 setting_copy["s_weight1"] = s_weight1
-                setting_copy["p_keep"] = p_keep
                 setting_copy["p_proportion"] = p_proportion
                 setting_copy["p_maxsize"] = p_maxsize
                 a_settings.append(setting_copy)

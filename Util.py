@@ -428,108 +428,6 @@ def get_linear_regression_rise(s_index, s_data):
     return z[0]
 
 
-def Diff(li1, li2):
-    li_dif = [i for i in li1 + li2 if i not in li1 or i not in li2]
-    return li_dif
-
-
-def most_common_2(lst, firstn):
-    if not lst:
-        return float("nan")
-    result = Counter(lst).most_common(firstn)
-    return result
-
-
-def support_resistance(with_time_rs, df):
-    # NEED to be reversed and reindexed before continue
-    rolling_period = 240
-    first_n_resistance = 6
-    spread_threashold_1 = 0.8
-    spread_threashold_2 = 1.2
-
-    list_min = (np.array(df.close.rolling(rolling_period).min()))
-    list_max = (np.array(df.close.rolling(rolling_period).max()))
-    list_min_max = np.concatenate([list_min, list_max])
-
-    min_max_u, min_max_count = np.unique(list_min_max, return_index=False, return_inverse=False, return_counts=True)
-    min_max_sort = np.argsort(-min_max_count)
-    sorted_min_max_u = min_max_u[min_max_sort]
-    # sorted_count=count[count_sort_ind]
-
-    list_of_rs = []
-    for i in range(0, sorted_min_max_u.size):
-        possible_rs = sorted_min_max_u[i]
-        if (possible_rs == float("nan") or np.isnan(possible_rs)):
-            continue
-        too_close = False
-        for existing_rs in list_of_rs:
-            if (spread_threashold_1 <= (existing_rs / possible_rs) <= spread_threashold_2):
-                too_close = True
-                break
-
-        if (not too_close):
-            list_of_rs.append(possible_rs)
-            if (with_time_rs):
-                first_date = np.where(list_min == possible_rs)
-                if (first_date[0].size == 0):
-                    first_date = np.where(list_max == possible_rs)
-                df.loc[first_date[0][0]:len(df.index), "rs" + str(len(list_of_rs) - 1)] = possible_rs
-            else:
-                df["sr" + str(len(list_of_rs) - 1)] = possible_rs
-
-        if (len(list_of_rs) > first_n_resistance):
-            break
-
-    # df["min"]=df.close.rolling(rolling_period).min()
-    # df["max"]=df.close.rolling(rolling_period).max()
-    return df
-
-
-def comp_support_resistance(with_time_rs, df, list_min_max):
-    # NEED to be reversed and reindexed before continue
-    rolling_period = 240
-    first_n_resistance = 6
-    spread_threashold_1 = 0.8
-    spread_threashold_2 = 1.2
-
-    list_min = (np.array(df.close[len(df.index)].rolling(rolling_period).min()))
-    list_max = (np.array(df.close[len(df.index)].rolling(rolling_period).max()))
-    list_min_max = list_min_max.append(list_min)
-    list_min_max = list_min_max.append(list_max)
-
-    min_max_u, min_max_count = np.unique(list_min_max, return_index=False, return_inverse=False, return_counts=True)
-    min_max_sort = np.argsort(-min_max_count)
-    sorted_min_max_u = min_max_u[min_max_sort]
-    # sorted_count=count[count_sort_ind]
-
-    list_of_rs = []
-    for i in range(0, sorted_min_max_u.size):
-        possible_rs = sorted_min_max_u[i]
-        if (possible_rs == float("nan") or np.isnan(possible_rs)):
-            continue
-        too_close = False
-        for existing_rs in list_of_rs:
-            if (spread_threashold_1 <= (existing_rs / possible_rs) <= spread_threashold_2):
-                too_close = True
-                break
-
-        if (not too_close):
-            list_of_rs.append(possible_rs)
-            if (with_time_rs):
-                first_date = np.where(list_min == possible_rs)
-                if (first_date[0].size == 0):
-                    first_date = np.where(list_max == possible_rs)
-                df.loc[first_date[0][0]:len(df.index), "rs" + str(len(list_of_rs) - 1)] = possible_rs
-            else:
-                df["sr" + str(len(list_of_rs) - 1)] = possible_rs
-
-        if (len(list_of_rs) > first_n_resistance):
-            break
-
-    # df["min"]=df.close.rolling(rolling_period).min()
-    # df["max"]=df.close.rolling(rolling_period).max()
-    return [df, list_min_max]
-
 
 def calculate_beta(s1, s2):
     s1 = s1.rename("s1").copy()
@@ -910,10 +808,6 @@ def c_groups_bad_industry_L3_instance():
     result = ["制冷空调设备", "软饮料", "粮油加工", "钢结构", "海洋捕捞", "酒店", "医药商业", "白酒", "一般物业经营", "旅游综合", "冰箱", "涤纶", "其他农产品加工", "中药", "氮肥", "葡萄酒", "磷肥", "有线电视网络", "钾肥", "其他酒类", "珠宝首饰", "毛纺", "特钢", "石油加工", "工程机械", "水产养殖", "油气钻采服务", "人工景点", "煤炭开采", "火电设备", "航运", "纯碱", "炭黑", "汽车服务", "家纺", "粮食种植", "自然景点", "氨纶",
               "女装", "造纸", "空调", "啤酒", "航空运输", "重型机械", "餐饮", "鞋帽", "商用载货车", "乘用车", "合成革", "专业市场", "焦炭加工", "丝绸", "多业态零售", "超市", "男装", "印染", "百货", "保险", "水电", "高压设备", "彩电", "港口", "水利工程", "石油开采", "洗衣机", "普钢", "复合肥", "休闲服装", "黄酒", "轮胎", "城轨建设", "棉纺", "火电", "铁路运输", "综合电力设备商", "高速公路", "银行", "铁路建设", "机场"]
     return result
-
-
-def c_trade_h_label():
-    return ["trade_date", "trade_type", "reason", "ts_code", "name", "hold_days", "buyout_price", "sold_price", "shares", "value", "pct_chg", "comp_chg", "rank_final", "buy_imp", "assets_value", "cash"]
 
 
 def c_folder_root():

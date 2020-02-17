@@ -107,7 +107,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_port_overview.at[0, "period"] = period
     df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
 
-    df_port_overview.at[0, "asset_hold"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "hold_days"].mean()
+    df_port_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
     df_port_overview.at[0, "asset_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
     df_port_overview.at[0, "all_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
 
@@ -201,86 +201,11 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     return [df_trade_h, df_port_overview, df_setting]
 
 
-# returns a portfolio for tomorrow
-def hold_port_h_for_tomorrow(df_today_portfolios, df_date_tomorrow, trade_date_tomorrow, setting_count):
-    # port_h
-    if df_today_portfolios.empty:
-        return df_today_portfolios
-
-    # use todays portfolio as a base for modify
-    df_result = df_today_portfolios.copy()
-
-    # set both df index=ts_code for later serialized operation
-    # df_date_tomorrow.index = df_date_tomorrow["ts_code"]
-    # df_result.index = df_result["ts_code"]
-
-    # operation done for both trading and non-trading stocks tomorrow
-    # TODO in REALIY if a stock does not trade, it counts as bad opportunity cost. So in REAL simulation, the pct_chg here should be changed to 0
-    # TODO A strategy that minimizes picking stock with 停牌 is also part of the strategy and hence needs to be regarded。
-    df_result["pct_chg"] = np.nan  # set all stocks tomorrows percent change to . If it trades tomorrow, it will be overritten. If not, it stays correct because stock not trading
-    df_result["trade_date"] = trade_date_tomorrow
-    df_result["hold_days"] = df_result["hold_days"] + 1  # update hold day for both trading and non trading stocks
-
-    try:  # at least one of todays portfolio is trading tomorrow
-        # filter df_tomorrow by todays portfolio
-        df_date_tomorrow_trade = df_date_tomorrow.loc[df_today_portfolios.index.tolist()]
-
-        # perform two operations ONLY for stocks that trade tomorrow
-        # df_result.loc[df_date_tomorrow_trade.index,"pct_chg"]=df_date_tomorrow_trade["pct_chg"]
-        # df_result.loc[df_date_tomorrow_trade.index,"comp_chg"]=df_date_tomorrow_trade["close"]/ df_result.loc[df_date_tomorrow_trade.index,"buyout_price"]
-
-        df_date_tomorrow_trade["comp_chg"] = df_date_tomorrow_trade["close"] / df_result["buyout_price"]
-        df_result.loc[df_date_tomorrow_trade.index, ["pct_chg", "comp_chg"]] = df_date_tomorrow_trade[["pct_chg", "comp_chg"]]
 
 
-    except:  # NONE of todays portfolio trade tomorrow. df_date_tomorrow.loc will raise error
-        # But I dont need to do anything because pct_chg was already set to 0.0.comp_chg will remain same
-        pass
-
-    # print out
-
-    for ts_code, hold_count in zip(df_result.index, range(len(df_result.index))):
-        print(f"{setting_count}: {hold_count} hold {ts_code}")
-
-    return df_result
-
-
-#
-# def update_simulate_history(df_portfolio_overview, df_setting):
-#     df_result = df_portfolio_overview.head(1)
-#
-#     # load existing excel
-#     path = "Market/CN/Backtest_Multiple/Backtest_Summary.xlsx"
-#     portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
-#
-#     # load sheets of existing excel
-#     try:  # if there is an existing history
-#         xls = pd.ExcelFile(path)
-#         df_overview_h = pd.read_excel(xls, sheet_name="Overview")
-#         df_setting_h = pd.read_excel(xls, sheet_name="Setting")
-#     except Exception as e:  # if there is no existing history
-#         print("ERROR",e)
-#         df_overview_h = pd.DataFrame()
-#         df_setting_h = pd.DataFrame()
-#
-#     # to_excel
-#     df_overview_h = df_result.append(df_overview_h, sort=False, ignore_index=True)
-#     df_setting_h = df_setting.append(df_setting_h, sort=False, ignore_index=True)
-#     df_overview_h.to_excel(portfolio_writer, sheet_name="Overview", index=False, encoding='utf-8_sig')
-#     df_setting_h.to_excel(portfolio_writer, sheet_name="Setting", index=False, encoding='utf-8_sig')
-#     for i in range(0, 10):
-#         try:
-#             portfolio_writer.save()
-#             return
-#         except Exception as e:
-#             Util.close_file(path)
-#             Util.sound("close_excel.mp3")
-#             print(e)
-#             time.sleep(10)
 
 
 # possible select func= pd.Dataframe.nsmallest, pd.Dataframe.nlargest, pd.Dataframe.sample
-
 def try_select(select_from_df, select_size, select_by):
     try:
         return select_from_df.nsmallest(int(select_size), [select_by])
@@ -288,7 +213,6 @@ def try_select(select_from_df, select_size, select_by):
     # return select_from_df.sort_values(select_by, ascending=True).head(int(select_size))
     except Exception as e:  # if sample size bigger than df, ignore
         print("ERROR. less than portfolio p_max_size", e)
-
 
 def print_and_time(setting_count, phase, dict_trade_h_hold, dict_trade_h_buy, dict_trade_h_sell, p_maxsize, a_time, prev_time):
     # print(f"{setting_count} : {phase} hold {len(dict_trade_h_hold)} bought {len(dict_trade_h_buy)} sold {len(dict_trade_h_sell)} space {p_maxsize - (len(dict_trade_h_hold)+len(dict_trade_h_buy))}")
@@ -298,8 +222,8 @@ def print_and_time(setting_count, phase, dict_trade_h_hold, dict_trade_h_buy, di
     return now
 
 
-def print_log(setting_count, *args):
-    print(setting_count, ": what ", [args], [*args])
+class print_log():
+    print_log = True
 
 
 if __name__ == '__main__':
