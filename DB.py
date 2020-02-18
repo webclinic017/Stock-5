@@ -17,6 +17,7 @@ import cProfile
 from tqdm import tqdm
 from Util import c_assets, c_rolling_freqs, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_ops, c_candle, c_groups_dict, multi_process, today
 
+pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
@@ -219,7 +220,10 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
     df_ignore_EI = get_ts_code_ignore()
     print("Index not to consider:", df_ignore_EI.loc[df_ignore_EI["ignore"] == True, "ts_code"].tolist())
 
+
     df_ts_codes = get_ts_code(asset)
+    if asset == "I":  # acceleration process to skip I TODO remove when I is fully used
+        df_ts_codes = df_ts_codes[df_ts_codes["ts_code"].isin(["000001.SH", "399006.SZ", "399001.SZ"])]
     df_ts_codes = df_ts_codes[~df_ts_codes["ts_code"].isin(df_ignore_EI.loc[df_ignore_EI["ignore"] == True, "ts_code"].tolist())]
 
     real_latest_trade_date = get_last_trade_date(freq)
@@ -387,6 +391,8 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
 
     # add trend for individual stocks
     Setup_date_trend_once(a_all=[1] + c_rolling_freqs(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_ops(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
+    # print(f"calculating resistance...")
+    #df=support_resistance(df_asset=df)
 
     return df
 
@@ -765,7 +771,7 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     a_result = []
     df_sh_index = get_asset(ts_code="000001.SH", asset="I", freq=freq, market="CN")
     df_sh_index = df_sh_index.loc[int(last_saved_date):int(last_trade_date)]
-    df_sh_index = df_sh_index.loc[df_sh_index.index > int(last_saved_date)]  #exclude last saved date from update
+    df_sh_index = df_sh_index.loc[df_sh_index.index > int(last_saved_date)]  # exclude last saved date from update
     print(df_sh_index)
 
     # loop through all trade dates and add them together
@@ -961,6 +967,73 @@ def D_to_WMYS_splitter(df_trade_date_WMYS, df_D):
     return a_result
 
 
+def support_resistance(start_window=240, rolling_freq=1, step=10, thresh=[4, 0.2], bins=8, dict_rs={"abv": 8, "und": 8}, df_asset=pd.DataFrame()):
+    def support_resistance_acc(abv_und, max_rs, s_minmax, end_date, f_end_date, df_asset):
+        # 1. step calculate all relevant resistance = relevant earlier price close to current price
+        current_price = df_asset.at[end_date, "close"]
+
+        if abv_und == "abv":
+            s_minmax = s_minmax[(s_minmax / current_price < thresh[0]) & ((s_minmax / current_price > 1))]
+        elif abv_und == "und":
+            s_minmax = s_minmax[(s_minmax / current_price < 1) & ((s_minmax / current_price > thresh[1]))]
+
+        # 2.step find the max occurence of n values
+        try:
+            s_occurence_bins = s_minmax.value_counts(bins=bins)
+            a_rs = []
+            for (index, value), counter in zip(s_occurence_bins.iteritems(), range(0, max_rs)):
+                a_rs.append(index.left)
+
+            # 3. step sort the max occurence values and assign them as rs
+            a_rs.sort()  # small value first 0 ,1, 2
+            for item, i in zip(a_rs, range(0, len(a_rs))):
+                df_asset.loc[end_date:f_end_date, f"rs{abv_und}{i}"] = item
+        except:
+            pass
+
+    #  calculate all min max for acceleration used for later simulation
+    try:
+        s_minall = df_asset["close"].rolling(rolling_freq).min()
+        s_maxall = df_asset["close"].rolling(rolling_freq).max()
+    except:
+        return
+
+    # iterate over past data as window. This simulates rs for past times/frames
+    for row in range(0, len(df_asset), step):
+        if row + start_window > len(df_asset) - 1:
+            break
+
+        start_date = df_asset.index[0]
+        end_date = df_asset.index[row + start_window]
+        for abv_und, max_rs in dict_rs.items():
+            if row + start_window + step > len(df_asset) - 1:
+                break
+
+            f_end_date = df_asset.index[row + start_window + step]
+            s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])
+            support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
+
+    # calcualte individual rs score
+    for abv_und, count in dict_rs.items():
+        for i in range(0, count):
+            try:
+                df_asset[f"rs{abv_und}{i}_abv"] = (df_asset[f"rs{abv_und}{i}"] > df_asset["close"]).astype(int)
+                df_asset[f"rs{abv_und}{i}_cross"] = df_asset[f"rs{abv_und}{i}_abv"].diff().replace(0, np.nan)
+            except:
+                pass
+
+    df_asset["rs"] = 0
+    for abv_und in ["und"]:
+        for i in [2, 3, 4, 5]:  # only consider rs und 2,3,4,5, evenly weighted. middle ones have most predictive power
+            for cross in [-1]:
+                try:
+                    df_asset["rs"] = df_asset[df_asset[f"rs{abv_und}{i}_cross"] == cross] * 0.25
+                except:
+                    pass
+
+    return df_asset
+
+
 # actually a onetime use
 # One of the most important functions
 def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
@@ -1059,7 +1132,7 @@ def Setup_date_trend_once(minmax=0.5, market="CN", close_label="close", index_la
         df[pct_chg_tomorrow_column] = df[pct_chg_column].shift(-1)
 
     for i in a_all:  # RSI 1
-        if i == 1:  #TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
+        if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
             df[market_suffix + "rsi1"] = 0.0
             op_func = dict_ops[op_sign]
             df.loc[op_func(df["pct_chg" + index_label], 0.0), market_suffix + "rsi1"] = 1.0
@@ -1121,7 +1194,7 @@ def Setup_date_trend_once(minmax=0.5, market="CN", close_label="close", index_la
     if not for_analysis:
         a_remove = []
         for i in a_all:
-            a_remove.append(market_suffix + "rsi" + str(i))
+            #a_remove.append(market_suffix + "rsi" + str(i))
             a_remove.append(market_suffix + "phase" + str(i))
         Util.columns_remove(df, a_remove)
 
@@ -1193,6 +1266,7 @@ def get_file(path):
     except:  # if there is no existing history
         df = pd.DataFrame()
     return df
+
 
 def get_group_instance(group_instance="asset_E", market="CN"):
     df = read(Util.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance))
@@ -1447,7 +1521,7 @@ def update_all_in_one(big_update=False):
     multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": big_update}, a_steps=a_steps)
 
     # 2.2. ASSET - DF
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=[1])
     multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)  # big: smart decide - small: smart decide
 
     # 3.1. DATE - OTH
@@ -1464,7 +1538,7 @@ def update_all_in_one(big_update=False):
     Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=big_update)  # big: override - small: override
 
     # 4.1. CUSTOM - INDEX
-    #update_custom_index(big_update=big_update)
+    # update_custom_index(big_update=big_update)
 
 
 @njit
@@ -1493,11 +1567,15 @@ if __name__ == '__main__':
         big_update = False
         pr = cProfile.Profile()
         pr.enable()
+
+        # df=get_asset()
+        # df=support_resistance(df_asset=df)
+
+        #df.to_csv("testdf.csv")
         update_all_in_one(False)
 
-
         pr.disable()
-        pr.print_stats(sort='file')
+        #pr.print_stats(sort='file')
 
 
 
