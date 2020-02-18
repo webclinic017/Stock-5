@@ -85,7 +85,7 @@ def backtest_once(settings=[{}]):
             tomorrow = int(DB.get_next_trade_date(freq=freq))
             df_today = df_today_accelerator
             df_tomorrow = df_today_accelerator.copy()
-            df_tomorrow[["open", "high", "low", "close", "pct_chg"]] = np.nan
+            df_tomorrow[["high", "low", "close", "pct_chg"]] = np.nan
         else:
             df_tomorrow = DB.get_date(trade_date=tomorrow, assets=assets, freq="D", market=market)
             df_today = DB.get_date(trade_date=today, assets=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
@@ -298,7 +298,7 @@ def backtest_once(settings=[{}]):
                     dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] - value_open - fee
 
                     dict_trade_h[tomorrow]["buy"].append(
-                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "ts_code": ts_code, "name": row["name"], "T+": 0, "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "T+": 0, "ts_code": ts_code, "name": row["name"], "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
                          "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
                          "value_close": value_close, "port_cash": dict_capital[setting_count]["cash"]})
 
@@ -365,7 +365,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20000101",
+        "start_date": "20200101",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",

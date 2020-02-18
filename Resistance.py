@@ -131,8 +131,11 @@ def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000
 
     for key, count in dict_rs.items():
         for i in range(0, count):
-            df_asset[f"rs{key}{i}_abv"] = (df_asset["close"] < df_asset[f"rs{key}{i}"]).astype(int)
-            df_asset[f"rs{key}{i}_cross"] = df_asset[f"rs{key}{i}_abv"].diff().replace(0, np.nan)
+            try:
+                df_asset[f"rs{key}{i}_abv"] = (df_asset["close"] < df_asset[f"rs{key}{i}"]).astype(int)
+                df_asset[f"rs{key}{i}_cross"] = df_asset[f"rs{key}{i}_abv"].diff().replace(0, np.nan)
+            except:
+                pass
 
     return df_asset
 
@@ -144,8 +147,10 @@ def rs_evaluator(ts_code, df_evaluate, df_result, dict_rs):
         for key, count in dict_rs.items():
             for i in range(0, count):
                 for cross in [1, -1]:
-                    df_result.at[ts_code, f"rs{key}{i}_cross{cross}_fgain{fgain_freq}"] = df_evaluate.loc[df_evaluate[f"rs{key}{i}_cross"] == cross, f"fgain{fgain_freq}"].mean() / freq_mean
-
+                    try:
+                        df_result.at[ts_code, f"rs{key}{i}_cross{cross}_fgain{fgain_freq}"] = df_evaluate.loc[df_evaluate[f"rs{key}{i}_cross"] == cross, f"fgain{fgain_freq}"].mean() / freq_mean
+                    except:
+                        pass
 
 
 if __name__ == '__main__':
@@ -153,20 +158,25 @@ if __name__ == '__main__':
     # support_resistance_multiple()
 
     df_result = pd.DataFrame()
-    dict_asset = DB.preload(load="asset")
+    df_result_summary = pd.DataFrame()
+    dict_asset = DB.preload(load="asset", step=37)
 
-    for step in [20]:
-        for start_window in [1000]:
-            for rolling_freq in [40]:
-                for bins in [100]:
-                    for thresh in [[2, 0.5]]:
-                        for rs_count in [2]:
+    for step in [20, 120]:  # performance : how many days should I refresh the future rs line
+        for start_window in [1000]:  # how long is the starting window
+            for rolling_freq in [1, 240]:  # how many past days should I use to calculate
+                for bins in [20, 200]:  # performance:  how big is the distance between the lines themselves
+                    for thresh in [[3, 0.33], [1.5, 0.66]]:  # how far is the spread from current price to the line
+                        for rs_count in [2, 4]:  # how many lines for abv and und current price
+
                             dict_rs = {"abv": rs_count, "und": rs_count}
-
-                            for ts_code, df_asset in dict_asset.items()[::37]:
+                            for ts_code, df_asset in dict_asset.items():
                                 # ultimate RS search
                                 df_evaluate = support_resistance_once_calc(start_window=start_window, rolling_freq=rolling_freq, ts_code=ts_code, step=step, thresh=thresh, bins=bins, dict_rs=dict_rs)
                                 rs_evaluator(ts_code, df_evaluate, df_result, dict_rs)
 
                                 # df_evaluate.to_csv(f"{ts_code}.csv")
                                 df_result.to_csv(f"Market/CN/RS/summary_step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_rs_count{rs_count}_thresh{thresh[0]}_{thresh[1]}.csv")
+
+                                # evaluator summarizer
+                                df_result_summary = df_result_summary.append(df_result.mean(), ignore_index=True, sort=False)
+                                df_result_summary.to_csv(f"Market/CN/RS/summary.csv")
