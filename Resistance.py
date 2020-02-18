@@ -184,8 +184,8 @@ if __name__ == '__main__':
                                 rs_evaluator(ts_code, df_evaluate, df_result, dict_rs, df_asset)
 
                                 # df_evaluate.to_csv(f"{ts_code}.csv")
-                                df_result.to_csv(f"Market/CN/RS/summary_step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_rs_count{rs_count}_thresh{thresh[0]}_{thresh[1]}.csv")
+                                df_result.to_csv(f"Market/CN/RS/DETAIL_step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_rs_count{rs_count}_thresh{thresh[0]}_{thresh[1]}.csv")
 
                             # evaluator summarizer
                             df_result_summary[f"step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_thresh{thresh[0], thresh[1]}_rscount{rs_count}"] = df_result.mean()
-                            df_result_summary.to_csv(f"Market/CN/RS/summary.csv")
+                            df_result_summary.to_csv(f"Market/CN/RS/SUM_step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_rs_count{rs_count}_thresh{thresh[0]}_{thresh[1]}.csv")
