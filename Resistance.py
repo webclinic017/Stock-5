@@ -76,7 +76,7 @@ def support_resistance_plot_multiple(step=1):
     create_gif(ts_code=ts_code)
 
 
-def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000002.SZ", step=1, thresh=[2, 0.5], bins=100, dict_rs={"abv": 2, "und": 2}):
+def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000002.SZ", step=1, thresh=[2, 0.5], bins=100, dict_rs={"abv": 2, "und": 2}, df_asset=pd.DataFrame()):
     def support_resistance_acc(abv_und, max_rs, s_minmax, adj_start_date, end_date, f_end_date, df_asset):
         # 1. step calculate all relevant resistance = relevant earlier price close to current price
         current_price = df_asset.at[end_date, "close"]
@@ -86,24 +86,26 @@ def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000
         elif abv_und == "und":
             s_minmax = s_minmax[(s_minmax / current_price < 1) & ((s_minmax / current_price > thresh[1]))]
 
-        # find the max occurence of n values
+        # 2.step find the max occurence of n values
         try:
             s_occurence_bins = s_minmax.value_counts(bins=bins)
             a_rs = []
             for (index, value), counter in zip(s_occurence_bins.iteritems(), range(0, max_rs)):
                 a_rs.append(index.left)
 
-            # sort the max occurence values and assign them as rs
-            a_rs.sort()  # small value first
+            # 3. step sort the max occurence values and assign them as rs
+            a_rs.sort()  # small value first 0 ,1, 2
             for item, i in zip(a_rs, range(0, len(a_rs))):
                 df_asset.loc[end_date:f_end_date, f"rs{abv_und}{i}"] = item
         except:
             pass
 
-    # calculate all min max for acceleration used for later simulation
-    df_asset = DB.get_asset(ts_code=ts_code)
-    s_minall = df_asset["close"].rolling(rolling_freq).min()
-    s_maxall = df_asset["close"].rolling(rolling_freq).max()
+    #  calculate all min max for acceleration used for later simulation
+    try:
+        s_minall = df_asset["close"].rolling(rolling_freq).min()
+        s_maxall = df_asset["close"].rolling(rolling_freq).max()
+    except:
+        return pd.DataFrame()
 
     # only consider close and add rsi for plotting reason
     a_pgain = []
@@ -129,10 +131,11 @@ def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000
             s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])
             support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, adj_start_date=start_date, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
 
+
     for key, count in dict_rs.items():
         for i in range(0, count):
             try:
-                df_asset[f"rs{key}{i}_abv"] = (df_asset["close"] < df_asset[f"rs{key}{i}"]).astype(int)
+                df_asset[f"rs{key}{i}_abv"] = (df_asset[f"rs{key}{i}"] > df_asset["close"]).astype(int)
                 df_asset[f"rs{key}{i}_cross"] = df_asset[f"rs{key}{i}_abv"].diff().replace(0, np.nan)
             except:
                 pass
@@ -143,10 +146,14 @@ def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000
 def rs_evaluator(ts_code, df_evaluate, df_result, dict_rs, df_asset):
     # Normalize:  devide the pct_chg gain by the stocks mean gain to calculate the relative performance against mean
     for fgain_freq in Util.c_rolling_freqs():
-        fgain_mean = df_asset[f"fgain{fgain_freq}"].mean()
+        try:
+            fgain_mean = df_asset[f"fgain{fgain_freq}"].mean()  # TODO NOTE: normalizer is very good. always divide fgain by its mean fgain
+        except:
+            pass
+
         for key, count in dict_rs.items():
             for i in range(0, count):
-                for cross in [1, -1]:
+                for cross in [1, -1]:  #TODO doesnt matter. if it touches, it already counts
                     try:
                         df_result.at[ts_code, f"rs{key}{i}_cross{cross}_fgain{fgain_freq}"] = df_evaluate.loc[df_evaluate[f"rs{key}{i}_cross"] == cross, f"fgain{fgain_freq}"].mean() / fgain_mean
                     except:
@@ -161,19 +168,19 @@ if __name__ == '__main__':
     df_result_summary = pd.DataFrame()
     dict_asset = DB.preload(load="asset", step=20)
 
-    for step in [20]:  # performance : how many days should I refresh the future rs line
-        for start_window in [1000]:  # how long is the starting window
-            for rolling_freq in [1, 240]:  # how many past days should I use to calculate
-                for bins in [20, 100]:  # performance:  how big is the distance between the lines themselves
-                    for thresh in [[3, 0.33], [1.5, 0.66]]:  # how far is the spread from current price to the line
-                        for rs_count in [4, 2]:  # how many lines for abv and und current price
+    for step in [1, 10, 20]:  # performance : how many days should I refresh the future rs line
+        for start_window in [240]:  # how long is the starting window
+            for rolling_freq in [1]:  # how many past days should I use to calculate
+                for thresh in [[4, 0.2]]:  # how far is the spread from current price to the line. bigger spread better
+                    for rs_count in [8, 4]:  # how many lines for abv and und current price. more is better
+                        for bins in [8]:  # performance:  how big is the distance between the lines themselves. smaller bin better
 
                             df_result = pd.DataFrame()
                             dict_rs = {"abv": rs_count, "und": rs_count}
 
                             for ts_code, df_asset in dict_asset.items():
                                 # ultimate RS search
-                                df_evaluate = support_resistance_once_calc(start_window=start_window, rolling_freq=rolling_freq, ts_code=ts_code, step=step, thresh=thresh, bins=bins, dict_rs=dict_rs)
+                                df_evaluate = support_resistance_once_calc(start_window=start_window, rolling_freq=rolling_freq, ts_code=ts_code, step=step, thresh=thresh, bins=bins, dict_rs=dict_rs, df_asset=df_asset)
                                 rs_evaluator(ts_code, df_evaluate, df_result, dict_rs, df_asset)
 
                                 # df_evaluate.to_csv(f"{ts_code}.csv")
