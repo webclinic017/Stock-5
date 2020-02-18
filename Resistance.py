@@ -115,7 +115,7 @@ def support_resistance_once_calc(start_window=1000, rolling_freq=5, ts_code="000
         a_pgain.append(f"pgain{i}")
     df_asset = df_asset[["close", "pct_chg"] + a_pgain + a_fgain]
 
-    # iterate over past data as window
+    # iterate over past data as window. This simulates rs for past times/frames
     for row in range(0, len(df_asset), step):
         if row + start_window > len(df_asset) - 1:
             break
@@ -166,9 +166,9 @@ if __name__ == '__main__':
 
 
     df_result_summary = pd.DataFrame()
-    dict_asset = DB.preload(load="asset", step=20)
+    dict_asset = DB.preload(load="asset", step=10)
 
-    for step in [1, 10, 20]:  # performance : how many days should I refresh the future rs line
+    for step in [10, 20]:  # performance : how many days should I refresh the future rs line. Ultimate step should be 1
         for start_window in [240]:  # how long is the starting window
             for rolling_freq in [1]:  # how many past days should I use to calculate
                 for thresh in [[4, 0.2]]:  # how far is the spread from current price to the line. bigger spread better

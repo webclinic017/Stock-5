@@ -1451,7 +1451,7 @@ def update_all_in_one(big_update=False):
     multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=a_steps)  # big: smart decide - small: smart decide
 
     # 3.1. DATE - OTH
-    multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
+    # multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
     a_steps = [1, -1] if big_update else [1, -1]
@@ -1464,7 +1464,7 @@ def update_all_in_one(big_update=False):
     Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=big_update)  # big: override - small: override
 
     # 4.1. CUSTOM - INDEX
-    update_custom_index(big_update=big_update)
+    #update_custom_index(big_update=big_update)
 
 
 @njit
