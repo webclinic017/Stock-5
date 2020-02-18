@@ -159,14 +159,14 @@ if __name__ == '__main__':
 
     df_result = pd.DataFrame()
     df_result_summary = pd.DataFrame()
-    dict_asset = DB.preload(load="asset", step=37)
+    dict_asset = DB.preload(load="asset", step=20)
 
     for step in [20, 120]:  # performance : how many days should I refresh the future rs line
         for start_window in [1000]:  # how long is the starting window
             for rolling_freq in [1, 240]:  # how many past days should I use to calculate
-                for bins in [20, 200]:  # performance:  how big is the distance between the lines themselves
+                for bins in [20, 100]:  # performance:  how big is the distance between the lines themselves
                     for thresh in [[3, 0.33], [1.5, 0.66]]:  # how far is the spread from current price to the line
-                        for rs_count in [2, 4]:  # how many lines for abv and und current price
+                        for rs_count in [4, 2]:  # how many lines for abv and und current price
 
                             dict_rs = {"abv": rs_count, "und": rs_count}
                             for ts_code, df_asset in dict_asset.items():
@@ -178,5 +178,5 @@ if __name__ == '__main__':
                                 df_result.to_csv(f"Market/CN/RS/summary_step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_rs_count{rs_count}_thresh{thresh[0]}_{thresh[1]}.csv")
 
                                 # evaluator summarizer
-                                df_result_summary = df_result_summary.append(df_result.mean(), ignore_index=True, sort=False)
+                                df_result_summary[f"step{step}_window{start_window}_rolling_freq{rolling_freq}_bins{bins}_thresh{thresh[0], thresh[1]}_rscount{rs_count}"] = df_result.mean()
                                 df_result_summary.to_csv(f"Market/CN/RS/summary.csv")
