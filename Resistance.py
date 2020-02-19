@@ -78,23 +78,6 @@ def support_resistance_plot_multiple(step=1):
 
 
 
-def rs_evaluator(ts_code, df_evaluate, df_result, dict_rs, df_asset):
-    # Normalize:  devide the pct_chg gain by the stocks mean gain to calculate the relative performance against mean
-    for fgain_freq in Util.c_rolling_freqs():
-        try:
-            fgain_mean = df_asset[f"fgain{fgain_freq}"].mean()  # TODO NOTE: normalizer is very good. always divide fgain by its mean fgain
-        except:
-            pass
-
-        for key, count in dict_rs.items():
-            for i in range(0, count):
-                for cross in [1, -1]:  #TODO doesnt matter. if it touches, it already counts
-                    try:
-                        occurence =
-                        df_result.at[ts_code, f"rs{key}{i}_cross{cross}_fgain{fgain_freq}"] = df_evaluate.loc[df_evaluate[f"rs{key}{i}_cross"] == cross, f"fgain{fgain_freq}"].mean() / fgain_mean
-                    except:
-                        pass
-
 
 def resistance_bruteforce():
     df_result_summary = pd.DataFrame()

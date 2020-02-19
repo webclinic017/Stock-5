@@ -109,15 +109,13 @@ def eval_fgain_mean(df, ts_code, column, dict_fgain_mean_detail):
 
 # 1. iterate through all variable
 # 2. find fgain mean
-def bruteforce():
+def bruteforce_established():
     setting = {
         "target": "asset",  # date
         "step": 37,  # 1 or any other integer
-        "onthefly": False,  # if the indicator needs to be created during eval or is already there
-        "indicator": "trend",
         "group_result": False,
-        "path_general": "Market/CN/Bruteforce/result/",
-        "path_result": "Market/CN/Bruteforce/",
+        "path_general": "Market/CN/Bruteforce/Established/result/",
+        "path_result": "Market/CN/Bruteforce/Established/",
         "big_update": False
     }
 
@@ -157,10 +155,6 @@ def bruteforce():
                 print(f"{ts_code} too young")
                 continue
 
-            # if the indicator needs to be created on the fly
-            if setting["onthefly"]:
-                pass
-
             # evaluate function
             eval_fgain_mean(df=df_asset, ts_code=ts_code, column=column, dict_fgain_mean_detail=dict_fgain_mean_detail)
 
@@ -179,5 +173,71 @@ def bruteforce():
             Util.to_csv_feather(df=dict_df_summary[key], skip_feather=True, a_path=Util.a_path(setting["path_result"] + f"{key}_summary"))
 
 
+def bruteforce_test():
+    setting = {
+        "target": "asset",  # date
+        "step": 37,  # 1 or any other integer
+        "group_result": False,
+        "path_general": "Market/CN/Bruteforce/Test/result/",
+        "path_result": "Market/CN/Bruteforce/Test/",
+        "big_update": False
+    }
+
+    dict_df_asset = DB.preload(load=setting["target"], step=setting["step"])
+    dict_df_summary = {f"fgain{freq}": pd.DataFrame() for freq in Util.c_rolling_freqs()}
+    numeric_col = Util.get_numeric_df_columns(DB.get_asset())
+
+    for column, counter in zip(numeric_col, range(len(numeric_col))):
+        # for one_indicator_setting in all_indicator_settings(all_indicator_variables(indicator=setting["indicator"])):
+
+        # if small update, then continue if file exists
+        if not setting["big_update"]:
+            for key in Util.c_rolling_freqs():
+                path = setting["path_general"] + f"{column}_fgain{key}_mean.xlsx"
+                if not os.path.exists(path):
+                    print("=" * 30)
+                    print("SMALL UPDATE: File NOT EXIST. DO. -> ", f"({counter}/{len(numeric_col)}) {column}")
+                    print("=" * 30)
+                    break  # go into the column
+            else:
+                print("=" * 30)
+                print("SMALL UPDATE: File Exists. Skip. -> ", f"({counter}/{len(numeric_col)}) {column}")
+                print("=" * 30)
+                continue  # go to next column
+        else:
+            print("=" * 30)
+            print(f"BIG UPDATE: {column} ({counter}/{len(numeric_col)})")
+            print("=" * 30)
+
+        # ts_code and fgain
+        dict_fgain_mean_detail = {f"fgain{freq}": pd.DataFrame() for freq in Util.c_rolling_freqs()}
+        for ts_code, df_asset in dict_df_asset.items():
+            print("ts_code", ts_code, column)
+            try:
+                df_asset = df_asset[df_asset.index >= 20050101 & (df_asset["period"] > 240)]
+            except Exception as e:
+                print(f"{ts_code} too young")
+                continue
+
+            # if the indicator needs to be created on the fly TODO
+
+            # evaluate function
+            eval_fgain_mean(df=df_asset, ts_code=ts_code, column=column, dict_fgain_mean_detail=dict_fgain_mean_detail)
+
+        # save
+        for key, df in dict_fgain_mean_detail.items():
+            # save column result
+            df.index.name = "ts_code"
+            path = setting["path_general"] + f"{column}_{key}_mean.xlsx"
+            DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
+
+            # save Summary
+            row_summary = df.mean()
+            row_summary["bruteforce"] = f"{column}_{key}_mean"
+            dict_df_summary[key] = dict_df_summary[key].append(row_summary, sort=False, ignore_index=True)
+            Util.to_csv_feather(df=dict_df_summary[key], skip_feather=True, a_path=Util.a_path(setting["path_result"] + f"{key}_summary"))
+
+
+
 if __name__ == '__main__':
-    bruteforce()
+    bruteforce_established()
