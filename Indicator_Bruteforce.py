@@ -12,6 +12,7 @@ import datetime
 import copy
 import imageio
 import glob
+import Indicator_Create
 import itertools
 from multiprocessing import Process
 
@@ -173,7 +174,7 @@ def bruteforce_established():
             Util.to_csv_feather(df=dict_df_summary[key], skip_feather=True, a_path=Util.a_path(setting["path_result"] + f"{key}_summary"))
 
 
-def bruteforce_test():
+def bruteforce_create_derivative():
     setting = {
         "target": "asset",  # date
         "step": 37,  # 1 or any other integer
@@ -236,6 +237,9 @@ def bruteforce_test():
             row_summary["bruteforce"] = f"{column}_{key}_mean"
             dict_df_summary[key] = dict_df_summary[key].append(row_summary, sort=False, ignore_index=True)
             Util.to_csv_feather(df=dict_df_summary[key], skip_feather=True, a_path=Util.a_path(setting["path_result"] + f"{key}_summary"))
+
+
+def bruteforce_create_base():
 
 
 

@@ -4,14 +4,10 @@ import tushare as ts
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from collections import Counter
 import talib
 import smtplib
-import math
 from email.message import EmailMessage
 import os
-import time as mytime
-import time
 from win32com.client import Dispatch
 import traceback
 import API_Tushare
@@ -20,7 +16,6 @@ from time import time, strftime, localtime
 import time
 from datetime import timedelta
 from playsound import playsound
-from numba import njit
 from numba import jit
 import numba
 
@@ -193,35 +188,6 @@ def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.
         df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
 
 
-def add_period(df, complete_new_update=True):
-    add_to = "period"
-    add_column(df, add_to, "ts_code", 1)
-    df[add_to] = (range(1, len(df.index) + 1))  # for now the complete_new_update is the same
-
-
-def add_ivola(df, df_saved, complete_new_update=True):
-    add_to = "ivola"
-    add_column(df, add_to, "pct_chg", 1)
-
-    df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
-    for rolling_freq in [2, 5]:
-        if complete_new_update:
-            df[add_to + str(rolling_freq)] = df[add_to].rolling(rolling_freq).mean()
-        else:
-            fast_add_rolling(df, add_from=add_to, add_to=add_to + str(rolling_freq), rolling_freq=rolling_freq, func=pd.Series.mean)
-
-
-def add_pgain(df, rolling_freq, complete_new_update=True):
-    add_to = "pgain" + str(rolling_freq)
-    add_column(df, add_to, "pct_chg", 1)
-
-    # df[add_to+"test"] = (1 + (df["pct_chg"] / 100)).rolling(rolling_freq).apply(pd.Series.prod, raw=False)
-    try:
-        df[add_to] = rolling_prod2((1 + (df["pct_chg"] / 100)).to_numpy(), rolling_freq)
-    except:
-        df[add_to] = np.nan
-
-
 @numba.jit
 def my_rolling_gain(numpy_series, rolling_freq):
     i_start = 0
@@ -256,90 +222,7 @@ def my_real_core(numpy_series):
     return result
 
 
-def add_fgain(df, rolling_freq, complete_new_update=True):
-    add_to = "fgain" + str(rolling_freq)
-    add_column(df, add_to, "pct_chg", 1)
-    df[add_to] = df["pgain" + str(rolling_freq)].shift(int(-rolling_freq))
-
-
-def add_candle_signal(df, complete_new_update=True):
-    a_positive_columns = []
-    a_negative_columns = []
-
-    # create candle stick column
-    for key, array in c_candle().items():
-        if (array[1] != 0) or (array[2] != 0):  # if used at any, calculate the pattern
-            func = array[0]
-            df[key] = func(open=df["open"], high=df["high"], low=df["low"], close=df["close"]).replace(0, np.nan)
-
-            if (array[1] != 0):  # candle used as positive pattern
-                a_positive_columns.append(key)
-                if (array[1] == -100):  # talib still counts the pattern as negative: cast it positive
-                    df[key] = df[key].replace(-100, 100)
-
-            if (array[2] != 0):  # candle used as negative pattern
-                a_negative_columns.append(key)
-                if (array[2] == 100):  # talib still counts the pattern as positive: cast it negative
-                    df[key] = df[key].replace(100, -100)
-
-    df["candle_pos"] = (df[df[a_positive_columns] == 100].sum(axis='columns') / 100)
-    df["candle_neg"] = (df[df[a_negative_columns] == -100].sum(axis='columns') / 100)
-    df["candle_net_pos"] = (df["candle_pos"] + df["candle_neg"])
-
-    # remove candle stick column
-    # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
-    columns_remove(df, a_positive_columns + a_negative_columns)
-
-    # last step add rolling
-    for rolling_freq in [2, 5]:
-        if complete_new_update:
-            df["candle_net_pos" + str(rolling_freq)] = df["candle_net_pos"].rolling(rolling_freq).sum()
-        else:
-            df["candle_net_pos" + str(rolling_freq)] = df["candle_net_pos"].rolling(rolling_freq).sum()
-            # fast_add_rolling(df=df, add_from="candle_net_pos",add_to="candle_net_pos"+str(rolling_freq), rolling_freq=rolling_freq, func=pd.Series.sum)
-
-
-def add_pjump_up(df, complete_new_update=True):
-    add_to = "pjump_up"
-    add_column(df, add_to, "pct_chg", 1)
-
-    yesterday_high = df["high"].shift(1)
-    today_low = df["low"]
-    condition_1 = today_low > yesterday_high
-    condition_2 = df["pct_chg"] >= 2
-    df[add_to] = condition_1 & condition_2
-    df[add_to] = df[add_to].astype(int)
-
-    for rolling_freq in [5, 10]:
-        if complete_new_update:
-            df[add_to + str(rolling_freq)] = df[add_to].rolling(rolling_freq).sum()
-        else:
-            fast_add_rolling(df=df, add_from=add_to, add_to=add_to + str(rolling_freq), rolling_freq=rolling_freq, func=pd.Series.sum)
-
-
-def add_pjump_down(df, complete_new_update=True):
-    add_to = "pjump_down"
-    add_column(df, add_to, "pct_chg", 1)
-
-    yesterday_low = df["low"].shift(1)
-    today_high = df["high"]
-    condition_1 = today_high < yesterday_low
-    condition_2 = df.pct_chg <= -2
-    df[add_to] = condition_1 & condition_2
-    df[add_to] = df[add_to].astype(int)
-
-    for rolling_freq in [5, 10]:
-        if complete_new_update:
-            df[add_to + str(rolling_freq)] = df[add_to].rolling(rolling_freq).sum()
-        else:
-            fast_add_rolling(df=df, add_from=add_to, add_to=add_to + str(rolling_freq), rolling_freq=rolling_freq, func=pd.Series.sum)
-
-
 # TODO
-def add_indi_rs(df):
-    if df.empty:
-        return df
-    return df
 
 
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
@@ -375,46 +258,6 @@ def column_check_duplicates(df, column_name):
 
 
 # add from =input, add_to =output
-def column_add_mean(df, rolling_freq, add_from, complete_new_update=True):
-    add_to = add_from + str(rolling_freq)
-    add_column(df, add_to, add_from, 1)
-
-    if complete_new_update:
-        df[add_to] = df[add_from].rolling(rolling_freq).mean()
-    else:
-        fast_add_rolling(df=df, add_from=add_from, add_to=add_to, rolling_freq=rolling_freq, func=pd.Series.mean)
-
-
-def column_add_std(df, trading_days, add_from, complete_new_update=True):
-    add_to = add_from + "_std" + str(trading_days)
-    add_column(df, add_to, add_from, 1)
-
-    if complete_new_update:
-        df[add_to] = df[add_from].rolling(trading_days).std()
-    else:
-        fast_add_rolling(df=df, add_from=add_from, add_to=add_to, rolling_freq=trading_days, func=pd.Series.std)
-
-
-def column_add_deri_deviation(df, trading_days, add_from1, add_from2):
-    add_to = add_from1.name + "_" + add_from2.name + "_dev" + str(trading_days)
-    add_column(df, add_to, add_from1, 1)
-
-    s_result = pd.Series()
-    for i in range(0, len(add_from1) - 1 - trading_days):
-        rolling_index = df.index[i:i + trading_days]
-        rolling_add_from1 = add_from1[i:i + trading_days]
-        rolling_add_from2 = add_from2[i:i + trading_days]
-        add_from1_lg = get_linear_regression_rise(rolling_index, rolling_add_from1)
-        add_from2_lg = get_linear_regression_rise(rolling_index, rolling_add_from2)
-        if (add_from2_lg > 1000 or add_from1_lg > 1000):
-            print("bigger than 1k")
-        if (add_from2_lg < -1000 or add_from1_lg < -1000):
-            print("smaller than 1k")
-        if (abs(add_from1_lg - add_from2_lg) > 1000 or abs(add_from1_lg - add_from2_lg) < -1000):
-            print("what", add_from2_lg, add_from1_lg)
-        s_result = s_result.append(pd.Series(abs(add_from1_lg - add_from2_lg)), ignore_index=True)
-    df[add_to] = s_result
-    column_add_mean(df, 20, df[add_to])
 
 
 def get_linear_regression_s(s_index, s_data):

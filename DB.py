@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import talib
 import API_Tushare
+import Indicator_Create
 import Util
 import os.path
 import inspect
@@ -371,29 +372,29 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
     traceback_freq_small = [2, 5]
 
     if asset == "E":
-        Util.add_ivola(df, df_saved=df_saved, complete_new_update=complete_new_update)  # 0.890578031539917 for 300 loop
-    Util.add_period(df, complete_new_update=complete_new_update)  # 0.2 for 300 loop
-    Util.add_indi_rs(df)  # notimplemented
-    Util.add_pjump_up(df, complete_new_update=complete_new_update)  # 1.0798187255859375 for 300 loop
-    Util.add_pjump_down(df, complete_new_update=complete_new_update)  # 1.05 independend for 300 loop
-    Util.add_candle_signal(df, complete_new_update=complete_new_update)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
+        Indicator_Create.add_ivola(df, df_saved=df_saved, complete_new_update=complete_new_update)  # 0.890578031539917 for 300 loop
+    Indicator_Create.add_period(df, complete_new_update=complete_new_update)  # 0.2 for 300 loop
+    Indicator_Create.add_indi_rs(df)  # notimplemented
+    Indicator_Create.add_pjump_up(df, complete_new_update=complete_new_update)  # 1.0798187255859375 for 300 loop
+    Indicator_Create.add_pjump_down(df, complete_new_update=complete_new_update)  # 1.05 independend for 300 loop
+    Indicator_Create.add_candle_signal(df, complete_new_update=complete_new_update)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
 
     for rolling_freq in traceback_freq_small[::-1]:
         if asset == "E":
-            Util.column_add_mean(df, rolling_freq, "turnover_rate", complete_new_update=complete_new_update)  # dependend
+            Indicator_Create.column_add_mean(df, rolling_freq, "turnover_rate", complete_new_update=complete_new_update)  # dependend
             df[f"turnover_rate_pct{rolling_freq}"] = df["turnover_rate"] / df[f"turnover_rate{rolling_freq}"]
         # Util.column_add_std(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
 
     for rolling_freq in traceback_freq_big[::-1]:
         # Util.column_add_mean(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
-        Util.add_pgain(df, rolling_freq, complete_new_update=complete_new_update)  # past gain includes today = today +yesterday comp_gain
-        Util.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        Indicator_Create.add_pgain(df, rolling_freq, complete_new_update=complete_new_update)  # past gain includes today = today +yesterday comp_gain
+        Indicator_Create.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
     Setup_date_trend_once(a_all=[1] + c_rolling_freqs(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_operator(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
     print(f"calculating resistance...")
 
-    df = support_resistance_horizontal(df_asset=df)
+    # df = support_resistance_horizontal(df_asset=df)
 
 
     return df

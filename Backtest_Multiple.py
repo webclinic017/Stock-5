@@ -366,7 +366,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20100101",
+        "start_date": "20200201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -427,33 +427,30 @@ def backtest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    # for p_maxsize in [2, 5, 8, 12]:
-    #     for p_proportion in [False]:
-    #             setting_copy = copy.deepcopy(setting_base)
-    #             s_weight1 = {  # ascending True= small, False is big
-    #                 "trend": [False, 100, 1],  # very important for this strategy
-    #                 "pct_chg": [True, 5, 1],  # very important for this strategy
-    #                 "pgain2": [True, 3, 1],  # very important for this strategy
-    #                 "pgain5": [True, 2, 1],  # very important for this strategy
-    #             }
-    #             setting_copy["s_weight1"] = s_weight1
-    #             setting_copy["p_proportion"] = p_proportion
-    #             setting_copy["p_maxsize"] = p_maxsize
-    #             a_settings.append(setting_copy)
-    #             print(setting_copy["s_weight1"])
-
-    for f_query in ["rs_abv", "rs_und"]:
-        # for counter in [0,1,2,3,4,5,6,7]:
-        # for abv_cross in ["abv","cross"]:
-
+    for p_maxsize in [2, 12]:
         setting_copy = copy.deepcopy(setting_base)
         s_weight1 = {  # ascending True= small, False is big
-            "trend": [False, 1, 1],  # very important for this strategy
+            "trend": [False, 100, 1],  # very important for this strategy
+            "pct_chg": [True, 5, 1],  # very important for this strategy
+            "pgain2": [True, 3, 1],  # very important for this strategy
+            "pgain5": [True, 2, 1],  # very important for this strategy
         }
         setting_copy["s_weight1"] = s_weight1
-        setting_copy["f_query"][f_query] = [Util.op("ge"), 3]
+        setting_copy["p_maxsize"] = p_maxsize
         a_settings.append(setting_copy)
         print(setting_copy["s_weight1"])
+
+    # for f_query in ["rs_abv", "rs_und"]:
+    # for counter in [0,1,2,3,4,5,6,7]:
+    # for abv_cross in ["abv","cross"]:
+
+    # setting_copy = copy.deepcopy(setting_base)
+    # s_weight1 = {  # ascending True= small, False is big
+    #     "trend": [False, 1, 1],  # very important for this strategy
+    # }
+    # setting_copy["s_weight1"] = s_weight1
+    # a_settings.append(setting_copy)
+    # print(setting_copy["s_weight1"])
 
     print("Total Settings:", len(a_settings))
     backtest_once(settings=a_settings)
