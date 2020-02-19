@@ -185,13 +185,16 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
-    Path(portfolio_path).mkdir(parents=True, exist_ok=True)
-
-    df_port_overview.to_csv(portfolio_path + "/overview.csv", index=False, encoding='utf-8_sig')
-    df_trade_h.to_csv(portfolio_path + "/trade_h.csv", index=False, encoding='utf-8_sig')
-    df_port_c.to_csv(portfolio_path + "/chart.csv", index=True, encoding='utf-8_sig')
+    Util.to_csv_feather(df=df_port_overview, a_path=Util.a_path(portfolio_path + "/overview"), index=False, skip_feather=True)
+    Util.to_csv_feather(df=df_trade_h, a_path=Util.a_path(portfolio_path + "/trade_h"), index=False, skip_feather=True)
+    Util.to_csv_feather(df=df_port_c, a_path=Util.a_path(portfolio_path + "/chart"), reset_index=False, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
+    Util.to_csv_feather(df=df_setting, a_path=Util.a_path(portfolio_path + "/setting"), index=False, skip_feather=True)
+
+    # df_port_overview.to_csv(portfolio_path + "/overview.csv", index=False, encoding='utf-8_sig')
+    # df_trade_h.to_csv(portfolio_path + "/trade_h.csv", index=False, encoding='utf-8_sig')
+    # df_port_c.to_csv(portfolio_path + "/chart.csv", index=True, encoding='utf-8_sig')
+    # df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)

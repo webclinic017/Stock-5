@@ -503,6 +503,15 @@ def groups_dict_to_string_iterable(dict_groups: dict):
     return result
 
 
+# returns only numeric volumns in a df
+def get_numeric_df(df):
+    return df.select_dtypes(include=[np.number])
+
+
+def get_numeric_df_columns(df):
+    return list(df.select_dtypes(include=[np.number]).columns.values)
+
+
 def shutdown_windows():
     import os
     os.system('shutdown -s')
@@ -536,45 +545,48 @@ def a_path(path: str = ""):
     return [x for x in [path + ".csv", path + ".feather"]]
 
 
-def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False):  # utf-8_sig
+def handle_save_exception(e, path):
+    if type(e) == FileNotFoundError:
+        folder = "/".join(path.rsplit("/")[:-1])
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+    elif type(e) == PermissionError:
+        close_file(path)
+    else:
+        traceback.print_exc()
+    time.sleep(2)
+
+
+def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False, skip_csv=False):  # utf-8_sig
     if reset_index:
         df.reset_index(drop=drop, inplace=True)
-    else:
-        pass
     df = df.infer_objects()
-    for _ in range(10):
-        try:
-            df.to_csv(a_path[0], index=index, encoding=encoding)
-            break
-        except:
-            folder = "/".join(a_path[0].rsplit("/")[:-1])
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-            close_file(a_path[0])
-            traceback.print_exc()
-            time.sleep(10)
+
+    if not skip_csv:
+        for _ in range(10):
+            try:
+                df.to_csv(a_path[0], index=index, encoding=encoding)
+                break
+            except Exception as e:
+                handle_save_exception(e, a_path[0])
 
     if not skip_feather:
         try:
             df.to_feather(a_path[1])
         except Exception as e:
-            print("save feather error")
-            traceback.print_exc()
+            handle_save_exception(e, a_path[1])
 
 
-def to_excel(path, dict_df):
+def to_excel(path_excel, dict_df):
     for i in range(0, 10):
         try:
-            portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
+            portfolio_writer = pd.ExcelWriter(path_excel, engine='xlsxwriter')
             for key, df in dict_df.items():
                 df.to_excel(portfolio_writer, sheet_name=key, index=True, encoding='utf-8_sig')
             portfolio_writer.save()
-            return
+            break
         except Exception as e:
-            close_file(path)
-            sound("close_excel.mp3")
-            print(e)
-            time.sleep(10)
+            handle_save_exception(e, path_excel)
 
 
 def pd_writer_save(pd_writer, path):
@@ -674,10 +686,12 @@ def c_industry_level():
     return ['1', '2', '3']
 
 
-def c_ops():
-    # return { "prod": operator.mul, "gt": operator.gt, "lt": operator.lt}
-    return {"plus": operator.add, "minus": operator.sub, "gt": operator.gt, "lt": operator.lt}
+def c_operator():
+    return {"plus": operator.add, "minus": operator.sub, "gt": operator.gt, "ge": operator.ge, "lt": operator.lt, "le": operator.le, "eq": operator.eq}
 
+
+def op(name):
+    return c_operator()[name]
 
 def c_candle():
     # array = [function, candle positive return use, candle negative return use]

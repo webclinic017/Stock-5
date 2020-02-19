@@ -59,7 +59,7 @@ def increaselimit(increase=1):
                 df_summary_asset.at[f"days{days}", f"{gain}{freq}"] = df_result_asset[f"days{days}_{gain}{freq}"].mean()
 
     path = "Market/CN/Indicator/increaselimit.xlsx" if increase == 1 else "Market/CN/Indicator/decreaselimit.xlsx"
-    Util.to_excel(path=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
+    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
 
 
 def overma():
@@ -101,7 +101,7 @@ def overma():
             df_result_date.at[f"close{lower}", f"closer{upper}_over"] = mean
 
     path = "Market/CN/Indicator/overma.xlsx"
-    Util.to_excel(path=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
+    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
 
 
 def crossma():
@@ -169,7 +169,7 @@ def crossma():
 
     # date summary
     path = "Market/CN/Indicator/crossma.xlsx"
-    Util.to_excel(path=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
+    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
 
 
 def c_all_indicators():
@@ -404,7 +404,7 @@ def indicator_common(indicator_label, index, df_saved, period, dict_result_dfs, 
             df_result.at[index, f"period"] = period
 
         for trend in rolling_freqs_big:
-            for trend_op_label, trend_op in Util.c_ops().items():
+            for trend_op_label, trend_op in Util.c_operator().items():
                 df_filtered_trend = df_filtered[trend_op(df_filtered[f"trend{trend}"], 0.5)]
 
                 for rolling_freq in rolling_freqs_small:

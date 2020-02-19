@@ -109,9 +109,12 @@ def backtest_once(settings=[{}]):
             now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"INIT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 1.1 FILTER
-            df_today_mod = df_today[df_today["period"] > 240]
-            for query_string in setting["f_query"]:  # very slow and expensive for small operation because parsing the string takes long
-                df_today_mod.query(query_string, inplace=True)
+            a_filter = True
+            for column, a_op in setting["f_query"].items():  # very slow and expensive for small operation because parsing the string takes long
+                print("filter", column)
+                func = a_op[0]
+                a_filter = a_filter & func(df_today[column], a_op[1])
+            df_today_mod = df_today[a_filter]
             now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 2 ECONOMY
@@ -167,7 +170,6 @@ def backtest_once(settings=[{}]):
                             reason = reason + "- not trading"
                             print("probably 停牌", ts_code)
 
-
                         if sell:  # Execute sell
                             shares = dict_trade["shares"]
                             realized_value = tomorrow_open * shares
@@ -202,6 +204,7 @@ def backtest_once(settings=[{}]):
                 # 6.4 PORTFOLIO BUY SCORE/RANK
                 dict_group_instance_weight = Util.c_group_score_weight()
                 for column, a_weight in setting["s_weight1"].items():
+                    print("select column", column)
                     # column use group rank
                     if a_weight[2] != 1:
 
@@ -330,7 +333,6 @@ def backtest_once(settings=[{}]):
             print("REPORT PORTFOLIO TIME:", mytime.time() - now)
             a_summary_merge.append(pd.merge(left=df_portfolio_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False))
 
-
             # sendmail
             if setting["send_mail"]:
                 df_last_simulated_trade = df_trade_h.loc[df_trade_h["trade_date"] == last_simulated_date, ["trade_type", "name"]]
@@ -344,9 +346,8 @@ def backtest_once(settings=[{}]):
             traceback.print_exc()
 
     path = Util.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
-    df_h = DB.get_file(path[0])
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
-    df_backtest_summ = df_backtest_summ.append(df_h, sort=False)
+    df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
     Util.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
 
     return
@@ -365,7 +366,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20200101",
+        "start_date": "20100101",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -381,7 +382,7 @@ def backtest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query": [],  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query": {"period": [Util.op("ge"), 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
 
         "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important
@@ -426,20 +427,33 @@ def backtest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for p_maxsize in [2, 5, 8, 12]:
-        for p_proportion in [False]:
-                setting_copy = copy.deepcopy(setting_base)
-                s_weight1 = {  # ascending True= small, False is big
-                    "trend": [False, 100, 1],  # very important for this strategy
-                    "pct_chg": [True, 5, 1],  # very important for this strategy
-                    "pgain2": [True, 3, 1],  # very important for this strategy
-                    "pgain5": [True, 2, 1],  # very important for this strategy
-                }
-                setting_copy["s_weight1"] = s_weight1
-                setting_copy["p_proportion"] = p_proportion
-                setting_copy["p_maxsize"] = p_maxsize
-                a_settings.append(setting_copy)
-                print(setting_copy["s_weight1"])
+    # for p_maxsize in [2, 5, 8, 12]:
+    #     for p_proportion in [False]:
+    #             setting_copy = copy.deepcopy(setting_base)
+    #             s_weight1 = {  # ascending True= small, False is big
+    #                 "trend": [False, 100, 1],  # very important for this strategy
+    #                 "pct_chg": [True, 5, 1],  # very important for this strategy
+    #                 "pgain2": [True, 3, 1],  # very important for this strategy
+    #                 "pgain5": [True, 2, 1],  # very important for this strategy
+    #             }
+    #             setting_copy["s_weight1"] = s_weight1
+    #             setting_copy["p_proportion"] = p_proportion
+    #             setting_copy["p_maxsize"] = p_maxsize
+    #             a_settings.append(setting_copy)
+    #             print(setting_copy["s_weight1"])
+
+    for f_query in ["rs_abv", "rs_und"]:
+        # for counter in [0,1,2,3,4,5,6,7]:
+        # for abv_cross in ["abv","cross"]:
+
+        setting_copy = copy.deepcopy(setting_base)
+        s_weight1 = {  # ascending True= small, False is big
+            "trend": [False, 1, 1],  # very important for this strategy
+        }
+        setting_copy["s_weight1"] = s_weight1
+        setting_copy["f_query"][f_query] = [Util.op("ge"), 3]
+        a_settings.append(setting_copy)
+        print(setting_copy["s_weight1"])
 
     print("Total Settings:", len(a_settings))
     backtest_once(settings=a_settings)
