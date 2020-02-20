@@ -16,7 +16,7 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
-    current_trend = Util.c_rolling_freqs()
+    current_trend = Util.c_rolling_freq()
     beta_against = "_000001.SH"
 
     a_time = []
@@ -191,29 +191,17 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     df_setting = pd.DataFrame(setting, index=[0])
     Util.to_csv_feather(df=df_setting, a_path=Util.a_path(portfolio_path + "/setting"), index=False, skip_feather=True)
 
-    # df_port_overview.to_csv(portfolio_path + "/overview.csv", index=False, encoding='utf-8_sig')
-    # df_trade_h.to_csv(portfolio_path + "/trade_h.csv", index=False, encoding='utf-8_sig')
-    # df_port_c.to_csv(portfolio_path + "/chart.csv", index=True, encoding='utf-8_sig')
-    # df_setting.to_csv(portfolio_path + "/setting.csv", index=False, encoding='utf-8_sig')
-
     print("setting is", setting["s_weight1"])
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
-
     return [df_trade_h, df_port_overview, df_setting]
 
 
-
-
-
-
-# possible select func= pd.Dataframe.nsmallest, pd.Dataframe.nlargest, pd.Dataframe.sample
+# TODO try with numba
 def try_select(select_from_df, select_size, select_by):
     try:
         return select_from_df.nsmallest(int(select_size), [select_by])
-    # return numba_select(select_from_df,select_size,select_by)
-    # return select_from_df.sort_values(select_by, ascending=True).head(int(select_size))
     except Exception as e:  # if sample size bigger than df, ignore
         print("ERROR. less than portfolio p_max_size", e)
 
@@ -223,11 +211,6 @@ def print_and_time(setting_count, phase, dict_trade_h_hold, dict_trade_h_buy, di
     now = mytime.time()
     a_time.append('{0: <25}'.format(phase) + f": {now - prev_time}")
     return now
-
-
-class print_log():
-    print_log = True
-
 
 if __name__ == '__main__':
     pass

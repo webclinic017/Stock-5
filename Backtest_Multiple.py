@@ -309,7 +309,6 @@ def backtest_once(settings=[{}]):
 
                 now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
-
             else:  # to not buy today
                 if market_trend <= 0.7:
                     print("not buying today because no trend")
@@ -366,7 +365,7 @@ def backtest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20200201",
+        "start_date": "20100201",
         "end_date": Util.today(),
         "freq": "D",
         "market": "CN",
@@ -382,7 +381,7 @@ def backtest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query": {"period": [Util.op("ge"), 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query": {"period": [Util.c_op()["ge"], 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
 
         "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important

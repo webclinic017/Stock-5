@@ -13,15 +13,38 @@ import traceback
 import API_Tushare
 import atexit
 from time import time, strftime, localtime
+import inspect
 import time
 from datetime import timedelta
 from playsound import playsound
 from numba import jit
 import numba
+import enum
 
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
+
+def today():
+    return str(datetime.now().date()).replace("-", "")
+
+
+def plot_autocorrelation(series):
+    from pandas.plotting import autocorrelation_plot
+    from matplotlib import pyplot
+    autocorrelation_plot(series)
+    pyplot.show()
+
+
+def standard_indi_name(ibase, deri, dict_variables):
+    result = f"{ibase}.{deri}"
+    for key, enum_val in dict_variables.items():
+        if key not in ["df", "ibase"]:
+            try:
+                result = result + "(" + f"{key}.{enum_val.value}" + ")"
+            except:
+                result = result + "(" + f"{key}.{enum_val}" + ")"
+    return result
 
 def fibonacci(n):
     if n < 0:
@@ -188,22 +211,6 @@ def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.
         df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
 
 
-@numba.jit
-def my_rolling_gain(numpy_series, rolling_freq):
-    i_start = 0
-    i_end = rolling_freq
-    a_result = np.array([])
-
-    for i in numpy_series:
-        if i <= rolling_freq:
-            a_result = np.append(a_result, 1)
-            continue
-        else:
-            a_result = np.append(a_result, 1)
-            i_start = i_start + 1
-            i_end = i_end + 1
-
-
 @jit
 def rolling_prod2(xs, n):
     cxs = np.cumprod(xs)
@@ -214,26 +221,12 @@ def rolling_prod2(xs, n):
     return cxs / a
 
 
-@numba.vectorize
-def my_real_core(numpy_series):
-    result = 1
-    for i in numpy_series:
-        result = result * i
-    return result
-
-
-# TODO
-
 
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
     try:
         df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
     except Exception as e:
         pass
-
-
-def column_set_as_first(df, a_column_names):
-    return df[a_column_names + [x for x in df.columns.tolist() if x not in a_column_names]]
 
 
 def columns_remove(df, columns_array):
@@ -248,31 +241,20 @@ def column_add_comp_chg(pct_chg_series):
     cun_pct_chg_series = 1 + (pct_chg_series / 100)
     return cun_pct_chg_series.cumprod()
 
-
-def apply_rolling_comp_chg(pct_chg_series):
-    return column_add_comp_chg(pct_chg_series).iloc[-1]
-
-
 def column_check_duplicates(df, column_name):
     print("duplicated column is", any(df[column_name].duplicated()))
-
-
-# add from =input, add_to =output
-
 
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     s_result = pd.Series(index=s_index, data=s_index * z[0] + z[1])
     return s_result
 
-
 def get_linear_regression_rise(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     return z[0]
 
 
-
-def calculate_beta(s1, s2):
+def calculate_beta(s1, s2):  # TODO maybe überflüssig, just use s.corr
     s1 = s1.rename("s1").copy()
     s2 = s2.rename("s2").copy()
 
@@ -280,20 +262,6 @@ def calculate_beta(s1, s2):
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
     correl = asset_all["s1"].corr(asset_all["s2"], method="pearson")
     return correl
-
-
-# input: a any matrix
-# output: column correlation
-def calculate_pearson_matrix(df, output_path="pearson.csv"):
-    df_pearson = pd.DataFrame(index=df.columns, columns=df.columns)
-
-    for index in df_pearson.index:
-        for column in df_pearson.columns:
-            try:
-                df_pearson.at[index, column] = df[index].corr(df[column], method="pearson")
-            except:
-                df_pearson.at[index, column] = float("nan")
-    df_pearson.to_csv(output_path, index=True)
 
 
 def open_file(filepath):
@@ -312,8 +280,7 @@ def close_file(filepath):
     try:
         xl = Dispatch('Excel.Application')
         wb = xl.Workbooks.Open(filepath)
-        # do some stuff
-        wb.Close(True)  # save the workbook
+        wb.Close(True)
     except Exception as e:
         pass
 
@@ -445,6 +412,11 @@ def pd_writer_save(pd_writer, path):
             time.sleep(10)
 
 
+def line_print(text, lines=40):
+    print("=" * lines)
+    print(text)
+    print("=" * lines)
+
 def send_mail(trade_string="what to buy and sell"):
     sender_email = "sizhe.huang@guanyueinternational.com"
     receiver = "sizhe.huang@guanyueinternational.com"
@@ -479,62 +451,56 @@ def multi_process(func, a_kwargs, a_steps=[]):
     [process.start() for process in a_process]
     [process.join() for process in a_process]
 
-
 def c_assets():
-    return ["I", "E", "FD"]
+    return [e.value for e in Assets]
 
+
+class Assets(enum.Enum):
+    I = "I"
+    E = "E"
+    FD = "FD"
 
 def c_freqs():
-    return ["D"]  # return ["D", "W", "M", "Y", "S"]
+    return [e.value for e in Freqs]  # return ["D", "W", "M", "Y", "S"]
 
 
-def c_rolling_freqs():
-    return [2, 5, 10, 20, 60, 240]
-    # return [2, 5, 10, 20, 65, 260]
+class Freqs(enum.Enum):
+    D = "D"
+    # W="W"
+    # S="S"
+    # Y="Y"
 
+
+def c_rolling_freq():
+    return [e.value for e in Freq]
+
+
+class Freq(enum.Enum):
+    f2 = 2
+    f5 = 5
+    f10 = 10
+    f20 = 20
+    f60 = 60
+    f240 = 240
 
 def c_rolling_freqs_fibonacci():
     return [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]
 
-
-
-
-def c_panda_rolling_op():
-    dict_op = {"mean": pd.Series.mean,
-               "std": pd.Series.std,
-               "min": pd.Series.min,
-               "max": pd.Series.max,
-               "sum": pd.Series.sum,
-               "count": pd.Series.count,
-               "unique": pd.Series.unique,
-               "nlargest": pd.Series.nlargest,
-               "nsmallest": pd.Series.nsmallest
-               }
-    return dict_op
-
-
 def c_group_score_weight():
     return {"area": 0.10, "exchange": 0.40, "industry1": 0.20, "industry2": 0.20, "state_company": 0.05, "is_hs": 0.05}  # "industry3": 0.20,
-
 
 def c_date_oth():
     return {"block_trade": API_Tushare.my_block_trade, "holdertrade": API_Tushare.my_holdertrade, "repurchase": API_Tushare.my_repurchase, "share_float": API_Tushare.my_share_float}
 
-
 def c_assets_fina_function_dict():
     return {"fina_indicator": API_Tushare.my_fina_indicator, "income": API_Tushare.my_income, "balancesheet": API_Tushare.my_balancesheet, "cashflow": API_Tushare.my_cashflow}
-
 
 def c_industry_level():
     return ['1', '2', '3']
 
 
-def c_operator():
+def c_op():
     return {"plus": operator.add, "minus": operator.sub, "gt": operator.gt, "ge": operator.ge, "lt": operator.lt, "le": operator.le, "eq": operator.eq}
-
-
-def op(name):
-    return c_operator()[name]
 
 def c_candle():
     # array = [function, candle positive return use, candle negative return use]
@@ -667,15 +633,8 @@ def c_groups_bad_industry_L3_instance():
     return result
 
 
-def c_folder_root():
-    return ""
-
-
-def select_percentile(df, select_by, a_between):
-    helper_column = np.array(df[select_by])
-    percentile_between = np.nanpercentile(a=helper_column, q=[a_between[0], a_between[1]], overwrite_input=True)
-    df = df[df[select_by].between(percentile_between[0], percentile_between[1])]
-    return df
+def c_setting_path():  # TODO create setting
+    return "D:/GoogleDrive/私人/私人 Stock 2.0/"
 
 
 # play sound file merged into Util.py
@@ -686,41 +645,37 @@ def secondsToStr(elapsed=None):
         return str(timedelta(seconds=elapsed))
 
 
-def log(s, elapsed=None):
-    line = "=" * 50
-    print(line)
-    print(secondsToStr(), '-', s)
-    if elapsed:
-        print("Elapsed time:", elapsed)
-    print(line)
-    print()
-
+def log(message, elapsed=None):
+    print("=" * 100)
+    print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
+    print("=" * 100)
 
 def endlog():
     sound("finished_all.mp3")
-    end = time.time()
-    elapsed = end - start
-    log("End Program", secondsToStr(elapsed))
+    log("END", secondsToStr(time.time() - start))
     time.sleep(2)
+
+
+def wrap_line(func):
+    def line(lines=50):
+        print("=" * lines)
+
+    def this_function_will_never_be_seen(*args, **kwargs):
+        line()
+        result = func(*args, **kwargs)
+        line()
+        return result
+
+    return this_function_will_never_be_seen
 
 
 if __name__ == '__main__':
     pass
 
 
+
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     start = time.time()
     sound("start.mp3")
     atexit.register(endlog)
-    log("Start Program")
-
-
-def today():
-    return str(datetime.now().date()).replace("-", "")
-
-
-def plot_autocorrelation(series):
-    from pandas.plotting import autocorrelation_plot
-    from matplotlib import pyplot
-    autocorrelation_plot(series)
-    pyplot.show()
+    log("START")

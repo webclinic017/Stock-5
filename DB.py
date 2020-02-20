@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import talib
 import API_Tushare
-import Indicator_Create
 import Util
 import os.path
 import inspect
@@ -16,7 +15,7 @@ from numba import njit
 import traceback
 import cProfile
 from tqdm import tqdm
-from Util import c_assets, c_rolling_freqs, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_operator, c_candle, c_groups_dict, multi_process, today
+from Util import c_assets, c_rolling_freq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
 
 pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
@@ -368,20 +367,19 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 # For all Pri indices and derivates
 def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
     complete_new_update = True if len(df_saved) == 0 else False
-    traceback_freq_big = c_rolling_freqs()
+    traceback_freq_big = c_rolling_freq()
     traceback_freq_small = [2, 5]
 
     if asset == "E":
         Indicator_Create.add_ivola(df, df_saved=df_saved, complete_new_update=complete_new_update)  # 0.890578031539917 for 300 loop
     Indicator_Create.add_period(df, complete_new_update=complete_new_update)  # 0.2 for 300 loop
-    Indicator_Create.add_indi_rs(df)  # notimplemented
     Indicator_Create.add_pjump_up(df, complete_new_update=complete_new_update)  # 1.0798187255859375 for 300 loop
     Indicator_Create.add_pjump_down(df, complete_new_update=complete_new_update)  # 1.05 independend for 300 loop
     Indicator_Create.add_candle_signal(df, complete_new_update=complete_new_update)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
 
     for rolling_freq in traceback_freq_small[::-1]:
         if asset == "E":
-            Indicator_Create.column_add_mean(df, rolling_freq, "turnover_rate", complete_new_update=complete_new_update)  # dependend
+            Indicator_Create.mean(df, rolling_freq, "turnover_rate", complete_new_update=complete_new_update)  # dependend
             df[f"turnover_rate_pct{rolling_freq}"] = df["turnover_rate"] / df[f"turnover_rate{rolling_freq}"]
         # Util.column_add_std(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
 
@@ -391,7 +389,7 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
         Indicator_Create.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
-    Setup_date_trend_once(a_all=[1] + c_rolling_freqs(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_operator(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
+    Setup_date_trend_once(a_all=[1] + c_rolling_freq(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
     print(f"calculating resistance...")
 
     # df = support_resistance_horizontal(df_asset=df)
@@ -1101,7 +1099,7 @@ def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
         "thresh_log": -0.043,
         "thresh_rest": 0.7237,
         "op_sign": "gt",  # ["<"，">"]
-        "all_comb": [1] + c_rolling_freqs(),  # tested, that the higher the ma, the less useful. somewhere between is da best
+        "all_comb": [1] + c_rolling_freq(),  # tested, that the higher the ma, the less useful. somewhere between is da best
         "minmax": 0.5
     }
 
@@ -1504,7 +1502,7 @@ def check_tushare_upto_date():
         return False
 
 
-def preload(load="asset", step=1):
+def preload(load="asset", step=1, query=""):
     dict_result = {}
     df_listing = get_ts_code()[::step] if load == "asset" else get_trade_date(start_date="20000101")[::step]
     key = "ts_code" if load == "asset" else "trade_date"
@@ -1519,7 +1517,9 @@ def preload(load="asset", step=1):
             dict_result[iterator] = pd.DataFrame()
             continue
         try:
-            df = df[df["period"] > 240]
+            df = df[(df["period"] > 240)]
+            if query:
+                df = df.query(expr=query)
         except:
             pass
         dict_result[iterator] = df

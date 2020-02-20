@@ -113,7 +113,7 @@ if __name__ == '__main__':
     dict_asset = DB.preload(load="asset", step=1)
 
     for ts_code, df_asset in dict_asset.items():
-        for fgain_freq in Util.c_rolling_freqs():
+        for fgain_freq in Util.c_rolling_freq():
             for abv_und in ["und", "abv"]:
                 for i in [0, 1, 2, 3, 4, 5, 6, 7]:
                     for cross in [1, -1]:
