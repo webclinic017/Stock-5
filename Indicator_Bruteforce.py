@@ -1,12 +1,9 @@
-import pandas as pd
-import time
-import os.path
-import numpy as np
-import Util
-import DB
 import os
+import os.path
+import pandas as pd
+import DB
 import Indicator_Create
-import itertools
+import Util
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -112,6 +109,7 @@ def bruteforce_create_derivative():
                     df_asset_copy = df_asset.copy()  # maybe can be saved, but is risky. Copy is safer but slower
                     deri_column = deri_function(df=df_asset_copy, ibase=ibase.value, **one_setting)
 
+
                     # evaluate new derived indicator
                     eval_fgain(df=df_asset_copy, ts_code=ts_code, column=deri_column, dict_fgain_mean_detail=dict_fgain_mean_detail)
 
@@ -130,4 +128,5 @@ def bruteforce_create_derivative():
 
 
 if __name__ == '__main__':
+    # TODO generate test file
     bruteforce_create_derivative()

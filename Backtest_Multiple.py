@@ -84,7 +84,7 @@ def backtest_once(settings=[{}]):
             print("last day reached")
             tomorrow = int(DB.get_next_trade_date(freq=freq))
             df_today = df_today_accelerator
-            df_tomorrow = df_today_accelerator.copy()
+            df_tomorrow = df_today_accelerator.copy()  # bug here?
             df_tomorrow[["high", "low", "close", "pct_chg"]] = np.nan
         else:
             df_tomorrow = DB.get_date(trade_date=tomorrow, assets=assets, freq="D", market=market)
@@ -461,7 +461,15 @@ if __name__ == '__main__':
         pr = cProfile.Profile()
         pr.enable()
 
-        backtest_multiple(5)
+        # backtest_multiple(5)
+
+        # TODO hypothesis where the bug is
+        # 1 trend reads future data
+        # 2 backtest provides future data
+        # 3 ignore log ignores data that are important
+        # 4 pgain 2 and 5 decides the small nuance for tomorrow
+        # date file aggregates wrong
+
 
         pr.disable()
         # pr.print_stats(sort='file')
