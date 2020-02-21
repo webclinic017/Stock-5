@@ -15,6 +15,7 @@ import atexit
 from time import time, strftime, localtime
 import inspect
 import time
+import subprocess, os, platform
 from datetime import timedelta
 from playsound import playsound
 from numba import jit
@@ -23,6 +24,31 @@ import enum
 
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
+
+
+# decorator functions must be at top
+def try_ignore(func):
+    def this_function_will_never_be_seen(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+        except:
+            result = None
+        return result
+
+    return this_function_will_never_be_seen
+
+
+def wrap_line(func):
+    def line(lines=50):
+        print("=" * lines)
+
+    def this_function_will_never_be_seen(*args, **kwargs):
+        line()
+        result = func(*args, **kwargs)
+        line()
+        return result
+
+    return this_function_will_never_be_seen
 
 
 def today():
@@ -38,12 +64,14 @@ def plot_autocorrelation(series):
 
 def standard_indi_name(ibase, deri, dict_variables):
     result = f"{ibase}.{deri}"
+    variables = ""
     for key, enum_val in dict_variables.items():
         if key not in ["df", "ibase"]:
             try:
-                result = result + "(" + f"{key}.{enum_val.value}" + ")"
+                variables = variables + f"{key}={enum_val.value}."
             except:
-                result = result + "(" + f"{key}.{enum_val}" + ")"
+                variables = variables + f"{key}={enum_val}."
+    result = result + f"({variables})"
     return result
 
 def fibonacci(n):
@@ -212,7 +240,7 @@ def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.
 
 
 @jit
-def rolling_prod2(xs, n):
+def quick_rolling_prod(xs, n):
     cxs = np.cumprod(xs)
     nans = np.empty(n)
     nans[:] = np.nan
@@ -221,13 +249,9 @@ def rolling_prod2(xs, n):
     return cxs / a
 
 
-
+@try_ignore
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
-    try:
-        df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
-    except Exception as e:
-        pass
-
+    df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
 
 def columns_remove(df, columns_array):
     for column in columns_array:
@@ -236,13 +260,9 @@ def columns_remove(df, columns_array):
         except Exception as e:
             pass
 
-
 def column_add_comp_chg(pct_chg_series):
     cun_pct_chg_series = 1 + (pct_chg_series / 100)
     return cun_pct_chg_series.cumprod()
-
-def column_check_duplicates(df, column_name):
-    print("duplicated column is", any(df[column_name].duplicated()))
 
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
@@ -254,19 +274,14 @@ def get_linear_regression_rise(s_index, s_data):
     return z[0]
 
 
-def calculate_beta(s1, s2):  # TODO maybe überflüssig, just use s.corr
-    s1 = s1.rename("s1").copy()
-    s2 = s2.rename("s2").copy()
-
+def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan because std returns nan too often
     # calculate beta by only using the non na days = smallest amount of days where both s1 s2 are trading
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
     correl = asset_all["s1"].corr(asset_all["s2"], method="pearson")
     return correl
 
-
 def open_file(filepath):
     filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
-    import subprocess, os, platform
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', filepath))
     elif platform.system() == 'Windows':  # Windows
@@ -275,15 +290,12 @@ def open_file(filepath):
         subprocess.call(('xdg-open', filepath))
 
 
+@try_ignore
 def close_file(filepath):
     filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
-    try:
-        xl = Dispatch('Excel.Application')
-        wb = xl.Workbooks.Open(filepath)
-        wb.Close(True)
-    except Exception as e:
-        pass
-
+    xl = Dispatch('Excel.Application')
+    wb = xl.Workbooks.Open(filepath)
+    wb.Close(True)
 
 def groups_dict_to_string_iterable(dict_groups: dict):
     result = ""
@@ -317,41 +329,17 @@ def groups_dict_to_string_iterable(dict_groups: dict):
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
 
-
 def get_numeric_df_columns(df):
-    return list(df.select_dtypes(include=[np.number]).columns.values)
-
+    return list(get_numeric_df(df).columns.values)
 
 def shutdown_windows():
-    import os
     os.system('shutdown -s')
-
-
-def setting_to_path(dict_setting):
-    result = ""
-    for key, value in dict_setting.items():
-        if type(value) == list or type(value) == dict or type(value) == np.array:
-            value = ''.join(str(e) for e in value)
-            print(value)
-            result = result + str(key) + "_" + value + " - "
-        elif type(value) == str:
-            result = result + str(key) + "_" + str(value) + " - "
-        elif type(value) == int:
-            result = result + str(key) + "_" + str(value) + " - "
-        elif type(value) == float:
-            result = result + str(key) + "_" + str(value) + " - "
-        elif type(value) == bool:
-            result = result + str(key) + "_" + str(value) + " - "
-        else:
-            result = result + str(key) + "_" + str(value) + " - "
-    return result
-
 
 def sound(file="error.mp3"):
     playsound("Media/Sound/" + file)
 
 
-def a_path(path: str = ""):
+def a_path(path: str = ""):  #TODO use os path library instead of my own
     return [x for x in [path + ".csv", path + ".feather"]]
 
 
@@ -365,7 +353,6 @@ def handle_save_exception(e, path):
     else:
         traceback.print_exc()
     time.sleep(2)
-
 
 def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False, skip_csv=False):  # utf-8_sig
     if reset_index:
@@ -397,19 +384,6 @@ def to_excel(path_excel, dict_df):
             break
         except Exception as e:
             handle_save_exception(e, path_excel)
-
-
-def pd_writer_save(pd_writer, path):
-    close_file(path)
-    for _ in range(0, 10):
-        try:
-            pd_writer.save()
-            break
-        except Exception as e:
-            close_file(path)
-            sound("close_excel.mp3")
-            print(e)
-            time.sleep(10)
 
 
 def line_print(text, lines=40):
@@ -447,34 +421,31 @@ def multi_process(func, a_kwargs, a_steps=[]):
         new_dict.update({"step": step})
         p = Process(target=func, kwargs=new_dict)
         a_process.append(p)
-
     [process.start() for process in a_process]
     [process.join() for process in a_process]
 
 def c_assets():
     return [e.value for e in Assets]
 
-
 class Assets(enum.Enum):
     I = "I"
     E = "E"
     FD = "FD"
 
-def c_freqs():
-    return [e.value for e in Freqs]  # return ["D", "W", "M", "Y", "S"]
+
+def c_SFreq():
+    return [e.value for e in SFreq]  # return ["D", "W", "M", "Y", "S"]
 
 
-class Freqs(enum.Enum):
+class SFreq(enum.Enum):
     D = "D"
     # W="W"
     # S="S"
     # Y="Y"
 
 
-def c_rolling_freq():
+def c_freq():
     return [e.value for e in Freq]
-
-
 class Freq(enum.Enum):
     f2 = 2
     f5 = 5
@@ -487,25 +458,41 @@ def c_rolling_freqs_fibonacci():
     return [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]
 
 def c_group_score_weight():
-    return {"area": 0.10, "exchange": 0.40, "industry1": 0.20, "industry2": 0.20, "state_company": 0.05, "is_hs": 0.05}  # "industry3": 0.20,
+    return {"area": 0.10,
+            "exchange": 0.40,
+            "industry1": 0.20,
+            "industry2": 0.20,
+            "state_company": 0.05,
+            "is_hs": 0.05}  # "industry3": 0.20,
 
 def c_date_oth():
-    return {"block_trade": API_Tushare.my_block_trade, "holdertrade": API_Tushare.my_holdertrade, "repurchase": API_Tushare.my_repurchase, "share_float": API_Tushare.my_share_float}
+    return {"block_trade": API_Tushare.my_block_trade,
+            "holdertrade": API_Tushare.my_holdertrade,
+            "repurchase": API_Tushare.my_repurchase,
+            "share_float": API_Tushare.my_share_float}
 
 def c_assets_fina_function_dict():
-    return {"fina_indicator": API_Tushare.my_fina_indicator, "income": API_Tushare.my_income, "balancesheet": API_Tushare.my_balancesheet, "cashflow": API_Tushare.my_cashflow}
+    return {"fina_indicator": API_Tushare.my_fina_indicator,
+            "income": API_Tushare.my_income,
+            "balancesheet": API_Tushare.my_balancesheet,
+            "cashflow": API_Tushare.my_cashflow}
 
 def c_industry_level():
     return ['1', '2', '3']
 
-
 def c_op():
-    return {"plus": operator.add, "minus": operator.sub, "gt": operator.gt, "ge": operator.ge, "lt": operator.lt, "le": operator.le, "eq": operator.eq}
+    return {"plus": operator.add,
+            "minus": operator.sub,
+            "gt": operator.gt,
+            "ge": operator.ge,
+            "lt": operator.lt,
+            "le": operator.le,
+            "eq": operator.eq}
 
 def c_candle():
     # array = [function, candle positive return use, candle negative return use]
     # e.g. "CDLDOJISTAR": [talib.CDLDOJISTAR, -100, 0] : for POSITIVE return WHEN -100 occurs. and 0 means not used for negative return
-    dict_pattern = {"CDL2CROWS": [talib.CDL2CROWS, 0, 0],
+    return {"CDL2CROWS": [talib.CDL2CROWS, 0, 0],
                     "CDL3BLACKCROWS": [talib.CDL3BLACKCROWS, 0, 0],
                     "CDL3INSIDE": [talib.CDL3INSIDE, 0, 0],
                     "CDL3LINESTRIKE": [talib.CDL3LINESTRIKE, 0, 0],
@@ -567,7 +554,6 @@ def c_candle():
                     "CDLUPSIDEGAP2CROWS": [talib.CDLUPSIDEGAP2CROWS, 0, 0],
                     "CDLXSIDEGAP3METHODS": [talib.CDLXSIDEGAP3METHODS, 0, 0],
                     }
-    return dict_pattern
 
 
 def c_groups_dict(assets=c_assets(), a_ignore=[]):
@@ -613,60 +599,24 @@ def c_groups_dict(assets=c_assets(), a_ignore=[]):
                                   "景顺长城基金", "泰信基金", "长信基金", "长城基金", "万家基金", "摩根士丹利华鑫基金", "中银基金", "东证资管", "兴全基金", "民生加银基金", "华富基金", "红土创新基金"],
                    "custodian": ["中信证券", "渤海银行", "招商证券", "国泰君安", "中信建投", "广发证券", "平安银行", "中金公司", "北京银行", "招商银行", "浦发银行", "中国工商银行", "中国银行", "中国建设银行", "海通证券", "浙商银行", "中国农业银行", "中国银河", "中国民生银行", "兴业银行", "兴业证券", "国信证券", "中信银行", "交通银行", "广发银行", "中国光大银行", "邮储银行", "宁波银行", "上海银行", "华夏银行"]}
         asset = {**asset, **dict_fd}
-
     asset = {key: value for key, value in asset.items() if key not in a_ignore}
     return asset
-
-
-def c_groups_good_industry_L3_instance():
-    result = ["电机", "房屋建设", "综合", "电子系统组装", "光学元件", "其他纤维", "路桥施工", "软件开发", "玻纤", "金属制品", "集成电路", "多元金融", "其他轻工制造", "调味发酵品", "半导体材料", "其他互联网服务", "互联网信息服务", "营销服务", "环保设备", "航天装备", "装修装饰", "日用化学产品", "林业", "终端设备", "通信配套服务", "电子零部件制造", "磁性材料", "地面兵装", "航空装备", "磷化工及磷酸盐", "仪器仪表", "计算机设备", "其它专用机械",
-              "其他休闲服务", "医疗服务", "其他化学原料", "通信传输设备", "IT服务", "玻璃制造", "涂料油漆油墨制造", "铝", "非金属新材料", "其他稀有小金属", "医疗器械", "改性塑料", "其他电子", "磨具磨料", "通信运营", "印制电路板", "包装印刷", "畜禽养殖", "其它视听器材", "楼宇设备", "农业综合", "稀土", "线缆部件及其他", "分立器件", "其他家用轻工", "被动元件", "金属新材料", "其他化学制品", "储能设备", "机床工具", "辅料", "动物保健", "风电设备",
-              "食品综合", "锂", "中压设备", "低压设备", "船舶制造", "化学原料药", "氟化工及制冷剂", "民爆用品", "其他交运设备", "工控自动化", "物流", "移动互联网服务", "汽车零部件", "专业连锁", "LED", "显示器件", "证券", "影视动漫", "计量仪表", "钨", "其他文化传媒", "其他种植业", "光伏设备", "环保工程及服务", "饲料", "其它通用机械", "聚氨酯", "其他服装", "其他专业工程", "铅锌", "无机盐", "其他塑料制品", "其他采掘", "黄金", "文娱用品",
-              "乳品", "其他橡胶制品", "化学工程", "维纶", "家具", "纺织化学用品", "新能源发电", "公交", "农用机械", "小家电", "燃机发电", "燃气", "内燃机", "家电零部件", "铁路设备", "电网自动化", "热电", "园林工程", "机械基础件", "印刷包装机械", "果蔬加工", "其他基础建设", "化学制剂", "铜", "耐火材料", "其他建材", "其他采掘服务", "水泥制造", "水务", "纺织服装设备", "种子生产", "农药", "石油贸易", "贸易", "其它电源设备", "冶金矿采化工设备",
-              "生物制品", "肉制品", "房地产开发", "氯碱", "国际工程承包", "管材", "其他纺织", "园区开发", "商用载客车", "平面媒体", "粘胶"]
-    return result
-
-
-def c_groups_bad_industry_L3_instance():
-    result = ["制冷空调设备", "软饮料", "粮油加工", "钢结构", "海洋捕捞", "酒店", "医药商业", "白酒", "一般物业经营", "旅游综合", "冰箱", "涤纶", "其他农产品加工", "中药", "氮肥", "葡萄酒", "磷肥", "有线电视网络", "钾肥", "其他酒类", "珠宝首饰", "毛纺", "特钢", "石油加工", "工程机械", "水产养殖", "油气钻采服务", "人工景点", "煤炭开采", "火电设备", "航运", "纯碱", "炭黑", "汽车服务", "家纺", "粮食种植", "自然景点", "氨纶",
-              "女装", "造纸", "空调", "啤酒", "航空运输", "重型机械", "餐饮", "鞋帽", "商用载货车", "乘用车", "合成革", "专业市场", "焦炭加工", "丝绸", "多业态零售", "超市", "男装", "印染", "百货", "保险", "水电", "高压设备", "彩电", "港口", "水利工程", "石油开采", "洗衣机", "普钢", "复合肥", "休闲服装", "黄酒", "轮胎", "城轨建设", "棉纺", "火电", "铁路运输", "综合电力设备商", "高速公路", "银行", "铁路建设", "机场"]
-    return result
-
 
 def c_setting_path():  # TODO create setting
     return "D:/GoogleDrive/私人/私人 Stock 2.0/"
 
-
-# play sound file merged into Util.py
 def secondsToStr(elapsed=None):
-    if elapsed is None:
-        return strftime("%Y-%m-%d %H:%M:%S", localtime())
-    else:
-        return str(timedelta(seconds=elapsed))
+    return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
 
 
+@wrap_line
 def log(message, elapsed=None):
-    print("=" * 100)
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
-    print("=" * 100)
 
 def endlog():
     sound("finished_all.mp3")
     log("END", secondsToStr(time.time() - start))
     time.sleep(2)
-
-
-def wrap_line(func):
-    def line(lines=50):
-        print("=" * lines)
-
-    def this_function_will_never_be_seen(*args, **kwargs):
-        line()
-        result = func(*args, **kwargs)
-        line()
-        return result
-
-    return this_function_will_never_be_seen
 
 
 if __name__ == '__main__':

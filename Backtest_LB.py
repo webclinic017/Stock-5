@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import time
 import DB
-import Util
+import LB
 from datetime import datetime
 from numba import njit
 from numba import jit
@@ -15,8 +15,8 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
-def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
-    current_trend = Util.c_rolling_freq()
+def backtest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
+    current_trend = LB.c_freq()
     beta_against = "_000001.SH"
 
     a_time = []
@@ -31,7 +31,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     # convertes dict in dict to string
     for key, value in setting.items():
         if type(value) == dict:
-            setting[key] = Util.groups_dict_to_string_iterable(setting[key])
+            setting[key] = LB.groups_dict_to_string_iterable(setting[key])
         elif type(value) in [list, np.ndarray]:
             if (key == "p_compare"):
                 setting["p_compare"] = ', '.join([x[1] for x in setting["p_compare"]])
@@ -63,7 +63,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
         print("file has nan ts_codes")
         raise ValueError
 
-    df_port_c = df_trade_h.groupby("trade_date").agg("mean")
+    df_port_c = df_trade_h.groupby("trade_date").agg("mean")  # TODO remove inefficient apply and groupby and loc
     df_port_c["port_pearson"] = df_trade_h.groupby("trade_date").apply(lambda x: x["rank_final"].corr(x["pct_chg"]))
     df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
     df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: x.at[x.last_valid_index(), "port_cash"])
@@ -79,7 +79,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     # add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
-        df_port_c["comp_chg_" + competitor[1]] = Util.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
+        df_port_c["comp_chg_" + competitor[1]] = LB.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
     # df_port_c add trend2,10,20,60,240
     a_current_trend_label = []
@@ -122,7 +122,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
     except:
         df_port_overview.at[0, "all_comp_chg"] = float("nan")
 
-    df_port_overview.at[0, "port_beta"] = Util.calculate_beta(df_port_c["all_pct_chg"], df_port_c["pct_chg" + beta_against])
+    df_port_overview.at[0, "port_beta"] = LB.calculate_beta(df_port_c["all_pct_chg"], df_port_c["pct_chg" + beta_against])
     df_port_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
     df_port_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
 
@@ -164,7 +164,7 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
         df_port_overview.at[i + 1, "period"] = len(df_port_c) - df_port_c["pct_chg_" + competitor_ts_code].isna().sum()
         df_port_overview.at[i + 1, "pct_days_involved"] = 1
         df_port_overview.at[i + 1, "comp_chg"] = df_port_c.at[df_port_c["comp_chg_" + competitor_ts_code].last_valid_index(), "comp_chg_" + competitor_ts_code]
-        df_port_overview.at[i + 1, "beta"] = Util.calculate_beta(df_port_c["pct_chg_" + competitor_ts_code], df_port_c["pct_chg" + beta_against])
+        df_port_overview.at[i + 1, "beta"] = LB.calculate_beta(df_port_c["pct_chg_" + competitor_ts_code], df_port_c["pct_chg" + beta_against])
         df_port_c["tomorrow_pct_chg_" + competitor_ts_code] = df_port_c["pct_chg_" + competitor_ts_code].shift(-1)  # add a future pct_chg 1 for easier target
 
         # calculate percent change and winrate
@@ -185,11 +185,11 @@ def report_portfolio(setting_original, dict_trade_h, df_stock_market_all, backte
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
-    Util.to_csv_feather(df=df_port_overview, a_path=Util.a_path(portfolio_path + "/overview"), index=False, skip_feather=True)
-    Util.to_csv_feather(df=df_trade_h, a_path=Util.a_path(portfolio_path + "/trade_h"), index=False, skip_feather=True)
-    Util.to_csv_feather(df=df_port_c, a_path=Util.a_path(portfolio_path + "/chart"), reset_index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), reset_index=False, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    Util.to_csv_feather(df=df_setting, a_path=Util.a_path(portfolio_path + "/setting"), index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), index=False, skip_feather=True)
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)

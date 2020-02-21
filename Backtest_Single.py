@@ -9,7 +9,7 @@ import numpy as np
 import time
 import math
 import talib
-import Util
+import LB
 import DB
 
 
@@ -261,7 +261,7 @@ def asset_bullishness(start_date, end_date, assets, freq):
 
             if df_asset.empty:
                 continue
-            df_asset = Util.df_reindex(df_asset)
+            df_asset = LB.df_reindex(df_asset)
 
             # comp_gain
             asset_first_period_open = df_asset.open.loc[df_asset.open.first_valid_index()]
@@ -399,9 +399,9 @@ def asset_trend_once(ts_code, start_time, end_time):
     df["trend60_pct_chg"] = df["trend60_pct_chg"].fillna(value=0, inplace=False)
     df["trend20_pct_chg"] = df["trend20_pct_chg"].fillna(value=0, inplace=False)
 
-    df["trend240_comp_chg"] = Util.column_add_comp_chg(df["trend240_pct_chg"])
-    df["trend60_comp_chg"] = Util.column_add_comp_chg(df["trend60_pct_chg"])
-    df["trend20_comp_chg"] = Util.column_add_comp_chg(df["trend20_pct_chg"])
+    df["trend240_comp_chg"] = LB.column_add_comp_chg(df["trend240_pct_chg"])
+    df["trend60_comp_chg"] = LB.column_add_comp_chg(df["trend60_pct_chg"])
+    df["trend20_comp_chg"] = LB.column_add_comp_chg(df["trend20_pct_chg"])
 
     # print out trend
 
@@ -459,7 +459,7 @@ def asset_trend_multiple(asset="E", start_time="20050101", end_time="20191111"):
     ts_code_series_to_excel(df_ts_code_series=df_result, path=path, sort=["rsi_mean_even", False], asset=["E"])
 
 
-# mainly used for save ts_code series into excel with groups
+# mainly used for save ts_code series into excel with groups #TODO duplicate remove
 def ts_code_series_to_excel(df_ts_code_series, path, sort=["column_name", True], asset=["E"]):
     pdwriter = pd.ExcelWriter(path, engine='xlsxwriter')
 
@@ -468,7 +468,7 @@ def ts_code_series_to_excel(df_ts_code_series, path, sort=["column_name", True],
     df_ts_code_series.to_excel(pdwriter, sheet_name="Overview", index=False, encoding='utf-8_sig')
 
     # tab group
-    for group_column, group_instancce in Util.c_groups_dict(asset).items():
+    for group_column, group_instancce in LB.c_groups_dict(asset).items():
         df_groupbyhelper = df_ts_code_series.groupby(group_column)
         try:
             df_group = df_groupbyhelper.mean()
@@ -480,7 +480,7 @@ def ts_code_series_to_excel(df_ts_code_series, path, sort=["column_name", True],
             pass
 
     # save
-    Util.close_file(path)
+    LB.close_file(path)
     pdwriter.save()
 
 
@@ -500,7 +500,7 @@ def excel_to_summary(folder_path, sort_setting=["", False]):
                 dict_tab[key] = df.append(df_helper, sort=False, ignore_index=True)
 
     summary_path = folder_path + "/excel_summary.xlsx"
-    Util.close_file(summary_path)
+    LB.close_file(summary_path)
     pdwriter = pd.ExcelWriter(summary_path, engine='xlsxwriter')
     for key, df in dict_tab.items():
         df.sort_values(by=sort_setting[0], ascending=sort_setting[1], inplace=True)
@@ -643,7 +643,7 @@ def asset_technical_analysis_multiple():
                                         df_saved = pd.DataFrame()
                                     df_saved = df_saved.append(df, ignore_index=True, sort=False)
 
-                                    Util.close_file(path)
+                                    LB.close_file(path)
                                     df_saved.to_csv(path, index=False)
                                     time.sleep(7)
 
@@ -708,7 +708,7 @@ def asset_price_analysis_multiple(freq_day=2):
         else:
             query = '(pct_chg >= {0}) & (pct_chg <= {1})'.format(from_price, to_price)
         print("query is", query)
-        asset_price_analysis_once("00000000", Util.today(), freq="D", from_price=from_price, to_price=to_price, query=query, subfolder_name="past_gain{}/".format(str(freq_day)))
+        asset_price_analysis_once("00000000", LB.today(), freq="D", from_price=from_price, to_price=to_price, query=query, subfolder_name="past_gain{}/".format(str(freq_day)))
 
     excel_to_summary(folder_path="D:/GoogleDrive/私人/私人 Stock 2.0/Market/CN/Backtest_Single/price/past_gain{}/".format(str(freq_day)), sort_setting=["future_gain2", False])
 
@@ -725,11 +725,11 @@ def date_seasonal_stats(start_date, end_date):
     df_all_dates = df_all_dates[(df_all_dates["trade_date"].between(int(start_date), int(end_date)))]
 
     # get all different groups
-    a_groups = [[Util.get_trade_date_datetime_dayofweek, "dayofweek"],
-                [Util.get_trade_date_datetime_d, "dayofmonth"],
-                [Util.get_trade_date_datetime_weekofyear, "weekofyear"],
-                [Util.get_trade_date_datetime_dayofyear, "dayofyear"],
-                [Util.get_trade_date_datetime_m, "monthofyear"]]
+    a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],
+                [LB.get_trade_date_datetime_d, "dayofmonth"],
+                [LB.get_trade_date_datetime_weekofyear, "weekofyear"],
+                [LB.get_trade_date_datetime_dayofyear, "dayofyear"],
+                [LB.get_trade_date_datetime_m, "monthofyear"]]
 
     # transform all trade_date into different format
     for group in a_groups:
@@ -836,7 +836,7 @@ def asset_candlestick_analysis_once(ts_code, pattern, func):
 
 
 def asset_candlestick_analysis_multiple():
-    dict_pattern = Util.c_candle()
+    dict_pattern = LB.c_candle()
     df_all_ts_code = DB.get_ts_code(asset="E")
 
     for key, array in dict_pattern.items():
@@ -869,9 +869,9 @@ def asset_resistance_once(asset="E"):
     i = 240
 
     df_select = df_asset.loc[i:i + 240, ["ts_code", "close"]]
-    Util.df_reindex(df_select)
+    LB.df_reindex(df_select)
     print(df_select)
-    df_select["regression"] = Util.get_linear_regression_s(df_select.index, df_select["close"])
+    df_select["regression"] = LB.get_linear_regression_s(df_select.index, df_select["close"])
     df_select.to_csv("regression.csv", index=False)
 
 

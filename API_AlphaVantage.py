@@ -28,7 +28,7 @@ import time
 import math
 import talib
 import DB
-import Util
+import LB
 import yfinance as yf
 
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')

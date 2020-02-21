@@ -5,7 +5,7 @@ import os.path
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
-import Util
+import LB
 import DB
 import os
 import datetime
@@ -109,20 +109,4 @@ def resistance_bruteforce():
 if __name__ == '__main__':
     # create_gif(ts_code="000001.SZ")
     # support_resistance_multiple()
-    df_result = pd.DataFrame()
-    dict_asset = DB.preload(load="asset", step=1)
-
-    for ts_code, df_asset in dict_asset.items():
-        for fgain_freq in Util.c_rolling_freq():
-            for abv_und in ["und", "abv"]:
-                for i in [0, 1, 2, 3, 4, 5, 6, 7]:
-                    for cross in [1, -1]:
-                        try:
-                            occurence = len(df_asset[(df_asset[f"rs{abv_und}{i}_cross"] == cross)]) / len(df_asset)
-                            mean = df_asset.loc[df_asset[f"rs{abv_und}{i}_cross"] == cross, f"fgain{fgain_freq}"].mean()
-                            df_result.at[ts_code, f"rs{abv_und}{i}_cross{cross}_occ"] = occurence
-                            df_result.at[ts_code, f"rs{abv_und}{i}_cross{cross}_mean"] = mean
-                        except:
-                            pass
-
-                    df_result.to_csv("occurence.csv")
+    pass

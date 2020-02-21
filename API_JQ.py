@@ -1,7 +1,7 @@
 import tushare as ts
 import pandas as pd
 import time
-import Util
+import LB
 import traceback
 from jqdatasdk import *
 

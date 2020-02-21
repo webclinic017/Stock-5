@@ -3,13 +3,14 @@ import os.path
 import pandas as pd
 import DB
 import Indicator_Create
-import Util
+import LB
+import glob
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 # evaluate a columns agains fgain in various aspects
-def eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
+def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
     dict_ts_code_mean = {}
     for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
         # general ts_code pgain
@@ -17,13 +18,16 @@ def eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
         # general ts_code pearson with fgain
         df_fgain_mean.at[ts_code, f"{fgain}_pearson"] = df[column].corr(df[fgain], method="pearson")
 
-    # evaluate after percentile
-    p_setting = [(0, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 1)]
-    for low_quant, high_quant in p_setting:
-        low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
-        df_percentile = df[df[column].between(low_val, high_val)]
-        for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
-            df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] = df_percentile[fgain].mean() / dict_ts_code_mean[fgain]
+    # evaluate after Quantile
+    try:
+        p_setting = [(0, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 1)]
+        for low_quant, high_quant in p_setting:
+            low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
+            df_percentile = df[df[column].between(low_val, high_val)]
+            for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
+                df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] = df_percentile[fgain].mean() / dict_ts_code_mean[fgain]
+    except:
+        print("Quantile did not work")
 
     # evaluate after occurence bins
     try:
@@ -39,27 +43,71 @@ def eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
     # evaluate after probability/ occurence TODO
 
     # evaluate after seasonality
-    for trend_freq in Util.c_rolling_freq():
+    for trend_freq in LB.c_freq():
         for trend in [1, 0]:
             for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
                 df_fgain_mean.at[ts_code, f"{fgain}_trend{trend_freq}{trend}"] = df.loc[df[f"trend{trend_freq}"] == trend, fgain].mean() / dict_ts_code_mean[fgain]
 
 
-# Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
-def bruteforce_create_derivative():
-    setting = {
-        "target": "asset",  # date
-        "step": 1000,  # 1 or any other integer
-        "group_result": False,
-        "path_general": "Market/CN/Bruteforce/result/",
-        "path_result": "Market/CN/Bruteforce/",
-        # "path_general": "E:/Bruteforce/result/",
-        # "path_result": "E:/Bruteforce/",
-        "big_update": False
-    }
+setting = {
+    "target": "asset",  # date
+    "step": 1000,  # 1 or any other integer
+    "group_result": False,
+    "path_general": "Market/CN/Bruteforce/result/",
+    "path_result": "Market/CN/Bruteforce/",
+    # "path_general": "E:/Bruteforce/result/",
+    # "path_result": "E:/Bruteforce/",
+    "big_update": False
+}
 
+
+def bruteforce_summary(folderPath, summarypath):
+    # init summary
+    dict_fgain = {f"fgain{x}": pd.DataFrame() for x in LB.c_freq()}
+
+    # iterate over all results
+    for subFolderRoot, foldersWithinSubFolder, files in os.walk(folderPath, topdown=False):
+        for fileName in files:
+
+            # get information from the file name
+            ibase, rest = fileName.split(".", 1)
+            deri, rest = rest.split("(", 1)
+
+            args, rest = rest.split(")", 1)
+            dict_args = {}
+            for arg_pair in args.split("."):
+                key = arg_pair.split("=")[0]
+                if key != "":
+                    value = arg_pair.split("=")[1]
+                    dict_args[key] = value
+
+            fgain = rest.split("_", 1)[1].split(".")[0]
+            print("ibase is", ibase)
+            print("deri is", deri)
+            print("args", dict_args)
+            print("fgain", fgain)
+
+            if fgain != "sample":
+                df = pd.read_csv(subFolderRoot + "/" + fileName)
+                # mean
+                df_mean = df.mean()
+                df_mean["ibase"] = ibase
+                df_mean["deri"] = deri
+                df_mean["args"] = dict_args
+                dict_fgain[fgain] = dict_fgain[fgain].append(df_mean, sort=False, ignore_index=True)
+
+    for key, df in dict_fgain.items():
+        a_path = LB.a_path(summarypath + "/" + f"{key}")
+        LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True)
+
+        # print(os.path.join(subFolderRoot, fileName))
+
+
+
+# Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
+def bruteforce_iterate():
     dict_df_asset = DB.preload(load=setting["target"], step=setting["step"], query="trade_date > 20050101")
-    dict_df_summary = {f"fgain{freq}": pd.DataFrame() for freq in Util.c_rolling_freq()}
+    dict_df_summary = {f"fgain{freq}": pd.DataFrame() for freq in LB.c_freq()}
     e_ibase = Indicator_Create.IBase
     e_ideri = Indicator_Create.IDeri
 
@@ -82,25 +130,25 @@ def bruteforce_create_derivative():
 
                 # CHECK IF OVERRIDE OR NOT if small update, then continue if file exists
                 if not setting["big_update"]:
-                    for key in Util.c_rolling_freq():
-                        path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + Util.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_fgain{key}.csv"
+                    for key in LB.c_freq():
+                        path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_fgain{key}.csv"
                         if not os.path.exists(path):
-                            Util.line_print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                            LB.line_print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
                             break  # go into the ibase
                     else:
-                        Util.line_print(f"SMALL UPDATE: File Exists. Skip. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                        LB.line_print(f"SMALL UPDATE: File Exists. Skip. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
                         continue  # go to next ibase
                 else:
-                    Util.line_print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                    LB.line_print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{deri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
 
                 # create sample
-                path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + Util.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_sample"
+                path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_sample"
                 df_sample = dict_df_asset["000001.SZ"][[ibase_name]]
                 deri_function(df=df_sample, ibase=ibase.value, **one_setting)
-                Util.to_csv_feather(df=df_sample, index=True, reset_index=False, a_path=Util.a_path(path), skip_feather=True)
+                LB.to_csv_feather(df=df_sample, index=True, reset_index=False, a_path=LB.a_path(path), skip_feather=True)
 
                 # Initialize ALL ts_code and fgain result for THIS COLUMN, THIS DERIVATION, THIS SETTING
-                dict_fgain_mean_detail = {f"fgain{freq}": pd.DataFrame() for freq in Util.c_rolling_freq()}
+                dict_fgain_mean_detail = {f"fgain{freq}": pd.DataFrame() for freq in LB.c_freq()}
 
                 # for each possible asset
                 print(f"START: ibase={ibase.value} ideri={ideri.value} setting=" + str({**one_setting}))
@@ -111,14 +159,14 @@ def bruteforce_create_derivative():
 
 
                     # evaluate new derived indicator
-                    eval_fgain(df=df_asset_copy, ts_code=ts_code, column=deri_column, dict_fgain_mean_detail=dict_fgain_mean_detail)
+                    bruteforce_eval_fgain(df=df_asset_copy, ts_code=ts_code, column=deri_column, dict_fgain_mean_detail=dict_fgain_mean_detail)
 
                 # save evaluated results
                 for key, df in dict_fgain_mean_detail.items():
                     df.index.name = "ts_code"
-                    path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + Util.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_{key}"
+                    path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_{key}"
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
-                    Util.to_csv_feather(df=df, index=True, reset_index=False, a_path=Util.a_path(path), skip_feather=True)
+                    LB.to_csv_feather(df=df, index=True, reset_index=False, a_path=LB.a_path(path), skip_feather=True)
 
         # save Summary after one columns all derivation is finished
         # row_summary = df.mean()
@@ -129,4 +177,7 @@ def bruteforce_create_derivative():
 
 if __name__ == '__main__':
     # TODO generate test file
-    bruteforce_create_derivative()
+    # USE Sound theory harmonic to find the best frequency
+    # TODO create summary of details
+    # bruteforce_iterate()
+    bruteforce_summary("Market/CN/Bruteforce/result/", "Market/CN/Bruteforce/")

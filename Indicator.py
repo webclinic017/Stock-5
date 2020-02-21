@@ -11,13 +11,13 @@ from itertools import combinations
 from itertools import permutations
 
 import Indicator_Create
-import Util
+import LB
 import operator
 from time import sleep
 from progress.bar import PixelBar
 from datetime import datetime
 import traceback
-import Backtest_Util
+import Backtest_LB
 import copy
 import cProfile
 from tqdm import tqdm
@@ -48,20 +48,20 @@ def increaselimit(increase=1):
                 df_gainlimit.dropna(inplace=True)
 
                 for gain in ["pgain", "fgain"]:
-                    for freq in Util.c_rolling_freq():
+                    for freq in LB.c_freq():
                         df_result_asset.at[ts_code, f"days{days}_{gain}{freq}"] = df_gainlimit[f"{gain}{freq}"].mean()
             except:
                 for gain in ["pgain", "fgain"]:
-                    for freq in Util.c_rolling_freq():
+                    for freq in LB.c_freq():
                         df_result_asset.at[ts_code, f"days{days}_{gain}{freq}"] = np.nan
 
     for gain in ["pgain", "fgain"]:
         for days in [1, 2, 3, 5, 10, -1, -2, -3, -5, -10]:
-            for freq in Util.c_rolling_freq():
+            for freq in LB.c_freq():
                 df_summary_asset.at[f"days{days}", f"{gain}{freq}"] = df_result_asset[f"days{days}_{gain}{freq}"].mean()
 
     path = "Market/CN/Indicator/increaselimit.xlsx" if increase == 1 else "Market/CN/Indicator/decreaselimit.xlsx"
-    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
+    LB.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
 
 
 def overma():
@@ -77,33 +77,33 @@ def overma():
         except:
             continue
 
-        for rolling_freq in Util.c_rolling_freq():
+        for rolling_freq in LB.c_freq():
             Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
-        for lower in Util.c_rolling_freq():
-            for upper in Util.c_rolling_freq():
+        for lower in LB.c_freq():
+            for upper in LB.c_freq():
                 mean = df.loc[df[f"close{upper}"] > df[f"close{lower}"], "fgain2"].mean()
                 df_result_asset.at[ts_code, f"lower{lower}_upper{upper}"] = mean
 
     # asset summary
-    for lower in Util.c_rolling_freq():
-        for upper in Util.c_rolling_freq():
+    for lower in LB.c_freq():
+        for upper in LB.c_freq():
             df_summary_asset.at[f"close{lower}", f"close{upper}_over"] = df_result_asset[f"lower{lower}_upper{upper}"].mean()
 
     # date summary
     df_result_date = pd.DataFrame()
     df_stock_market_all = DB.get_stock_market_all()
 
-    for rolling_freq in Util.c_rolling_freq():
+    for rolling_freq in LB.c_freq():
         Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
-    for lower in Util.c_rolling_freq():
-        for upper in Util.c_rolling_freq():
+    for lower in LB.c_freq():
+        for upper in LB.c_freq():
             mean = df_stock_market_all.loc[df_stock_market_all[f"close{upper}"] > df_stock_market_all[f"close{lower}"], "fgain2"].mean()
             df_result_date.at[f"close{lower}", f"closer{upper}_over"] = mean
 
     path = "Market/CN/Indicator/overma.xlsx"
-    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
+    LB.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
 
 
 def crossma():
@@ -120,19 +120,19 @@ def crossma():
             continue
 
         # add ma
-        for rolling_freq in Util.c_rolling_freq():
+        for rolling_freq in LB.c_freq():
             Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
         # add flag above ma and find cross over point
-        for lower in Util.c_rolling_freq():
-            for upper in Util.c_rolling_freq():
+        for lower in LB.c_freq():
+            for upper in LB.c_freq():
                 if lower != upper:
                     df[f"upper{upper}_abv_lower{lower}"] = ((df[f"close{upper}"] > df[f"close{lower}"]).astype(int))
                     df[f"upper{upper}_cross_lower{lower}"] = (df[f"upper{upper}_abv_lower{lower}"].diff()).replace(0, np.nan)
 
         # calculate future pgain based on crossover
-        for lower in Util.c_rolling_freq():
-            for upper in Util.c_rolling_freq():
+        for lower in LB.c_freq():
+            for upper in LB.c_freq():
                 if lower != upper:
                     for cross in [1, -1]:
                         mean = df.loc[df[f"upper{upper}_cross_lower{lower}"] == cross, "fgain2"].mean()
@@ -140,8 +140,8 @@ def crossma():
 
     # asset summary
     for cross in [1, -1]:
-        for lower in Util.c_rolling_freq():
-            for upper in Util.c_rolling_freq():
+        for lower in LB.c_freq():
+            for upper in LB.c_freq():
                 try:
                     df_summary_asset.at[f"close{lower}", f"close{upper}_cross{cross}"] = df_result_asset[f"upper{upper}_cross{cross}_lower{lower}"].mean()
                 except:
@@ -150,20 +150,20 @@ def crossma():
     # date
     df_result_date = pd.DataFrame()
     df_stock_market_all = DB.get_stock_market_all()
-    for rolling_freq in Util.c_rolling_freq():
+    for rolling_freq in LB.c_freq():
         Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
     # add flag above ma and find cross over point
-    for lower in Util.c_rolling_freq():
-        for upper in Util.c_rolling_freq():
+    for lower in LB.c_freq():
+        for upper in LB.c_freq():
             if lower != upper:
                 df_stock_market_all[f"upper{upper}_abv_lower{lower}"] = ((df_stock_market_all[f"close{upper}"] > df_stock_market_all[f"close{lower}"]).astype(int))
                 df_stock_market_all[f"upper{upper}_cross_lower{lower}"] = (df_stock_market_all[f"upper{upper}_abv_lower{lower}"].diff()).replace(0, np.nan)
 
     # date summary
     for cross in [1, -1]:
-        for lower in Util.c_rolling_freq():
-            for upper in Util.c_rolling_freq():
+        for lower in LB.c_freq():
+            for upper in LB.c_freq():
                 try:
                     df_result_date.at[f"close{lower}", f"close{upper}_cross{cross}"] = df_stock_market_all.loc[df_stock_market_all[f"upper{upper}_cross_lower{lower}"] == cross, "fgain2"].mean()
                 except:
@@ -171,21 +171,8 @@ def crossma():
 
     # date summary
     path = "Market/CN/Indicator/crossma.xlsx"
-    Util.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
+    LB.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset, "d": df_stock_market_all, "d_sum": df_result_date})
 
-
-def c_all_indicators():
-    return ["period", "open", "high", "low", "close", "pct_chg", "past_gain", "pjump_up", "pjump_down", "ivola", "vol", "turnover_rate", "pb", "ps_ttm", "dv_ttm", "total_share", "total_mv", "n_cashflow_act", "n_cashflow_inv_act", "n_cash_flows_fnc_act", "profit_dedt", "netprofit_yoy", "or_yoy",
-            "grossprofit_margin", "netprofit_margin", "debt_to_assets", "pledge_ratio", "candle_net_pos", "trend"]
-
-
-#
-def indicator_cross_once(df, a_indicators=[]):
-    pass
-
-
-def auto_corr_once(df, a_indicators=[]):
-    pass
 
 
 # auto correlation = relation between past price and future price
@@ -254,7 +241,7 @@ def auto_corr_multiple():
         #             condition_count=len(df_filtere.loc[df_filtere["fgain2"].between(fgain_lower,fgain_upper)])
         #             dict_df[pgain].at[ts_code,f"{pgain}_{pgain_lower,pgain_upper}_fgain2_{fgain_lower,fgain_upper}"]=condition_count/total_counts
 
-    for ma in Util.c_rolling_freq():
+    for ma in LB.c_freq():
         Indicator_Create.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
 
     df_mean = pd.DataFrame()
@@ -295,8 +282,8 @@ def auto_corr_multiple():
             portfolio_writer.save()
             return
         except Exception as e:
-            Util.close_file(path)
-            Util.sound("close_excel.mp3")
+            LB.close_file(path)
+            LB.sound("close_excel.mp3")
             print(e)
             time.sleep(10)
 
@@ -385,7 +372,7 @@ def cross_corr_multiple():
             for sheet_label, df in dict_dfs.items():
                 print(f"saving{indicator_label, sheet_label}...")
                 df.to_excel(writer, sheet_name=sheet_label, index=True)
-            Util.pd_writer_save(pd_writer=writer, path=path)
+            writer.save()
 
 
 def indicator_asset(indicator_label, ts_code, df_saved_asset, period, dict_dfs, rolling_freqs_big, rolling_freqs_small, keyword):
@@ -406,7 +393,7 @@ def indicator_common(indicator_label, index, df_saved, period, dict_result_dfs, 
             df_result.at[index, f"period"] = period
 
         for trend in rolling_freqs_big:
-            for trend_op_label, trend_op in Util.c_op().items():
+            for trend_op_label, trend_op in LB.c_op().items():
                 df_filtered_trend = df_filtered[trend_op(df_filtered[f"trend{trend}"], 0.5)]
 
                 for rolling_freq in rolling_freqs_small:
@@ -435,4 +422,4 @@ if __name__ == '__main__':
         pass
     except Exception as e:
         traceback.print_exc()
-        Util.sound("error.mp3")
+        LB.sound("error.mp3")

@@ -5,18 +5,19 @@ import os.path
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
-import Util
+import LB
 import os
 import datetime
 import copy
 import imageio
 import glob
+import talib
 import itertools
 from multiprocessing import Process
 import inspect
 import enum
+from LB import *
 
-from Util import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -57,6 +58,7 @@ class IDeri(enum.Enum):
     # rs="rs"
 
 
+# clip,autocorr,cummax
 def get_deri_func(deri_name: IDeri):
     dict = {
         "create": create,
@@ -126,16 +128,10 @@ class SApply(enum.Enum):
     skew = "skew"
     kurt = "kurt"
 
-
 class RE(enum.Enum):
     r = "r"
     e = "e"
 
-
-def add_period(df, complete_new_update=True):
-    add_to = "period"
-    add_column(df, add_to, "ts_code", 1)
-    df[add_to] = (range(1, len(df.index) + 1))  # for now the complete_new_update is the same
 
 
 def add_ivola(df, df_saved, complete_new_update=True):
@@ -156,7 +152,7 @@ def add_pgain(df, rolling_freq, complete_new_update=True):
 
     # df[add_to+"test"] = (1 + (df["pct_chg"] / 100)).rolling(rolling_freq).apply(pd.Series.prod, raw=False)
     try:
-        df[add_to] = rolling_prod2((1 + (df["pct_chg"] / 100)).to_numpy(), rolling_freq)
+        df[add_to] = quick_rolling_prod((1 + (df["pct_chg"] / 100)).to_numpy(), rolling_freq)
     except:
         df[add_to] = np.nan
 
@@ -240,8 +236,25 @@ def add_pjump_down(df, complete_new_update=True):
             fast_add_rolling(df=df, add_from=add_to, add_to=add_to + str(rolling_freq), rolling_freq=rolling_freq, func=pd.Series.sum)
 
 
-def create(df: pd.DataFrame, ibase: str, ):
+def period(df: pd.DataFrame, ibase: str):
+    add_to = ibase
+    add_column(df, add_to, "ts_code", 1)
+    df[add_to] = (range(1, len(df.index) + 1))
+
+
+def create(df: pd.DataFrame, ibase: str):
+    if ibase == "period":
+        period(df, ibase)
+    elif ibase == "egal":
+        pass
     return ibase
+
+
+def rsi(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):  # TODO
+    # add_to = LB.standard_indi_name(ibase=ibase, deri=, dict_variables={"freq": freq, "re": re.value})
+    # func=talib.RSI()
+    return
+
 
 
 def count(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
@@ -299,7 +312,7 @@ def deri_sta(df: pd.DataFrame, ibase: str, freq: Freq, re: RE, apply: SApply):
     apply = apply.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = Util.standard_indi_name(ibase=ibase, deri=apply, dict_variables={"freq": freq, "re": re.value})
+    add_to = LB.standard_indi_name(ibase=ibase, deri=apply, dict_variables={"freq": freq, "re": re.value})
     add_column(df, add_to, ibase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
@@ -355,14 +368,10 @@ def explode_settings(dict_one_indicator_variables):
 def function_all_combinations(func):
     signature = inspect.getfullargspec(func).annotations
     result_dict = {}
-
     # get function annotation with variable and type
     for variable, enum_or_class in signature.items():
         if issubclass(enum_or_class, enum.Enum):  # ignore everything else that is not a enum. All Variable types MUST be custom defined Enum
             result_dict[variable] = enum_or_class
-        else:
-            print(f"WARNING [{variable}] is not ENUM but {type(enum_or_class)}")
-
     return explode_settings(result_dict)
 
 

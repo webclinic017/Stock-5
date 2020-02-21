@@ -8,11 +8,11 @@ import time
 import DB
 from itertools import combinations
 from itertools import permutations
-import Util
+import LB
 from progress.bar import Bar
 from datetime import datetime
 import traceback
-import Backtest_Util
+import Backtest_LB
 import copy
 import cProfile
 import threading
@@ -72,7 +72,7 @@ def backtest_once(settings=[{}]):
 
         if break_loop:
             print("BREAK loop")
-            Util.sound("break.mp3")
+            LB.sound("break.mp3")
             time.sleep(5)
             # adjust date if loop was break
             for setting in settings:
@@ -106,7 +106,7 @@ def backtest_once(settings=[{}]):
             dict_trade_h[tomorrow] = {"sell": [], "hold": [], "buy": []}
             print('{0: <26}'.format("TODAY EVENING ANALYZE") + f"{today} stocks {len(df_today)}")
             print('{0: <26}'.format("TOMORROW MORNING TRADE") + f"{tomorrow} stocks {len(df_tomorrow)}")
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"INIT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+            now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"INIT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 1.1 FILTER
             a_filter = True
@@ -115,7 +115,7 @@ def backtest_once(settings=[{}]):
                 func = a_op[0]
                 a_filter = a_filter & func(df_today[column], a_op[1])
             df_today_mod = df_today[a_filter]
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+            now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 2 ECONOMY
             # 3 FINANCIAL MARKET
@@ -195,14 +195,14 @@ def backtest_once(settings=[{}]):
                             print(f"{setting_count} : " + '{0: <0}'.format("") + '{0: <9}'.format(f"hold {hold_count}"), (f"{ts_code}"))
                             hold_count = hold_count + 1
 
-            now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"SELL AND HOLD", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+            now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"SELL AND HOLD", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # PORTFOLIO BUY BEGIN
             buyable_size = p_maxsize - len(dict_trade_h[tomorrow]["hold"])
             if buyable_size > 0 and int(market_trend) >= 0.7:
 
                 # 6.4 PORTFOLIO BUY SCORE/RANK
-                dict_group_instance_weight = Util.c_group_score_weight()
+                dict_group_instance_weight = LB.c_group_score_weight()
                 for column, a_weight in setting["s_weight1"].items():
                     print("select column", column)
                     # column use group rank
@@ -215,7 +215,7 @@ def backtest_once(settings=[{}]):
                         else:
                             # 1. iterate to see replace value
                             print("NOT accelerated")
-                            for group, instance_array in Util.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]).items():
+                            for group, instance_array in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]).items():
                                 dict_replace = {}
                                 df_today_mod["rank_" + column + "_" + group] = df_today_mod[group]  # to be replaced later by int value
                                 for instance in instance_array:
@@ -231,7 +231,7 @@ def backtest_once(settings=[{}]):
 
                         # 2. calculate group score
                         df_today_mod["rank_" + column + "_group"] = 0.0
-                        for group in Util.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]):
+                        for group in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]):
                             try:
                                 df_today_mod["rank_" + column + "_group"] = df_today_mod["rank_" + column + "_group"] + df_today_mod["rank_" + column + "_" + group] * dict_group_instance_weight[group]
                             except Exception as e:
@@ -246,12 +246,12 @@ def backtest_once(settings=[{}]):
                 # 4. Create Rank Final = indicator1+indicator2+indicator3
                 df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
                                                   for column, a_weight in setting["s_weight1"].items()])  # if final rank is na, nsmallest will not select anyway
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
-                                                   prev_time=now)
+                now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
+                                                 prev_time=now)
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 1
                 for i in range(1, len(df_today_mod) + 1):
-                    df_select = Backtest_Util.try_select(select_from_df=df_today_mod, select_size=buyable_size * 3 * i, select_by=setting["f_percentile_column"])
+                    df_select = Backtest_LB.try_select(select_from_df=df_today_mod, select_size=buyable_size * 3 * i, select_by=setting["f_percentile_column"])
 
                     # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
                     df_select = df_select[~df_select.index.isin([trade_info["ts_code"] for trade_info in dict_trade_h[tomorrow]["hold"]])]
@@ -264,15 +264,15 @@ def backtest_once(settings=[{}]):
                     else:
                         print(f"selection failed, reselect {i}")
                 else:
-                    Util.sound("error.mp3")
+                    LB.sound("error.mp3")
                     print("Error, should not happend")
 
                 # carry final rank, otherwise the second select will not be able to select
                 df_select_tomorrow["rank_final"] = df_today_mod["rank_final"]
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 2
-                df_select_tomorrow = Backtest_Util.try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by=setting["f_percentile_column"])
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY SELECT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                df_select_tomorrow = Backtest_LB.try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by=setting["f_percentile_column"])
+                now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"BUY SELECT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
                 # 6.11 BUY EXECUTE:
                 p_fee = setting["p_fee"]
@@ -281,7 +281,7 @@ def backtest_once(settings=[{}]):
                     df_select_tomorrow["reserved_capital"] = (df_select_tomorrow["rank_final"].sum() / df_select_tomorrow["rank_final"])
                     df_select_tomorrow["reserved_capital"] = current_capital * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
                 elif setting["p_proportion"] == "fibo":
-                    df_select_tomorrow["reserved_capital"] = current_capital * pd.Series(data=Util.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
+                    df_select_tomorrow["reserved_capital"] = current_capital * pd.Series(data=LB.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
                 else:
                     df_select_tomorrow["reserved_capital"] = current_capital / buyable_size
 
@@ -307,7 +307,7 @@ def backtest_once(settings=[{}]):
 
                     print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
 
-                now = Backtest_Util.print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                now = Backtest_LB.print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             else:  # to not buy today
                 if market_trend <= 0.7:
@@ -324,11 +324,11 @@ def backtest_once(settings=[{}]):
     # 10 STEP CREATE REPORT AND BACKTEST OVERVIEW
 
     a_summary_merge = []
-    Util.sound("saving.mp3")
+    LB.sound("saving.mp3")
     for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
         try:
             now = mytime.time()
-            df_trade_h, df_portfolio_overview, df_setting = Backtest_Util.report_portfolio(setting_original=setting, dict_trade_h=dict_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)
+            df_trade_h, df_portfolio_overview, df_setting = Backtest_LB.backtest_portfolio(setting_original=setting, dict_trade_h=dict_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)
             print("REPORT PORTFOLIO TIME:", mytime.time() - now)
             a_summary_merge.append(pd.merge(left=df_portfolio_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False))
 
@@ -337,17 +337,17 @@ def backtest_once(settings=[{}]):
                 df_last_simulated_trade = df_trade_h.loc[df_trade_h["trade_date"] == last_simulated_date, ["trade_type", "name"]]
                 str_last_simulated_trade = df_last_simulated_trade.to_string(header=False, index=True)
                 str_last_simulated_trade = str(last_simulated_date) + ": \n" + setting["name"] + "\n" + str_last_simulated_trade
-                Util.send_mail(str_last_simulated_trade)
+                LB.send_mail(str_last_simulated_trade)
 
         except Exception as e:
-            Util.sound("error.mp3")
+            LB.sound("error.mp3")
             print("summarizing ERROR:", e)
             traceback.print_exc()
 
-    path = Util.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
+    path = LB.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
     df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
-    Util.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
+    LB.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
 
     return
 
@@ -366,7 +366,7 @@ def backtest_multiple(loop_indicator=1):
     setting_base = {
         # general = Non changeable through one run
         "start_date": "20100201",
-        "end_date": Util.today(),
+        "end_date": LB.today(),
         "freq": "D",
         "market": "CN",
         "assets": ["E"],  # E,I,FD
@@ -381,7 +381,7 @@ def backtest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query": {"period": [Util.c_op()["ge"], 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query": {"period": [LB.c_op()["ge"], 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
 
         "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important
@@ -477,4 +477,4 @@ if __name__ == '__main__':
         pass
     except Exception as e:
         traceback.print_exc()
-        Util.sound("error.mp3")
+        LB.sound("error.mp3")
