@@ -187,69 +187,108 @@ class RE(enum.Enum):
     e = "e"
 
 
+def assert_Ibase(func):
+    def this_func_is_never_visible(df: pd.DataFrame, ibase: str, *args, **kwargs):
+        try:
+            is_nan = df[ibase].isna().all()
+            if is_nan:
+                df[ibase] = np.nan
+                result = ibase
+            else:
+                result = func(df=df, ibase=ibase, *args, **kwargs)
+        except Exception:
+            df[ibase] = np.nan
+            result = ibase
+        return result
+
+    return this_func_is_never_visible
+
+
+@assert_Ibase
 def open(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def high(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def close(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def low(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def pct_chg(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def pe_ttm(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def pb(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def ps_ttm(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def dv_ttm(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def n_cashflow_act(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def n_cashflow_inv_act(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def n_cash_flows_fnc_act(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def profit_dedt(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def netprofit_yoy(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def or_yoy(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def grossprofit_margin(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def netprofit_margin(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def debt_to_assets(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def total_mv(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def vol(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
 
 
+@assert_Ibase
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
@@ -259,7 +298,7 @@ def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 # 3 Step Create Trend
 # 4 Step calculate trend pct_chg
 # 5 Step Calculate Step comp_chg
-
+@assert_Ibase
 def trend(df: pd.DataFrame, ibase: str, on_column: IBase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
     a_all = [1] + c_freq()
     a_low = [str(x) for x in a_all][:-1]  # should be [5, 20,60]
@@ -268,23 +307,20 @@ def trend(df: pd.DataFrame, ibase: str, on_column: IBase, thresh_log=-0.043, thr
 
     # variables:1. function, 2. threshhold 3. final weight 4. combination with other function
     for i in a_all:  # RSI 1
-        try:
-            if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
-                df[market_suffix + "rsi1"] = 0.0
-                df.loc[(df["pct_chg"] > 0.0), market_suffix + "rsi1"] = 1.0
-            else:
-                df[market_suffix + "rsi" + str(i)] = talib.RSI(df[on_column.value], timeperiod=i) / 100
-        except:
-            pass
+        if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
+            df[market_suffix + "rsi1"] = 0.0
+            df.loc[(df["pct_chg"] > 0.0), market_suffix + "rsi1"] = 1.0
+        else:
+            df[market_suffix + "rsi" + str(i)] = talib.RSI(df[on_column.value], timeperiod=i) / 100
 
     # Create Phase
     for i in [str(x) for x in a_all]:
         maximum = (thresh_log * math.log(int(i)) + thresh_rest)
         minimum = 1 - maximum
-
         # df[market_suffix + f"phase{i}"] = [1 if x > maximum else 0 if x < minimum else np.nan for x in df[market_suffix + "rsi" + i]]
         # df[market_suffix + f"phase{i}"] = df[market_suffix + "rsi" + i].apply(lambda x: 1 if x > maximum else 0 if x < minimum else np.nan )
         df[market_suffix + f"phase{i}"] = [1 if x > maximum else 0 if x < minimum else np.nan for x in df[market_suffix + "rsi" + i]]
+
 
     # one loop to create trend from phase
     for freq_low, freq_high in zip(a_low, a_high):
@@ -312,6 +348,7 @@ def trend(df: pd.DataFrame, ibase: str, on_column: IBase, thresh_log=-0.043, thr
     return market_suffix + ibase
 
 
+@assert_Ibase
 def cdl(df: pd.DataFrame, ibase: str):
     a_positive_columns = []
     a_negative_columns = []
@@ -339,6 +376,7 @@ def cdl(df: pd.DataFrame, ibase: str):
     return ibase
 
 
+@assert_Ibase
 def pjup(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
@@ -351,6 +389,7 @@ def pjup(df: pd.DataFrame, ibase: str):
     return add_to
 
 
+@assert_Ibase
 def pjdown(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
@@ -362,6 +401,8 @@ def pjdown(df: pd.DataFrame, ibase: str):
     df[add_to] = df[add_to].astype(int)
     return add_to
 
+
+@assert_Ibase
 def period(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "ts_code", 1)
@@ -369,6 +410,7 @@ def period(df: pd.DataFrame, ibase: str):
     return add_to
 
 
+@assert_Ibase
 def ivola(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
@@ -376,6 +418,7 @@ def ivola(df: pd.DataFrame, ibase: str):
     return add_to
 
 
+@assert_Ibase
 def pgain(df: pd.DataFrame, freq: LB.Freq):
     add_to = f"pgain{freq}"
     add_column(df, add_to, "pct_chg", 1)
@@ -387,6 +430,7 @@ def pgain(df: pd.DataFrame, freq: LB.Freq):
     return add_to
 
 
+@assert_Ibase
 def fgain(df: pd.DataFrame, freq: LB.Freq):
     add_to = f"fgain{freq}"
     add_column(df, add_to, "pct_chg", 1)
@@ -394,61 +438,74 @@ def fgain(df: pd.DataFrame, freq: LB.Freq):
     return add_to
 
 
+@assert_Ibase
 def rsi(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):  # TODO
     # add_to = LB.standard_indi_name(ibase=ibase, deri=, dict_variables={"freq": freq, "re": re.value})
     # func=talib.RSI()
     return
 
 
+@assert_Ibase
 def count(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.count)
 
 
+@assert_Ibase
 def sum(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.sum)
 
 
+@assert_Ibase
 def mean(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.mean)
 
 
+@assert_Ibase
 def median(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.median)
 
 
+@assert_Ibase
 def var(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.var)
 
 
+@assert_Ibase
 def std(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.std)
 
 
+@assert_Ibase
 def min(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.min)
 
 
+@assert_Ibase
 def max(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.max)
 
 
+@assert_Ibase
 def corr(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.corr)
 
 
+@assert_Ibase
 def cov(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.cov)
 
 
+@assert_Ibase
 def skew(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.skew)
 
 
+@assert_Ibase
 def kurt(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, apply=SApply.kurt)
 
 
-# this funciton should not exist. One should be able to pass function, but apply on rolling is slow and pandas.core.window.rolling is private. So Only if else case here is possible
+@assert_Ibase  # this funciton should not exist. One should be able to pass function, but apply on rolling is slow and pandas.core.window.rolling is private. So Only if else case here is possible
 def deri_sta(df: pd.DataFrame, ibase: str, freq: Freq, re: RE, apply: SApply):
     # enum to value
     freq = freq.value
@@ -519,4 +576,8 @@ def function_all_combinations(func):
 
 
 if __name__ == '__main__':
+    df = pd.DataFrame()
+    df.at[0, "close"] = 1
+    test = open(df=df, ibase="close")
+    print(test)
     pass
