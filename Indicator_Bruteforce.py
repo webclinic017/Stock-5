@@ -181,17 +181,7 @@ def bruteforce_iterate():
 if __name__ == '__main__':
     # TODO generate test file
     # USE Sound theory harmonic to find the best frequency
-    # TODO create summary of details
-    from Indicator_Create import Trend2Weight, trend
 
-    df = DB.get_asset()
-
-    df = df[["close", "trend", "pct_chg"]]
-    df["trend_saved"] = df["trend"]
-    df = df[["trend_saved", "close", "pct_chg"]]
-
-    finished = trend(df=df, ibase="trend", t2w=Trend2Weight.t1, thresh_log=-0.043, thresh_rest=0.7237, market_suffix="")
-    df.to_csv("test.csv")
 
     bruteforce_iterate()
-    bruteforce_summary("Market/CN/Bruteforce/result/", "Market/CN/Bruteforce/")
+    bruteforce_summary(setting["path_general"], setting["path_result"])

@@ -427,10 +427,9 @@ def backtest_multiple(loop_indicator=1):
 
     # settings creation
     for p_maxsize in [2, 12]:
-        for trend in ["trend", "trend2", "trend5"]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight1 = {  # ascending True= small, False is big
-                trend: [False, 100, 1],  # very important for this strategy
+                "trend": [False, 100, 1],  # very important for this strategy
                 "pct_chg": [True, 5, 1],  # very important for this strategy
                 "pgain2": [True, 3, 1],  # very important for this strategy
                 "pgain5": [True, 2, 1],  # very important for this strategy

@@ -128,10 +128,10 @@ class IBase(enum.Enum):
     pct_chg = "pct_chg"
     # fgain = "fgain"
     # # pgain = "pgain"
-    pjup = "pjup"
-    pjdown = "pjdown"
+    # pjup = "pjup"
+    # pjdown = "pjdown"
     ivola = "ivola"
-    cdl = "cdl"
+    # cdl = "cdl"
     trend = "trend"
 
     # fun
@@ -260,19 +260,22 @@ def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 # 4 Step calculate trend pct_chg
 # 5 Step Calculate Step comp_chg
 
-def trend(df: pd.DataFrame, ibase: str, t2w: Trend2Weight = Trend2Weight.t1, t5w: Trend2Weight = Trend2Weight.t1, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
+def trend(df: pd.DataFrame, ibase: str, on_column: IBase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
     a_all = [1] + c_freq()
     a_low = [str(x) for x in a_all][:-1]  # should be [5, 20,60]
     a_high = [str(x) for x in a_all][1:]  # should be [20,60,240]
-    on_column = IBase.close
+    # on_column = IBase.close
 
     # variables:1. function, 2. threshhold 3. final weight 4. combination with other function
     for i in a_all:  # RSI 1
-        if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
-            df[market_suffix + "rsi1"] = 0.0
-            df.loc[(df["pct_chg"] > 0.0), market_suffix + "rsi1"] = 1.0
-        else:
-            df[market_suffix + "rsi" + str(i)] = talib.RSI(df[on_column.value], timeperiod=i) / 100
+        try:
+            if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
+                df[market_suffix + "rsi1"] = 0.0
+                df.loc[(df["pct_chg"] > 0.0), market_suffix + "rsi1"] = 1.0
+            else:
+                df[market_suffix + "rsi" + str(i)] = talib.RSI(df[on_column.value], timeperiod=i) / 100
+        except:
+            pass
 
     # Create Phase
     for i in [str(x) for x in a_all]:
@@ -305,8 +308,7 @@ def trend(df: pd.DataFrame, ibase: str, t2w: Trend2Weight = Trend2Weight.t1, t5w
     LB.columns_remove(df, a_remove)
 
     # calculate final trend =weighted trend of previous TODO this need to be adjusted manually
-    df[market_suffix + ibase] = df[market_suffix + "trend2"] * t2w.value + df[market_suffix + "trend5"] * t5w.value + df[market_suffix + "trend20"] * 0.05 + df[market_suffix + "trend60"] * 0.05 + df[market_suffix + "trend240"] * 0.05
-    # df[market_suffix + ibase] = df[market_suffix + "trend2"]
+    df[market_suffix + ibase] = df[market_suffix + "trend2"] * 0.75 + df[market_suffix + "trend5"] * 0.10 + df[market_suffix + "trend20"] * 0.05 + df[market_suffix + "trend60"] * 0.05 + df[market_suffix + "trend240"] * 0.05
     return market_suffix + ibase
 
 
