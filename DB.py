@@ -1,7 +1,6 @@
 import tushare as ts
 import pandas as pd
 import numpy as np
-import talib
 import API_Tushare
 import LB
 import os.path
@@ -9,13 +8,13 @@ import inspect
 from itertools import combinations
 import operator
 import math
-import numba
-from numba import jit
 import Indicator_Create
 from numba import njit
 import traceback
 import cProfile
 from tqdm import tqdm
+
+from Indicator_Create import trend
 from LB import c_assets, c_freq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -372,30 +371,28 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
     traceback_freq_small = [2, 5]
 
     if asset == "E":
-        Indicator_Create.add_ivola(df, df_saved=df_saved, complete_new_update=complete_new_update)  # 0.890578031539917 for 300 loop
-    Indicator_Create.period(df, complete_new_update=complete_new_update)  # 0.2 for 300 loop
-    Indicator_Create.add_pjump_up(df, complete_new_update=complete_new_update)  # 1.0798187255859375 for 300 loop
-    Indicator_Create.add_pjump_down(df, complete_new_update=complete_new_update)  # 1.05 independend for 300 loop
-    Indicator_Create.add_candle_signal(df, complete_new_update=complete_new_update)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
+        Indicator_Create.ivola(df)  # 0.890578031539917 for 300 loop
+    Indicator_Create.period(df)  # 0.2 for 300 loop
+    Indicator_Create.pjup(df)  # 1.0798187255859375 for 300 loop
+    Indicator_Create.pjdown(df)  # 1.05 independend for 300 loop
+    Indicator_Create.cdl(df)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
 
     for rolling_freq in traceback_freq_small[::-1]:
         if asset == "E":
-            Indicator_Create.mean(df, rolling_freq, "turnover_rate", complete_new_update=complete_new_update)  # dependend
+            Indicator_Create.mean(df, rolling_freq, "turnover_rate")  # dependend
             df[f"turnover_rate_pct{rolling_freq}"] = df["turnover_rate"] / df[f"turnover_rate{rolling_freq}"]
         # Util.column_add_std(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
 
     for rolling_freq in traceback_freq_big[::-1]:
         # Util.column_add_mean(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
-        Indicator_Create.add_pgain(df, rolling_freq, complete_new_update=complete_new_update)  # past gain includes today = today +yesterday comp_gain
-        Indicator_Create.add_fgain(df, rolling_freq, complete_new_update=complete_new_update)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        Indicator_Create.pgain(df, rolling_freq)  # past gain includes today = today +yesterday comp_gain
+        Indicator_Create.fgain(df, rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
-    Setup_date_trend_once(a_all=[1] + c_freq(), df_result=df, close_label="close", index_label="", index=[], thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
+    trend(df=df, ibase="close", a_all=[1] + c_freq(), thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
     print(f"calculating resistance...")
 
     # df = support_resistance_horizontal(df_asset=df)
-
-
     return df
 
 
@@ -1121,7 +1118,7 @@ def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
                 if run_once_as_date_summary:
                     df_result = pd.DataFrame(columns=[str(x) + "_pct_chg_mean" for x in setting["all_comb"]] + [str(x) + "_pct_chg_std" for x in setting["all_comb"]] + [str(x) + "_comp_chg" for x in setting["all_comb"]] + [str(x) + "_trading_days" for x in setting["all_comb"]],
                                              index=setting["all_comb"])  # index is high which the trend name is after. Column is low. which the trend uses to determin is maxium
-                    df = Setup_date_trend_once(a_all=setting["all_comb"], df_result=df_result, close_label=close_label, index_label=sh_label, index=[], thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest, market_suffix="market_")
+                    df = trend(df=df_result, ibase=close_label, a_all=setting["all_comb"], thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest, market_suffix="market_")
 
                     a_path = LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market")
                     LB.to_csv_feather(df, a_path)
@@ -1142,112 +1139,13 @@ def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
                     comb = combinations(setting["all_comb"], max_len)
                     for index in list(comb):
                         part_combi = [x for x in index]
-                        Setup_date_trend_once(a_all=part_combi, df_result=df_result, close_label=close_label, index_label=sh_label, index=index, thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest)
+                        trend(df=df_result, ibase=close_label, a_all=part_combi, thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest)
                 #
                 setting_path = LB.setting_to_path(setting)
                 df_result.to_csv("Market/CN/Backtest_Single/trend/date_trend_" + setting_path + ".csv")
 
 
-# ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
-# input df = df_date with abov_ma indicator for a period e.g. 20000101 to 20191111
-def Setup_date_trend_once(minmax=0.5, market="CN", close_label="close", index_label="_000001.SH", a_all=[], df_result=pd.DataFrame(), index=[0], thresh=0.0, dict_ops={}, op_sign="gt", thresh_log=8.8, thresh_rest=0.0, for_analysis=True, market_suffix=""):
-    if for_analysis:
-        df = get_stock_market_all(market).reset_index()
-    else:
-        df = df_result
-    func = talib.RSI
 
-    # 1.Step Create RSI or Abv_ma
-    # 2.Step Create Phase
-    # 3 Step Create Trend
-    # 4 Step calculate trend pct_chg
-    # 5 Step Calculate Step comp_chg
-
-    a_low = [str(x) for x in a_all][:-1]  # should be [5, 20,60]
-    a_high = [str(x) for x in a_all][1:]  # should be [20,60,240]
-
-    pct_chg_column = "pct_chg"
-    if for_analysis:
-        # always measure the whole stock market pct_chg. More direct and better than approx with index
-        pct_chg_tomorrow_column = pct_chg_column + "_tomorrow"
-        df[pct_chg_tomorrow_column] = df[pct_chg_column].shift(-1)
-
-    for i in a_all:  # RSI 1
-        if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
-            df[market_suffix + "rsi1"] = 0.0
-            op_func = dict_ops[op_sign]
-            df.loc[op_func(df["pct_chg" + index_label], 0.0), market_suffix + "rsi1"] = 1.0
-        else:
-            df[market_suffix + "rsi" + str(i)] = func(df[close_label + index_label], timeperiod=i) / 100
-
-    max240 = minmax
-    min240 = minmax
-
-    # 1 means uptrend
-    # 0 means downtrend
-    # df["phase240"] = df["rsi240"].apply(lambda x: 1 if x > max240 else 0 if x < min240 else float("nan"))
-    # df["phase60"] = df["rsi60"].apply(lambda x: 1 if x > max240 - thresh60 else 0 if x < min240 + thresh60 else float("nan"))
-    # df["phase20"] = df["rsi20"].apply(lambda x: 1 if x > max240 - thresh60 else 0 if x < min240 + thresh60 else float("nan"))
-    # df["phase5"] = df["rsi5"].apply(lambda x: 1 if x > max240 - thresh60*4 else 0 if x < min240 + thresh60*4 else float("nan"))
-    # Create Phase
-
-    for i in [str(x) for x in a_all]:
-        maximum = (thresh_log * math.log(int(i)) + thresh_rest)
-        minimum = 1 - maximum
-        # df["phase" + i] = df["rsi" + i].apply(lambda x: 1 if x > max240 + thresh*int(i) else 0 if x < min240 - thresh*int(i) else float("nan"))
-        df[market_suffix + "phase" + i] = [1 if x > maximum else 0 if x < minimum else np.nan for x in df[market_suffix + "rsi" + i]]
-
-
-    # one loop to create trend from phase
-    for rolling_freq_low, rolling_freq_high in zip(a_low, a_high):
-        trend_name = market_suffix + "trend" + rolling_freq_high
-        df[trend_name] = float("nan")
-        df.loc[(df[market_suffix + "phase" + rolling_freq_high] == 1) & (df[market_suffix + "phase" + rolling_freq_low] == 1), trend_name] = 1
-        df.loc[(df[market_suffix + "phase" + rolling_freq_high] == 0) & (df[market_suffix + "phase" + rolling_freq_low] == 0), trend_name] = 0
-
-        # fill na based on the trigger points
-        df[trend_name].fillna(method='bfill', inplace=True)
-        last_trade = df.loc[df.last_valid_index(), trend_name]
-        if last_trade == 1:
-            df[trend_name].fillna(value=0, inplace=True)
-        else:
-            df[trend_name].fillna(value=1, inplace=True)
-
-        # calculate trend strategy pct_chg and comp_chg
-        if for_analysis:
-            df[trend_name + "_pct_chg"] = df.loc[(df[trend_name] == 1), pct_chg_tomorrow_column].fillna(value=0, inplace=False)
-            df[trend_name + "_comp_chg"] = LB.column_add_comp_chg(df[trend_name + "_pct_chg"])
-
-            # print_comp_chg = df.tail(1)[trend_name + "_comp_chg"].to_numpy()[0]
-            # print_pct_chg_mean = df[trend_name + "_pct_chg"].mean()
-            # print_pct_chg_std = df[trend_name + "_pct_chg"].std()
-            # trading_days = df[trend_name].sum() / len(df)
-
-            try:
-                pass
-                # df_result.at[index, market_suffix+str(rolling_freq_high) + "_pct_chg_mean"] = print_pct_chg_mean
-                # df_result.at[index, market_suffix+str(rolling_freq_high) + "_pct_chg_std"] = print_pct_chg_std
-                # df_result.at[index, market_suffix+ str(rolling_freq_high) + "_comp_chg"] = print_comp_chg
-                # df_result.at[index, market_suffix+str(rolling_freq_high) + "_trading_days"] = trading_days
-            except Exception as e:
-                print(e)
-
-    # remove RSI and phase Columns to make it cleaner
-    if not for_analysis:
-        a_remove = []
-        for i in a_all:
-            #a_remove.append(market_suffix + "rsi" + str(i))
-            a_remove.append(market_suffix + "phase" + str(i))
-        LB.columns_remove(df, a_remove)
-
-    # calculate final trend =weighted trend of previous
-    # TODO this need to be adjusted manually
-    df[market_suffix + "trend"] = df[market_suffix + "trend2"] * 0.7 + df[market_suffix + "trend5"] * 0.15 + df[market_suffix + "trend20"] * 0.05 + df[market_suffix + "trend60"] * 0.05 + df[market_suffix + "trend240"] * 0.05
-    if for_analysis:
-        df[market_suffix + "trend_pct_chg"] = df.loc[(df[market_suffix + "trend"] >= 0.7), pct_chg_tomorrow_column].fillna(value=0, inplace=False)
-        df[market_suffix + "trend_comp_chg"] = LB.column_add_comp_chg(df[market_suffix + "trend_pct_chg"])
-
-    return df
 
 
 def read(a_path=[], step=-1):  # if step is -1, read feather first
@@ -1510,21 +1408,21 @@ def preload(load="asset", step=1, query=""):
     key = "ts_code" if load == "asset" else "trade_date"
     func = get_asset if load == "asset" else get_date
 
-
     bar = tqdm(range(len(df_listing)))
     bar.set_description(f"loading {load}...")
     for iterator, i in zip(df_listing[key], bar):
-        df = func(iterator)
-        if df.empty:
-            dict_result[iterator] = pd.DataFrame()
-            continue
         try:
+            df = func(iterator)
             df = df[(df["period"] > 240)]
             if query:
                 df = df.query(expr=query)
+            if df.empty:
+                continue
+            else:  # only take df that satisfy ALL conditions and is non empty
+                dict_result[iterator] = df
         except:
             pass
-        dict_result[iterator] = df
+
     bar.close()
 
     return dict_result

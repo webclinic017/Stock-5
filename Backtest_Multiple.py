@@ -388,7 +388,7 @@ def backtest_multiple(loop_indicator=1):
             # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
             # "turnover_rate": [True, 0.1, 0.5],
             # "ivola": [True, 0.4, 1],  # seems important
-            "trend": [False, 100, 1],  # very important for this strategy
+            "trend5": [False, 100, 1],  # very important for this strategy
             "pct_chg": [True, 5, 1],  # very important for this strategy
             "pgain2": [True, 3, 1],  # very important for this strategy
             "pgain5": [True, 2, 1],  # very important for this strategy
@@ -427,17 +427,18 @@ def backtest_multiple(loop_indicator=1):
 
     # settings creation
     for p_maxsize in [2, 12]:
-        setting_copy = copy.deepcopy(setting_base)
-        s_weight1 = {  # ascending True= small, False is big
-            "trend": [False, 100, 1],  # very important for this strategy
-            "pct_chg": [True, 5, 1],  # very important for this strategy
-            "pgain2": [True, 3, 1],  # very important for this strategy
-            "pgain5": [True, 2, 1],  # very important for this strategy
-        }
-        setting_copy["s_weight1"] = s_weight1
-        setting_copy["p_maxsize"] = p_maxsize
-        a_settings.append(setting_copy)
-        print(setting_copy["s_weight1"])
+        for trend in ["trend", "trend2", "trend5"]:
+            setting_copy = copy.deepcopy(setting_base)
+            s_weight1 = {  # ascending True= small, False is big
+                trend: [False, 100, 1],  # very important for this strategy
+                "pct_chg": [True, 5, 1],  # very important for this strategy
+                "pgain2": [True, 3, 1],  # very important for this strategy
+                "pgain5": [True, 2, 1],  # very important for this strategy
+            }
+            setting_copy["s_weight1"] = s_weight1
+            setting_copy["p_maxsize"] = p_maxsize
+            a_settings.append(setting_copy)
+            print(setting_copy["s_weight1"])
 
     # for f_query in ["rs_abv", "rs_und"]:
     # for counter in [0,1,2,3,4,5,6,7]:
@@ -461,7 +462,7 @@ if __name__ == '__main__':
         pr = cProfile.Profile()
         pr.enable()
 
-        # backtest_multiple(5)
+        backtest_multiple(5)
 
         # TODO hypothesis where the bug is
         # 1 trend reads future data

@@ -68,9 +68,9 @@ def standard_indi_name(ibase, deri, dict_variables):
     for key, enum_val in dict_variables.items():
         if key not in ["df", "ibase"]:
             try:
-                variables = variables + f"{key}={enum_val.value}."
+                variables = variables + f"{key}={enum_val.value},"
             except:
-                variables = variables + f"{key}={enum_val}."
+                variables = variables + f"{key}={enum_val},"
     result = result + f"({variables})"
     return result
 
@@ -275,9 +275,15 @@ def get_linear_regression_rise(s_index, s_data):
 
 
 def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan because std returns nan too often
+    s1_name = s1.name
+    s2_name = s2.name
+    s1 = s1.copy()  # nessesary for some reason . dont delete it
+    s2 = s2.copy()
+
+
     # calculate beta by only using the non na days = smallest amount of days where both s1 s2 are trading
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
-    correl = asset_all["s1"].corr(asset_all["s2"], method="pearson")
+    correl = asset_all[s1_name].corr(asset_all[s2_name], method="pearson")
     return correl
 
 def open_file(filepath):
@@ -446,7 +452,9 @@ class SFreq(enum.Enum):
 
 def c_freq():
     return [e.value for e in Freq]
+
 class Freq(enum.Enum):
+    #f1 = 1
     f2 = 2
     f5 = 5
     f10 = 10

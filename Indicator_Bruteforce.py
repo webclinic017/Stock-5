@@ -51,7 +51,7 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
 
 setting = {
     "target": "asset",  # date
-    "step": 1000,  # 1 or any other integer
+    "step": 70,  # 1 or any other integer
     "group_result": False,
     "path_general": "Market/CN/Bruteforce/result/",
     "path_result": "Market/CN/Bruteforce/",
@@ -68,24 +68,20 @@ def bruteforce_summary(folderPath, summarypath):
     # iterate over all results
     for subFolderRoot, foldersWithinSubFolder, files in os.walk(folderPath, topdown=False):
         for fileName in files:
+            print("summarize ...", fileName)
 
-            # get information from the file name
             ibase, rest = fileName.split(".", 1)
             deri, rest = rest.split("(", 1)
-
             args, rest = rest.split(")", 1)
             dict_args = {}
-            for arg_pair in args.split("."):
+            for arg_pair in args.split(","):
                 key = arg_pair.split("=")[0]
                 if key != "":
+                    print("arg_pair", arg_pair)
                     value = arg_pair.split("=")[1]
                     dict_args[key] = value
 
             fgain = rest.split("_", 1)[1].split(".")[0]
-            print("ibase is", ibase)
-            print("deri is", deri)
-            print("args", dict_args)
-            print("fgain", fgain)
 
             if fgain != "sample":
                 df = pd.read_csv(subFolderRoot + "/" + fileName)
@@ -121,7 +117,10 @@ def bruteforce_iterate():
         # for each possible derivative function
         for ideri, ideri_counter in zip(e_ideri, range(1, len([x for x in e_ideri]) + 1)):
             deri_name = ideri.value
-            deri_function = Indicator_Create.get_deri_func(ideri)
+            if deri_name == "create":
+                deri_function = Indicator_Create.get_create_func(ibase)
+            else:
+                deri_function = Indicator_Create.get_deri_func(ideri)
             settings_explode = Indicator_Create.function_all_combinations(deri_function)
             len_setting_explode = len(settings_explode)
 
@@ -143,7 +142,8 @@ def bruteforce_iterate():
 
                 # create sample
                 path = setting["path_general"] + f"{ibase_name}/{deri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=deri_name, dict_variables=one_setting) + f"_sample"
-                df_sample = dict_df_asset["000001.SZ"][[ibase_name]]
+                df_sample = dict_df_asset["000001.SZ"].copy()
+                print("one setting is", {**one_setting})
                 deri_function(df=df_sample, ibase=ibase.value, **one_setting)
                 LB.to_csv_feather(df=df_sample, index=True, reset_index=False, a_path=LB.a_path(path), skip_feather=True)
 
@@ -155,6 +155,9 @@ def bruteforce_iterate():
                 for ts_code, df_asset in dict_df_asset.items():
                     # create new derived indicator ON THE FLY
                     df_asset_copy = df_asset.copy()  # maybe can be saved, but is risky. Copy is safer but slower
+                    print("ts_code", ts_code)
+                    if df_asset.empty:
+                        print("empty", ts_code)
                     deri_column = deri_function(df=df_asset_copy, ibase=ibase.value, **one_setting)
 
 
@@ -179,5 +182,16 @@ if __name__ == '__main__':
     # TODO generate test file
     # USE Sound theory harmonic to find the best frequency
     # TODO create summary of details
-    # bruteforce_iterate()
+    from Indicator_Create import Trend2Weight, trend
+
+    df = DB.get_asset()
+
+    df = df[["close", "trend", "pct_chg"]]
+    df["trend_saved"] = df["trend"]
+    df = df[["trend_saved", "close", "pct_chg"]]
+
+    finished = trend(df=df, ibase="trend", t2w=Trend2Weight.t1, thresh_log=-0.043, thresh_rest=0.7237, market_suffix="")
+    df.to_csv("test.csv")
+
+    bruteforce_iterate()
     bruteforce_summary("Market/CN/Bruteforce/result/", "Market/CN/Bruteforce/")
