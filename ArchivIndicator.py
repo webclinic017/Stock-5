@@ -10,14 +10,13 @@ import os
 from itertools import combinations
 from itertools import permutations
 
-import Indicator_Create
+import ICreate
 import LB
 import operator
 from time import sleep
 from progress.bar import PixelBar
 from datetime import datetime
 import traceback
-import Backtest_LB
 import copy
 import cProfile
 from tqdm import tqdm
@@ -78,7 +77,7 @@ def overma():
             continue
 
         for rolling_freq in LB.c_bfreq():
-            Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
+            ICreate.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
         for lower in LB.c_bfreq():
             for upper in LB.c_bfreq():
@@ -95,7 +94,7 @@ def overma():
     df_stock_market_all = DB.get_stock_market_all()
 
     for rolling_freq in LB.c_bfreq():
-        Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
+        ICreate.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
     for lower in LB.c_bfreq():
         for upper in LB.c_bfreq():
@@ -121,7 +120,7 @@ def crossma():
 
         # add ma
         for rolling_freq in LB.c_bfreq():
-            Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
+            ICreate.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
         # add flag above ma and find cross over point
         for lower in LB.c_bfreq():
@@ -151,7 +150,7 @@ def crossma():
     df_result_date = pd.DataFrame()
     df_stock_market_all = DB.get_stock_market_all()
     for rolling_freq in LB.c_bfreq():
-        Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
+        ICreate.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
     # add flag above ma and find cross over point
     for lower in LB.c_bfreq():
@@ -242,7 +241,7 @@ def auto_corr_multiple():
         #             dict_df[pgain].at[ts_code,f"{pgain}_{pgain_lower,pgain_upper}_fgain2_{fgain_lower,fgain_upper}"]=condition_count/total_counts
 
     for ma in LB.c_bfreq():
-        Indicator_Create.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
+        ICreate.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
 
     df_mean = pd.DataFrame()
 

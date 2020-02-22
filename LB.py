@@ -472,7 +472,6 @@ class BFreq(enum.Enum):
 def c_sfreq():
     return [e.value for e in SFreq]
 
-
 class SFreq(enum.Enum):
     # f1 = 1
     f2 = 2

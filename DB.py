@@ -8,13 +8,13 @@ import inspect
 from itertools import combinations
 import operator
 import math
-import Indicator_Create
+import ICreate
 from numba import njit
 import traceback
 import cProfile
 from tqdm import tqdm
 
-from Indicator_Create import trend
+from ICreate import trend
 from LB import c_assets, c_bfreq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -371,22 +371,22 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
     traceback_freq_small = [2, 5]
 
     if asset == "E":
-        Indicator_Create.ivola(df)  # 0.890578031539917 for 300 loop
-    Indicator_Create.period(df)  # 0.2 for 300 loop
-    Indicator_Create.pjup(df)  # 1.0798187255859375 for 300 loop
-    Indicator_Create.pjdown(df)  # 1.05 independend for 300 loop
-    Indicator_Create.cdl(df)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
+        ICreate.ivola(df)  # 0.890578031539917 for 300 loop
+    ICreate.period(df)  # 0.2 for 300 loop
+    ICreate.pjup(df)  # 1.0798187255859375 for 300 loop
+    ICreate.pjdown(df)  # 1.05 independend for 300 loop
+    ICreate.cdl(df)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
 
     for rolling_freq in traceback_freq_small[::-1]:
         if asset == "E":
-            Indicator_Create.mean(df, rolling_freq, "turnover_rate")  # dependend
+            ICreate.mean(df, rolling_freq, "turnover_rate")  # dependend
             df[f"turnover_rate_pct{rolling_freq}"] = df["turnover_rate"] / df[f"turnover_rate{rolling_freq}"]
         # Util.column_add_std(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
 
     for rolling_freq in traceback_freq_big[::-1]:
         # Util.column_add_mean(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
-        Indicator_Create.pgain(df, rolling_freq)  # past gain includes today = today +yesterday comp_gain
-        Indicator_Create.fgain(df, rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        ICreate.pgain(df, rolling_freq)  # past gain includes today = today +yesterday comp_gain
+        ICreate.fgain(df, rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
     trend(df=df, ibase="close", a_all=[1] + c_bfreq(), thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")

@@ -1,17 +1,10 @@
 import math
-
-import tushare as ts
 import pandas as pd
 import time
-import os.path
 import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
 import LB
 import os
 import datetime
-import copy
-import imageio
 import glob
 import talib
 import itertools
@@ -19,7 +12,6 @@ from multiprocessing import Process
 import inspect
 import enum
 from LB import *
-
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
@@ -104,13 +96,11 @@ def get_func(name: str):
     return globals()[name]
 
 class Trend2Weight(enum.Enum):
-    t1 = 0.01
-    t2 = 0.02
-    t4 = 0.04
     t8 = 0.08
     t16 = 0.16
     t32 = 0.32
     t64 = 0.64
+    t128 = 1.28
 
 class RE(enum.Enum):
     r = "r"
@@ -118,12 +108,9 @@ class RE(enum.Enum):
 
 
 
-
 def open(df: pd.DataFrame, ibase: str): return ibase
 
-
 def high(df: pd.DataFrame, ibase: str): return ibase
-
 
 def close(df: pd.DataFrame, ibase: str): return ibase
 
@@ -448,8 +435,6 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
 
     return add_to
 
-
-# TODO remove all APPLY functions in pandas. Generally avoid apply whereever possible
 
 
 # input a dict with all variables. Output a list of all possible combinations

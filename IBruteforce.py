@@ -2,7 +2,7 @@ import os
 import os.path
 import pandas as pd
 import DB
-import Indicator_Create
+import ICreate
 import LB
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -112,8 +112,8 @@ def bruteforce_summary(folderPath, summarypath):
 def bruteforce_iterate():
     dict_df_asset = DB.preload(load=setting["target"], step=setting["step"], query="trade_date > 20050101")
 
-    e_ibase = Indicator_Create.IBase
-    e_ideri = Indicator_Create.IDeri
+    e_ibase = ICreate.IBase
+    e_ideri = ICreate.IDeri
 
     len_e_ibase = len([x for x in e_ibase])
     len_e_ideri = len([x for x in e_ideri])
@@ -127,11 +127,11 @@ def bruteforce_iterate():
             ideri_name = ideri.value
             if ideri_name == "create":
                 print("names", ibase_name, ideri_name)
-                deri_function = Indicator_Create.get_func(ibase_name)
+                deri_function = ICreate.get_func(ibase_name)
             else:
-                deri_function = Indicator_Create.get_func(ideri_name)
+                deri_function = ICreate.get_func(ideri_name)
             print("deri is,", ideri_name, deri_function.__name__)
-            settings_explode = Indicator_Create.function_all_combinations(deri_function)
+            settings_explode = ICreate.function_all_combinations(deri_function)
 
             print("all combinations", settings_explode)
             len_setting_explode = len(settings_explode)
