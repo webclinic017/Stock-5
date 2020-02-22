@@ -27,16 +27,28 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 # decorator functions must be at top
+
+def only_big_update():
+    pass
+
 def try_ignore(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
-            result = func(*args, **kwargs)
-        except:
-            result = None
-        return result
-
+            return func(*args, **kwargs)
+        except Exception as e:
+            print("A small Try Ignore error", e)
+            return None
     return this_function_will_never_be_seen
 
+
+def except_empty_df(func):
+    def this_function_will_never_be_seen(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except:
+            return pd.DataFrame()
+
+    return this_function_will_never_be_seen
 
 def wrap_line(func):
     def line(lines=50):
@@ -642,6 +654,22 @@ def endlog():
     sound("finished_all.mp3")
     log("END", secondsToStr(time.time() - start))
     time.sleep(2)
+
+
+@numba.njit  # try to use njit
+def std(xs):
+    # compute the mean
+    mean = 0
+    for x in xs:
+        mean += x
+    mean /= len(xs)
+    # compute the variance
+    ms = 0
+    for x in xs:
+        ms += (x - mean) ** 2
+    variance = ms / len(xs)
+    std = math.sqrt(variance)
+    return std
 
 
 if __name__ == '__main__':

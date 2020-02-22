@@ -39,7 +39,7 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
     try:
         o_setting = 4
         s_occurence = df[column].value_counts(bins=o_setting)
-        for (index, value), counter in zip(s_occurence.iteritems(), range(0, o_setting)):
+        for counter, (index, value) in enumerate(s_occurence.iteritems()):
             df_occ = df[df[column].between(index.left, index.right)]
             for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
                 df_fgain_mean.at[ts_code, f"{fgain}_o{counter}"] = df_occ[fgain].mean() / dict_ts_code_mean[fgain]
@@ -120,14 +120,13 @@ def bruteforce_iterate():
     len_e_ideri = len([x for x in e_ideri])
 
     # for each possible base ibase
-    for ibase, ibase_counter in zip(e_ibase, range(1, len([x for x in e_ibase]) + 1)):
+    for ibase_counter, ibase in enumerate(e_ibase, start=1):
         ibase_name = ibase.value
 
         # for each possible derivative function
-        for ideri, ideri_counter in zip(e_ideri, range(1, len([x for x in e_ideri]) + 1)):
+        for ideri_counter, ideri in enumerate(e_ideri, start=1):
             ideri_name = ideri.value
             if ideri_name == "create":
-                print("names", ibase_name, ideri_name)
                 deri_function = ICreate.get_func(ibase_name)
             else:
                 deri_function = ICreate.get_func(ideri_name)
@@ -138,7 +137,7 @@ def bruteforce_iterate():
             len_setting_explode = len(settings_explode)
 
             # for each possible way to create the derivative function
-            for one_setting, setting_counter in zip(settings_explode, range(1, len(settings_explode) + 1)):
+            for setting_counter, one_setting in enumerate(settings_explode, start=1):
 
                 # CHECK IF OVERRIDE OR NOT if small update, then continue if file exists
                 if not setting["big_update"]:

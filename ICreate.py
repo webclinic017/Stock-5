@@ -136,30 +136,25 @@ def total_mv(df: pd.DataFrame, ibase: str): return ibase
 def vol(df: pd.DataFrame, ibase: str): return ibase
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
+
+
 def pjup(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
-    condition_1 = df["low"] > df["high"].shift(1)  # today low bigger thann yesterday high
-    condition_2 = df["pct_chg"] >= 2
-    df[add_to] = (condition_1 & condition_2).astype(int)
+    df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return add_to
-
 
 def pjdown(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
-    condition_1 = df["high"] < df["low"].shift(1)  # yesterday low bigger than todays high
-    condition_2 = df.pct_chg <= -2
-    df[add_to] = (condition_1 & condition_2).astype(int)
+    df[add_to] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -2)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
     return add_to
-
 
 def period(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "ts_code", 1)
     df[add_to] = (range(1, len(df.index) + 1))
     return add_to
-
 
 def ivola(df: pd.DataFrame, ibase: str):
     add_to = ibase
@@ -168,7 +163,7 @@ def ivola(df: pd.DataFrame, ibase: str):
     return add_to
 
 
-def pgain(df: pd.DataFrame, freq: LB.BFreq):
+def pgain(df: pd.DataFrame, freq: BFreq):
     add_to = f"pgain{freq}"
     add_column(df, add_to, "pct_chg", 1)
     # df[add_to+"test"] = (1 + (df["pct_chg"] / 100)).rolling(rolling_freq).apply(pd.Series.prod, raw=False)
@@ -179,12 +174,11 @@ def pgain(df: pd.DataFrame, freq: LB.BFreq):
     return add_to
 
 
-def fgain(df: pd.DataFrame, freq: LB.BFreq):
+def fgain(df: pd.DataFrame, freq: BFreq):
     add_to = f"fgain{freq}"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = df[f"pgain{freq}"].shift(int(-freq))
     return add_to
-
 
 def cdl(df: pd.DataFrame, ibase: str):
     a_positive_columns = []
@@ -280,6 +274,92 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
     df[trend_name] = df[f"{trend_name}2"] * 0.80 + df[f"{trend_name}5"] * 0.12 + df[f"{trend_name}10"] * 0.04 + df[f"{trend_name}20"] * 0.02 + df[f"{trend_name}60"] * 0.01 + df[f"{trend_name}240"] * 0.01
     return trend_name
+
+
+def support_resistance_horizontal(start_window=240, rolling_freq=1, step=10, thresh=[4, 0.2], bins=8, dict_rs={"abv": 8, "und": 8}, df_asset=pd.DataFrame(), delay=3):
+    def support_resistance_acc(abv_und, max_rs, s_minmax, end_date, f_end_date, df_asset):
+        # 1. step calculate all relevant resistance = relevant earlier price close to current price
+        current_price = df_asset.at[end_date, "close"]
+
+        if abv_und == "abv":
+            s_minmax = s_minmax[(s_minmax / current_price < thresh[0]) & ((s_minmax / current_price > 1))]
+        elif abv_und == "und":
+            s_minmax = s_minmax[(s_minmax / current_price < 1) & ((s_minmax / current_price > thresh[1]))]
+
+        # 2.step find the max occurence of n values
+        try:
+            s_occurence_bins = s_minmax.value_counts(bins=bins)
+            a_rs = []
+            for counter, (index, value) in enumerate(zip(s_occurence_bins.iteritems())):
+                a_rs.append(index.left)
+
+            # 3. step sort the max occurence values and assign them as rs
+            a_rs.sort()  # small value first 0 ,1, 2
+            for i, item in enumerate(a_rs):
+                df_asset.loc[end_date:f_end_date, f"rs{abv_und}{i}"] = item
+        except:
+            pass
+
+    if len(df_asset) > start_window:
+        #  calculate all min max for acceleration used for later simulation
+        try:
+            s_minall = df_asset["close"].rolling(rolling_freq).min()
+            s_maxall = df_asset["close"].rolling(rolling_freq).max()
+        except:
+            return
+
+        # iterate over past data as window. This simulates rs for past times/frames
+        for row in range(0, len(df_asset), step):
+            if row + start_window > len(df_asset) - 1:
+                break
+
+            start_date = df_asset.index[0]
+            end_date = df_asset.index[row + start_window]
+            for abv_und, max_rs in dict_rs.items():
+                if row + start_window + step > len(df_asset) - 1:
+                    break
+
+                f_end_date = df_asset.index[row + start_window + step]
+                s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])
+                support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
+
+        # calcualte individual rs score
+        for abv_und, count in dict_rs.items():
+            for i in range(0, count):
+                try:
+                    # first fill na for the last period because rolling does not reach
+                    df_asset[f"rs{abv_und}{i}"].fillna(method="ffill", inplace=True)
+                    df_asset[f"rs{abv_und}{i}"].fillna(method="bfill", inplace=True)
+
+                    df_asset[f"rs{abv_und}{i}_abv"] = (df_asset[f"rs{abv_und}{i}"] > df_asset["close"]).astype(int)
+                    df_asset[f"rs{abv_und}{i}_cross"] = df_asset[f"rs{abv_und}{i}_abv"].diff().fillna(0).astype(int)
+                except Exception as e:
+                    print("error resistance 1: probably new stock", e)
+
+        df_asset["rs_abv"] = 0  # for detecting breakout to top: happens often
+        df_asset["rs_und"] = 0  # for detecting breakout to bottom: happens rare
+        for abv_und, max_rs in dict_rs.items():
+            for i in range(0, max_rs):
+                try:
+                    df_asset[f"rs_{abv_und}"] = df_asset[f"rs_{abv_und}"] + df_asset[f"rs{abv_und}{i}_cross"].abs()
+                except Exception as e:
+                    print("error resistance 2", e)
+
+        # optional #TODO configure it nicely
+        df_asset["rs_abv"] = df_asset["rs_abv"].rolling(delay).max().fillna(0)
+        df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
+    else:
+        print(f"df is len is under {start_window}. probably new stock")
+        for abv_und, max_rs in dict_rs.items():
+            for i in range(0, max_rs):  # only consider rs und 2,3,4,5, evenly weighted. middle ones have most predictive power
+                df_asset[f"rs{abv_und}{i}"] = np.nan
+                df_asset[f"rs{abv_und}{i}_abv"] = np.nan
+                df_asset[f"rs{abv_und}{i}_cross"] = np.nan
+
+        df_asset["rs_abv"] = 0
+        df_asset["rs_und"] = 0
+
+    return df_asset
 
 
 # TODO this article

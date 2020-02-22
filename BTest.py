@@ -277,7 +277,7 @@ def btest_once(settings=[{}]):
             dict_weight_accelerator = {}
 
         # FOR EACH DAY LOOP OVER SETTING N
-        for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
+        for setting_count, (setting, dict_trade_h) in enumerate(zip(settings, a_dict_trade_h)):
             print("\n" * 3)
             a_time = []
             now = mytime.time()
@@ -469,7 +469,7 @@ def btest_once(settings=[{}]):
                 else:
                     df_select_tomorrow["reserved_capital"] = current_capital / buyable_size
 
-                for (ts_code, row), hold_count in zip(df_select_tomorrow.iterrows(), range(1, len(df_select_tomorrow) + 1)):
+                for hold_count, (ts_code, row) in enumerate(df_select_tomorrow.iterrows(), start=1):
                     # 6.9 BUY WEIGHT: # TODO weight vs score, buy good vs buy none
                     # if trend >0.7, add weight
                     # the market_trend weight = portfolio/cash ratio
@@ -509,7 +509,7 @@ def btest_once(settings=[{}]):
 
     a_summary_merge = []
     LB.sound("saving.mp3")
-    for setting, setting_count, dict_trade_h in zip(settings, range(0, len(settings)), a_dict_trade_h):
+    for setting_count, (setting, dict_trade_h) in enumerate(zip(settings, a_dict_trade_h)):
         try:
             now = mytime.time()
             df_trade_h, df_portfolio_overview, df_setting = btest_portfolio(setting_original=setting, dict_trade_h=dict_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)

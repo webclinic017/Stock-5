@@ -13,10 +13,8 @@ from numba import njit
 import traceback
 import cProfile
 from tqdm import tqdm
-
 from ICreate import trend
-from LB import c_assets, c_bfreq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
-
+from LB import *
 pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
@@ -27,9 +25,8 @@ def update_general_trade_cal(start_date="19900101", end_date="20250101"):
     a_path = LB.a_path("Market/CN/General/trade_cal_D")
     LB.to_csv_feather(df, a_path)
 
-
 def update_general_trade_date(freq="D", market="CN", big_update=True):
-    if (freq in ["D", "W"]):
+    if freq in ["D", "W"]:
         a_path = LB.a_path("Market/" + market + "/General/trade_date_" + freq)
         df = API_Tushare.my_pro_bar(ts_code="000001.SH", start_date="00000000", end_date=today(), freq=freq, asset="I")
         df = LB.df_reverse_reindex(df)
@@ -38,7 +35,6 @@ def update_general_trade_date(freq="D", market="CN", big_update=True):
         df = update_general_trade_date_stockcount(df)  # adds E,I,FD count
         df = update_general_trade_date_seasonal_score(df, freq, market)  # adds seasonal score for each day
         LB.to_csv_feather(df, a_path, encoding='utf-8_sig')
-
 
 def update_general_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
     # get all indicator for each day
@@ -94,8 +90,6 @@ def update_general_trade_date_stockcount(df, market="CN"):
 
 def update_general_ts_code(asset="E", market="CN", big_update=True):
     print("start update general ts_code ", asset)
-    a_path = LB.a_path("Market/" + market + "/General/ts_code_" + asset)
-
     if (asset == "E"):
         df = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="")
 
@@ -103,7 +97,7 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
         df["asset"] = asset
 
         # add exchange info for each stock
-        df["exchange"] = ["创业板" if x[0:3] in ["300"] else "中小板" if x[0:3] in ["002"] else "主板" if x[0:2] in ["00", "60"] else float("nan") for x in df_ts_code["ts_code"]]
+        df["exchange"] = ["创业板" if x[0:3] in ["300"] else "中小板" if x[0:3] in ["002"] else "主板" if x[0:2] in ["00", "60"] else float("nan") for x in df["ts_code"]]
 
         # add SW industry info for each stock
         for level in c_industry_level():
@@ -148,6 +142,7 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
     else:
         df = pd.DataFrame()
 
+    a_path = LB.a_path("Market/" + market + "/General/ts_code_" + asset)
     df.reset_index(drop=True, inplace=True)
     df["list_date"] = df["list_date"].fillna(method='ffill')
     LB.to_csv_feather(df, a_path, encoding='utf-8_sig')
@@ -155,19 +150,15 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
 
 def update_general_ts_code_all(market="CN"):
     a_path = LB.a_path("Market/" + market + "/General/ts_code_all")
-
     df = pd.DataFrame()
     for asset in c_assets():
         df_asset = get_ts_code(asset)
         df = df.append(df_asset, sort=False, ignore_index=True)
-
     LB.to_csv_feather(df, a_path, encoding='utf-8_sig')
-
 
 def update_general_industry_classify(level, market="CN", big_update=True):
     if not big_update:
         return
-
     path_array = LB.a_path("Market/" + market + "/General/industry_" + level)
     df = API_Tushare.my_index_classify(f"L" + level)
     if not df.empty:
@@ -180,9 +171,7 @@ def update_general_industry_classify(level, market="CN", big_update=True):
 def update_general_industry_index(level, market="CN", big_update=True):
     if not big_update:
         return
-
     df_all_industry_index = get_industry_classify(level)
-
     for index in df_all_industry_index["index_code" + level]:
         a_path = LB.a_path("Market/" + market + "/General/industry/" + level + "/" + index)
         df = API_Tushare.my_index_member(index)
@@ -296,13 +285,13 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
             # 2.2 add FUN financial report aka fina
             # 流动资产合计,非流动资产合计,资产合计，   流动负债合计,非流动负债合计,负债合计
-            df_balancesheet = get_assets_E_D_Fun("balancesheet", ts_code=ts_code, columns=["end_date"])
+            df_balancesheet = get_assets_E_D_Fun("balancesheet", ts_code=ts_code, columns=["end_date", "total_cur_assets", "total_assets", "total_cur_liab", "total_liab"])
 
             # 营业活动产生的现金流量净额	，投资活动产生的现金流量净额,筹资活动产生的现金流量净额
             df_cashflow = get_assets_E_D_Fun("cashflow", ts_code=ts_code, columns=["end_date", "n_cashflow_act", "n_cashflow_inv_act", "n_cash_flows_fnc_act"])
 
             # 扣除非经常性损益后的净利润,净利润同比增长(netprofit_yoy instead of q_profit_yoy on the doc)，营业收入同比增长,销售毛利率，销售净利率,资产负债率,存货周转天数(should be invturn_days,but casted to turn_days in the api for some reasons)
-            df_indicator = get_assets_E_D_Fun("fina_indicator", ts_code=ts_code, columns=["end_date", "profit_dedt", "netprofit_yoy", "or_yoy", "grossprofit_margin", "netprofit_margin", "debt_to_assets"])
+            df_indicator = get_assets_E_D_Fun("fina_indicator", ts_code=ts_code, columns=["end_date", "profit_dedt", "netprofit_yoy", "or_yoy", "grossprofit_margin", "netprofit_margin", "debt_to_assets", "turn_days"])
 
             # 股权质押比例
             df_pledge_stat = get_assets_pledge_stat(ts_code=ts_code, columns=["end_date", "pledge_ratio"])
@@ -366,126 +355,25 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
 # For all Pri indices and derivates
 def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
-    complete_new_update = True if len(df_saved) == 0 else False
     traceback_freq_big = c_bfreq()
     traceback_freq_small = [2, 5]
 
-    if asset == "E":
-        ICreate.ivola(df)  # 0.890578031539917 for 300 loop
-    ICreate.period(df)  # 0.2 for 300 loop
-    ICreate.pjup(df)  # 1.0798187255859375 for 300 loop
-    ICreate.pjdown(df)  # 1.05 independend for 300 loop
-    ICreate.cdl(df)  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
-
-    for rolling_freq in traceback_freq_small[::-1]:
-        if asset == "E":
-            ICreate.mean(df, rolling_freq, "turnover_rate")  # dependend
-            df[f"turnover_rate_pct{rolling_freq}"] = df["turnover_rate"] / df[f"turnover_rate{rolling_freq}"]
-        # Util.column_add_std(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
+    ICreate.ivola(df, ibase="ivola")  # 0.890578031539917 for 300 loop
+    ICreate.period(df, ibase="period")  # 0.2 for 300 loop
+    ICreate.pjup(df, ibase="pjup")  # 1.0798187255859375 for 300 loop
+    ICreate.pjdown(df, ibase="pjdown")  # 1.05 independend for 300 loop
+    # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
 
     for rolling_freq in traceback_freq_big[::-1]:
-        # Util.column_add_mean(df, rolling_freq, "close", complete_new_update=complete_new_update)  # dependend
-        ICreate.pgain(df, rolling_freq)  # past gain includes today = today +yesterday comp_gain
-        ICreate.fgain(df, rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        ICreate.pgain(df, freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
+        ICreate.fgain(df, freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
-    trend(df=df, ibase="close", a_all=[1] + c_bfreq(), thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
+    trend(df=df, ibase="close")
     print(f"calculating resistance...")
 
     # df = support_resistance_horizontal(df_asset=df)
     return df
-
-
-# KEEPIT IN CASE YOU NEED OTHER FREQUENCY LATER
-# def update_assets_EIFD_WMYS(asset="PD", freq="W", market="CN"):
-#     ts_codes = get_ts_code(asset)
-#     for ts_code in ts_codes.ts_code:
-#         path_d = "Market/" + market + "/Asset/" + asset + "/" + "D" + "/" + ts_code + ".csv"
-#         path = "Market/" + market + "/Asset/" + asset + "/" + freq + "/" + ts_code + ".csv"
-#
-#         # check if daily file exists, only makes sense if it does
-#         if os.path.isfile(path_d):
-#             df_d = pd.read_csv(path_d)
-#             if df_d.empty:
-#                 print("NEW STOCK: file EXISTS BUT file is EMPTY for update_assets_WMYS", asset, ts_code, "D")
-#                 df_result = Library_Main.empty_asset_Tushare(asset)
-#                 df_result.to_csv(path, index=False)
-#                 continue
-#             else:
-#                 start_date = df_d.at[0, "trade_date"]
-#                 end_date = df_d.at[len(df_d) - 1, "trade_date"]
-#                 df_trade_date_WMYS = get_trade_date(freq, start_date, end_date)
-#         else:
-#             print(asset, ts_code, freq, " has no Daily file for FD! Continue")
-#             continue
-#
-#         # if WMYS file exits
-#         if os.path.isfile(path):
-#             df_saved = pd.read_csv(path)
-#             if (df_saved.empty):
-#                 continue
-#             else:
-#                 # check if last db stored is the latest
-#                 asset_latest_trade_date = str(int(df_saved.at[len(df_saved) - 1, "trade_date"]))
-#                 real_latest_trade_date = get_last_trade_date(freq)
-#                 if (str(asset_latest_trade_date) == str(real_latest_trade_date)):
-#                     print(asset, ts_code, freq, start_date, end_date, "is already updated to latest trade_date", real_latest_trade_date)
-#                     continue
-#                 else:
-#                     df_trade_date_WMYS = get_trade_date(freq, asset_latest_trade_date, real_latest_trade_date)
-#                     df = update_assets_helper_WMYS(ts_code, freq, asset, start_date, end_date, df_d, df_trade_date_WMYS)
-#                     df_saved = df_saved.append(df, ignore_index=True, sort=False)
-#
-#                     df_saved["pct_chg"] = df_saved.close.pct_change() * 100
-#                     df_saved.iat[0, df_saved.columns.get_loc("pct_chg")] = df_saved.iat[0, df_saved.columns.get_loc("close")] / df_saved.iat[0, df_saved.columns.get_loc("open")]
-#
-#                     df_saved.to_csv(path, index=False)
-#
-#         # file WMYS does not exist
-#         else:
-#             # use D file to update for WMYS
-#             df_result = update_assets_helper_WMYS(ts_code, freq, asset, start_date, end_date, df_d, df_trade_date_WMYS)
-#             if (df_result.empty):
-#                 df_result = Library_Main.empty_asset_Tushare(asset)
-#                 df_result.to_csv(path, index=False)
-#                 continue
-#             df_result["pct_chg"] = df_result.close.pct_change() * 100
-#             df_result.iat[0, df_result.columns.get_loc("pct_chg")] = df_result.iat[0, df_result.columns.get_loc("close")] / df_result.iat[0, df_result.columns.get_loc("open")]
-#             df_result.to_csv(path, index=False)
-
-
-# def update_assets_helper_WMYS(ts_code, freq, asset, start_date, end_date, df_D, df_trade_date_WMYS):
-#     df_result = pd.DataFrame()
-#     s_trade_date, s_open, s_high, s_low, s_close, s_vol, s_turnover_rate = (pd.Series(),) * 7
-#
-#     for df_wmys in D_to_WMYS_splitter(df_trade_date_WMYS, df_D):
-#         if (df_wmys.empty):
-#             continue
-#         df_wmys = Library_Main.df_reindex(df_wmys)
-#         s_trade_date = s_trade_date.append(pd.Series(df_wmys.iat[len(df_wmys) - 1, df_wmys.columns.get_loc("trade_date")]), ignore_index=True)
-#         s_open = s_open.append(pd.Series(df_wmys.at[0, "open"]), ignore_index=True)
-#         s_close = s_close.append(pd.Series(df_wmys.at[len(df_wmys.index) - 1, "close"]), ignore_index=True)
-#         s_high = s_high.append(pd.Series(df_wmys[['open', "high", "low", "close"]].max().max()), ignore_index=True)
-#         s_low = s_low.append(pd.Series(df_wmys[['open', "high", "low", "close"]].min().min()), ignore_index=True)
-#         s_vol = s_vol.append(pd.Series(df_wmys.vol.sum()), ignore_index=True)
-#
-#         if "turnover_rate" in df_D.columns:
-#             s_turnover_rate = s_turnover_rate.append(pd.Series(df_wmys.turnover_rate.sum()), ignore_index=True)
-#
-#     df_result["trade_date"] = s_trade_date
-#     df_result["ts_code"] = ts_code
-#
-#     df_result = Library_Main.df_reindex(df_result)
-#
-#     df_result["open"] = s_open
-#     df_result["high"] = s_high
-#     df_result["low"] = s_low
-#     df_result["close"] = s_close
-#     df_result["vol"] = s_vol
-#
-#     df_result = df_result.round(4)
-#     print(asset, ts_code, freq, start_date, end_date, "updated to path")
-#     return df_result
 
 # For E,I,FD  D
 def update_assets_EI_D_reindex_reverse(ts_code, freq, asset, start_date, end_date, adj="qfq", market="CN"):
@@ -494,9 +382,7 @@ def update_assets_EI_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
     LB.columns_remove(df, ["pre_close", "amount", "change"])
     return df
 
-
 # For FD D
-
 def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_date, adj=None, market="CN"):
     df = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
     request_df_len = len(df)
@@ -536,8 +422,7 @@ def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
 def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN", step=1, big_update=True):
     if not big_update:
         return
-
-    for ts_code, counter in zip(get_ts_code("E").ts_code[::step], range(0, len(get_ts_code("E").ts_code[::step]))):
+    for counter, ts_code in enumerate(get_ts_code("E").ts_code[::step]):
         for fina_name, fina_function in c_assets_fina_function_dict().items():
             a_path = LB.a_path("Market/" + market + "/Asset/E/D_Fun/" + fina_name + "/" + ts_code)
             # ALWAYS UPDATES COMPLETELY because We can not detect by looking at file if it is most recent
@@ -553,7 +438,7 @@ def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, bi
         return
 
     real_latest_trade_date = get_last_trade_date("W")
-    for ts_code, counter in zip(get_ts_code("E").ts_code[::step], range(0, len(get_ts_code("E").ts_code[::step]))):
+    for counter, ts_code in enumerate(get_ts_code("E").ts_code[::step]):
         a_path = LB.a_path("Market/" + market + "/Asset/E/W_pledge_stat/" + str(ts_code))
         if os.path.isfile(a_path[0]):
             try:
@@ -574,9 +459,8 @@ def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, bi
 
 
 def update_assets_E_top_holder(big_update=True, market="CN", step=1):
-    for ts_code, counter in zip(get_ts_code("E").ts_code[::step], range(0, len(get_ts_code("E").ts_code[::step]))):
+    for counter, ts_code in enumerate(get_ts_code("E").ts_code[::step]):
         a_path = LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + str(ts_code))
-
         if not big_update:  # For small update. If File exists, Finish. For big Update, overwrite completely
             if os.path.isfile(a_path[0]):
                 print(counter, ts_code, "top_holder Up-to-date")
@@ -593,7 +477,6 @@ def update_assets_E_top_holder(big_update=True, market="CN", step=1):
 def update_date_all():
     # TODO merge all date files together (with static data)into one file
     pass
-
 
 def update_date(asset="E", freq="D", market="CN", step=1, big_update=True):
     for asset in ["E"]:  # TODO add I, FD date
@@ -627,7 +510,6 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
     else:
         print("ERROR, STEP MUST BE 1 or -1.")
         return
-    print("Update date finished preparation")
 
     for trade_date in trade_dates["trade_date"][::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
         a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "/" + str(trade_date))
@@ -676,7 +558,6 @@ def update_date_E_Oth(asset="E", freq="D", market="CN", big_update=True, step=1)
     for trade_date in trade_dates["trade_date"][::step]:
         dict_oth_names = c_date_oth()
         dict_oth_paths = {name: LB.a_path("Market/" + market + "/Date/" + asset + "/" + name + "/" + str(trade_date)) for name, function in dict_oth_names.items()}
-
         for name, function in dict_oth_names.items():
             if os.path.isfile(dict_oth_paths[name][0]):
                 print(trade_date, asset, freq, name, "Up-to-date")
@@ -748,7 +629,6 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     last_saved_date = "19990104"
     last_trade_date = get_last_trade_date("D")
     if not big_update:
-
         try:
             df_saved = get_stock_market_all()
             last_saved_date = df_saved.index[len(df_saved) - 1]
@@ -771,7 +651,6 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     df_sh_index = get_asset(ts_code="000001.SH", asset="I", freq=freq, market="CN")
     df_sh_index = df_sh_index.loc[int(last_saved_date):int(last_trade_date)]
     df_sh_index = df_sh_index.loc[df_sh_index.index > int(last_saved_date)]  # exclude last saved date from update
-    print(df_sh_index)
 
     # loop through all trade dates and add them together
     for trade_date, sh_pct_chg in zip(df_sh_index.index, df_sh_index["pct_chg"]):
@@ -782,7 +661,6 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
         trading_stocks = len(df_date)
         df_date_mean = df_date.mean()
         df_date_mean["trading"] = trading_stocks
-        df_date_mean["pct_chg_std"] = df_date["pct_chg"].std()
         df_date_mean["trade_date"] = trade_date
 
         df_date_mean["up_limit"] = len(df_date[df_date["pct_chg"] >= 8.0])
@@ -794,7 +672,6 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
         df_date_mean["beat_sh_index"] = len(df_date[df_date["pct_chg"] >= sh_pct_chg]) / trading_stocks
 
         # how many stocks封板 TODO
-
         a_result.append(df_date_mean)
 
     # array to dataframe
@@ -810,7 +687,6 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
         df_result = add_asset_comparison(df=df_result, freq=freq, asset="I", ts_code=ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"])
         df_result["comp_chg_" + ts_code] = LB.column_add_comp_chg(df_result["pct_chg_" + ts_code])
 
-    print(df_result)
     LB.to_csv_feather(df_result, a_path, index=True, reset_index=False)
     print("Date_Base UPDATED")
 
@@ -837,8 +713,7 @@ def update_custom_index(assets=["E"], big_update=True):
 
     # if small update and saved_date==last trade_date
     if last_trade_date == last_saved_date and (not big_update):
-        print("ALL GROUP Up-to-date")
-        return
+        return print("ALL GROUP Up-to-date")
 
     # initialize trade_date
     df_trade_date = get_trade_date(end_date=today(), freq="D")
@@ -860,13 +735,11 @@ def update_custom_index(assets=["E"], big_update=True):
         if not df_saved.empty:
             df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
 
-        a_path = LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/" + key)
-        LB.to_csv_feather(df_update, a_path)
+        LB.to_csv_feather(df_update, LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/" + key))
         print(key, "UPDATED")
 
 
 def ts_code_series_to_excel(df_ts_code, path, sort=["column_name", True], asset=["E"], group_result=True):
-    # add static data
     df_ts_code = add_static_data(df_ts_code, assets=asset)
     dict_df = {"Overview": df_ts_code}
 
@@ -882,277 +755,18 @@ def ts_code_series_to_excel(df_ts_code, path, sort=["column_name", True], asset=
                 dict_df[group_column] = df_group
             except:
                 pass
-
     LB.to_excel(path_excel=path, dict_df=dict_df)
 
 def update_cj_index_000001_SH():
     df = get_stock_market_all()
-    print(df.index)
     df = df[["pct_chg"]]
-    print(df.index)
     a_path = LB.a_path("Market/CN/Asset/I/D/CJ000001.SH")
     LB.to_csv_feather(df, a_path, index=False, reset_index=True, drop=False)
 
-
-def update_asset_candle(market="CN", asset="E", freq="D", step=1):
-    df_ts_code = get_ts_code("E")
-    dict_candle = c_candle()
-
-    for ts_code, counter in zip(df_ts_code.ts_code[::step], range(0, len(df_ts_code))):
-        df = get_asset(ts_code=ts_code, asset=asset, freq="D")
-        if df.empty:
-            continue
-
-        a_path = LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code))
-
-        a_positive_candle_columns = []
-        a_negative_candle_columns = []
-
-        # create candle stick column
-        for key, array in dict_candle.items():
-            if (array[1] != 0) or (array[2] != 0):  # if used at any, calculate the pattern
-                func = array[0]
-                df[key] = func(open=df["open"], high=df["high"], low=df["low"], close=df["close"]).replace(0, np.nan)
-
-                if (array[1] != 0):  # candle used as positive pattern
-                    a_positive_candle_columns.append(key)
-                    if (array[1] == -100):  # talib still counts the pattern as negative: cast it positive
-                        df[key] = df[key].replace(-100, 100)
-
-                if (array[2] != 0):  # candle used as negative pattern
-                    a_negative_candle_columns.append(key)
-                    if (array[2] == 100):  # talib still counts the pattern as positive: cast it negative
-                        df[key] = df[key].replace(100, -100)
-
-        # create a compound flag for all 12 positive and negative candle signals
-        df_pos = df[a_positive_candle_columns]
-        df_neg = df[a_negative_candle_columns]
-
-        df["candle_pos"] = (df_pos[df_pos[a_positive_candle_columns] == 100].sum(axis='columns') / 100)
-        df["candle_neg"] = (df_neg[df_neg[a_negative_candle_columns] == -100].sum(axis='columns') / 100)
-        df["candle_net_pos"] = (df["candle_pos"] + df["candle_neg"])
-        df["candle_net_pos2"] = df["candle_net_pos"].rolling(2).sum()
-        df["candle_net_pos5"] = df["candle_net_pos"].rolling(5).sum()
-
-        # remove candle stick column
-        for key, array in dict_candle.items():
-            LB.columns_remove(df, [key])
-
-        LB.to_csv_feather(df, a_path, encoding='utf-8_sig')
-        print(counter, ts_code, "Candlestick UPDATED")
-
-
-def update_market_WMYS(freq, market="CN"):  # TODO no idea if i need this or what to do
-    a_path = LB.a_path("Market/" + market + "/Date/market/" + freq)
-    df_trade_dates_WMYS = get_trade_date(start_date="00000000", end_date=today(), freq=freq)
-    df_result = df_trade_dates_WMYS.copy()
-
-    df_D = get_market("D")
-    s_trade_date, s_block_trade_count, s_holdertrade_in_count, s_holdertrade_de_count, s_repurchase_count, s_share_float_count = (pd.Series(),) * 6
-    for df_WMYS in D_to_WMYS_splitter(df_trade_dates_WMYS, df_D):
-        if (df_WMYS.empty):
-            continue
-        df_WMYS = LB.df_reindex(df_WMYS)
-        s_block_trade_count = s_block_trade_count.append(pd.Series(df_WMYS.q_block_trade_count.sum()), ignore_index=True)
-        s_holdertrade_in_count = s_holdertrade_in_count.append(pd.Series(df_WMYS.q_holdertrade_in_count.sum()), ignore_index=True)
-        s_holdertrade_de_count = s_holdertrade_de_count.append(pd.Series(df_WMYS.q_holdertrade_de_count.sum()), ignore_index=True)
-        s_repurchase_count = s_repurchase_count.append(pd.Series(df_WMYS.q_repurchase_count.sum()), ignore_index=True)
-        s_share_float_count = s_share_float_count.append(pd.Series(df_WMYS.q_share_float_count.sum()), ignore_index=True)
-
-    df_result["q_block_trade_count"] = pd.Series(s_block_trade_count)
-    df_result["q_holdertrade_in_count"] = pd.Series(s_holdertrade_in_count)
-    df_result["q_holdertrade_de_count"] = pd.Series(s_holdertrade_de_count)
-    df_result["q_repurchase_count"] = pd.Series(s_repurchase_count)
-    df_result["q_share_float_count"] = pd.Series(s_share_float_count)
-
-    LB.to_csv_feather(df_result, a_path, encoding="utf-8_sig")
-
-
-def D_to_WMYS_splitter(df_trade_date_WMYS, df_D):
-    a_result = []
-    df_helper = pd.DataFrame(float("nan"), index=[-1], columns=list(df_trade_date_WMYS.columns))
-    df_helper["trade_date"] = "00000000"
-    df_trade_date_WMYS = df_helper.append(df_trade_date_WMYS)
-    df_trade_date_WMYS.index = df_trade_date_WMYS.index + 1
-
-    for i in df_trade_date_WMYS.index:
-        if (i == len(df_trade_date_WMYS.index) - 1):
-            break
-        trade_date = df_trade_date_WMYS.at[i, "trade_date"]
-        next_trade_date = df_trade_date_WMYS.at[i + 1, "trade_date"]
-
-        df_wmys = df_D.loc[(int(trade_date) < df_D["trade_date"]) & (df_D["trade_date"] <= int(next_trade_date))]
-        a_result.append(df_wmys)
-    return a_result
-
-
-def support_resistance_horizontal(start_window=240, rolling_freq=60, step=10, thresh=[4, 0.2], bins=8, dict_rs={"abv": 8, "und": 8}, df_asset=pd.DataFrame(), delay=3):
-    def support_resistance_acc(abv_und, max_rs, s_minmax, end_date, f_end_date, df_asset):
-        # 1. step calculate all relevant resistance = relevant earlier price close to current price
-        current_price = df_asset.at[end_date, "close"]
-
-        if abv_und == "abv":
-            s_minmax = s_minmax[(s_minmax / current_price < thresh[0]) & ((s_minmax / current_price > 1))]
-        elif abv_und == "und":
-            s_minmax = s_minmax[(s_minmax / current_price < 1) & ((s_minmax / current_price > thresh[1]))]
-
-        # 2.step find the max occurence of n values
-        try:
-            s_occurence_bins = s_minmax.value_counts(bins=bins)
-            a_rs = []
-            for (index, value), counter in zip(s_occurence_bins.iteritems(), range(0, max_rs)):
-                a_rs.append(index.left)
-
-            # 3. step sort the max occurence values and assign them as rs
-            a_rs.sort()  # small value first 0 ,1, 2
-            for item, i in zip(a_rs, range(0, len(a_rs))):
-                df_asset.loc[end_date:f_end_date, f"rs{abv_und}{i}"] = item
-        except:
-            pass
-
-    if len(df_asset) > start_window:
-        #  calculate all min max for acceleration used for later simulation
-        try:
-            s_minall = df_asset["close"].rolling(rolling_freq).min()
-            s_maxall = df_asset["close"].rolling(rolling_freq).max()
-        except:
-            return
-
-        # iterate over past data as window. This simulates rs for past times/frames
-        for row in range(0, len(df_asset), step):
-            if row + start_window > len(df_asset) - 1:
-                break
-
-            start_date = df_asset.index[0]
-            end_date = df_asset.index[row + start_window]
-            for abv_und, max_rs in dict_rs.items():
-                if row + start_window + step > len(df_asset) - 1:
-                    break
-
-                f_end_date = df_asset.index[row + start_window + step]
-                s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])
-                support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
-
-        # calcualte individual rs score
-        for abv_und, count in dict_rs.items():
-            for i in range(0, count):
-                try:
-                    # first fill na for the last period because rolling does not reach
-                    df_asset[f"rs{abv_und}{i}"].fillna(method="ffill", inplace=True)
-                    df_asset[f"rs{abv_und}{i}"].fillna(method="bfill", inplace=True)
-
-                    df_asset[f"rs{abv_und}{i}_abv"] = (df_asset[f"rs{abv_und}{i}"] > df_asset["close"]).astype(int)
-                    df_asset[f"rs{abv_und}{i}_cross"] = df_asset[f"rs{abv_und}{i}_abv"].diff().fillna(0).astype(int)
-                except Exception as e:
-                    print("error resistance 1: probably new stock", e)
-
-        df_asset["rs_abv"] = 0  # for detecting breakout to top: happens often
-        df_asset["rs_und"] = 0  # for detecting breakout to bottom: happens rare
-        for abv_und, max_rs in dict_rs.items():
-            for i in range(0, max_rs):
-                try:
-                    df_asset[f"rs_{abv_und}"] = df_asset[f"rs_{abv_und}"] + df_asset[f"rs{abv_und}{i}_cross"].abs()
-                except Exception as e:
-                    print("error resistance 2", e)
-
-        # optional #TODO configure it nicely
-        df_asset["rs_abv"] = df_asset["rs_abv"].rolling(delay).max().fillna(0)
-        df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
-    else:
-        print(f"df is len is under {start_window}. probably new stock")
-        for abv_und, max_rs in dict_rs.items():
-            for i in range(0, max_rs):  # only consider rs und 2,3,4,5, evenly weighted. middle ones have most predictive power
-                df_asset[f"rs{abv_und}{i}"] = np.nan
-                df_asset[f"rs{abv_und}{i}_abv"] = np.nan
-                df_asset[f"rs{abv_und}{i}_cross"] = np.nan
-
-        df_asset["rs_abv"] = 0
-        df_asset["rs_und"] = 0
-
-    return df_asset
-
-
-# actually a onetime use
-# One of the most important functions
-def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
-    # current winner setting
-    # trend2 on trend1
-    # sh_label:"",
-    # close_label:"low",
-    # thresh:0.0
-    # thresh_log:-0.2E-16, # trend 240 and 60 do not divide and activate
-    # thresh_rest:0.7,
-    # op_sign:gt
-    # all_com: [1, 2, 10, 11, 12, 13, 15, 18, 20]
-    # minmax:0.5
-
-    # other possible tresh
-    # more curvy log  -0.043* ln(x) + 0.7351 where trend 240 also divides
-    # linear -0.0008*log(x)+0.6928 # TEST: Very bad! Log is much better than linear
-
-    setting = {
-        "sh_label": "",  # ["","_000001.SH","_399001.SZ","_399006.SZ"] use close from all stocks or sh
-        "close_label": "low",  # ["close","open","high","low"]  RSI base
-        "thresh": 0.0,  # [0.0, 0.05, -0.05,0.03, 0.02, -0.03,-0.02, -0.01]
-        "thresh_log": -0.043,
-        "thresh_rest": 0.7237,
-        "op_sign": "gt",  # ["<"，">"]
-        "all_comb": [1] + c_bfreq(),  # tested, that the higher the ma, the less useful. somewhere between is da best
-        "minmax": 0.5
-    }
-
-    ops = {"plus": operator.add, "minus": operator.sub, "prod": operator.mul, "gt": operator.gt, "lt": operator.lt}
-
-    for sh_label in [""]:
-        for close_label in ["low"]:
-            for op_sign in ["gt"]:
-                setting["sh_label"] = sh_label
-                setting["close_label"] = close_label
-                setting["op_sign"] = op_sign
-
-                thresh = setting["thresh"]
-                thresh_log = setting["thresh_log"]
-                thresh_rest = setting["thresh_rest"]
-
-                # use the function as a date_summary_generator and not a tester
-                if run_once_as_date_summary:
-                    df_result = pd.DataFrame(columns=[str(x) + "_pct_chg_mean" for x in setting["all_comb"]] + [str(x) + "_pct_chg_std" for x in setting["all_comb"]] + [str(x) + "_comp_chg" for x in setting["all_comb"]] + [str(x) + "_trading_days" for x in setting["all_comb"]],
-                                             index=setting["all_comb"])  # index is high which the trend name is after. Column is low. which the trend uses to determin is maxium
-                    df = trend(df=df_result, ibase=close_label, a_all=setting["all_comb"], thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest, market_suffix="market_")
-
-                    a_path = LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market")
-                    LB.to_csv_feather(df, a_path)
-                    return
-
-                # assign df_result
-                test_index = []
-                for max_len in range(3, len(setting["all_comb"])):
-                    comb = combinations(setting["all_comb"], max_len)
-                    for index in list(comb):
-                        test_index.append(index)
-
-                df_result = pd.DataFrame(columns=[str(x) + "_pct_chg_mean" for x in setting["all_comb"]] + [str(x) + "_pct_chg_std" for x in setting["all_comb"]] + [str(x) + "_comp_chg" for x in setting["all_comb"]] + [str(x) + "_trading_days" for x in setting["all_comb"]],
-                                         index=test_index)  # index is high which the trend name is after. Column is low. which the trend uses to determin is maxium
-
-                # loop through and calculate for each setting
-                for max_len in range(3, len(setting["all_comb"])):
-                    comb = combinations(setting["all_comb"], max_len)
-                    for index in list(comb):
-                        part_combi = [x for x in index]
-                        trend(df=df_result, ibase=close_label, a_all=part_combi, thresh=thresh, dict_ops=ops, op_sign=op_sign, thresh_log=thresh_log, thresh_rest=thresh_rest)
-                #
-                setting_path = LB.setting_to_path(setting)
-                df_result.to_csv("Market/CN/Backtest_Single/trend/date_trend_" + setting_path + ".csv")
-
-
-
-
-
 def read(a_path=[], step=-1):  # if step is -1, read feather first
     dict_format = {".csv": [pd.read_csv, "filepath_or_buffer", a_path[0]], ".feather": [pd.read_feather, "path", a_path[1]]}
-
     # reorder dict if nessesary to read csv first
-    dict_final = {}
+    dict_final = {}  #TODO reverse iterate over this
     for key in list(dict_format)[::step]:
         dict_final[key] = dict_format[key]
 
@@ -1161,147 +775,101 @@ def read(a_path=[], step=-1):  # if step is -1, read feather first
         function = array[0]
         argument = array[1]
         path = array[2]
-        kwargs = {argument: path}
         try:
-            df = function(**kwargs)
-            return df
+            return function(**{argument: path})
         except Exception as e:
             print("read error", format, e)
 
     print("DB READ File Not Exist!", a_path[0])
     return pd.DataFrame()
 
-
 def get_ts_code(asset="E", market="CN"):
-    a_path = LB.a_path("Market/" + market + "/General/ts_code_" + asset)
-    df = read(a_path)
-
+    df = read(LB.a_path("Market/" + market + "/General/ts_code_" + asset))
     if (asset == "FD"):
         # only consider still ongoing fund
         df = df[df["delist_date"].isna()]
-
         # for now, only consider Equity market traded funds
         df = df[df["market"] == "E"]
         df.reset_index(drop=True, inplace=True)
     return df
 
 
+@LB.try_ignore
+def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
+    df = read(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code)))
+    df["trade_date"] = df["trade_date"].astype(int)
+    return df.set_index(keys="trade_date", inplace=True, drop=True)
+
+
+@LB.except_empty_df
+def get_file(path):
+    return pd.read_csv(path)
+
+
 def get_ts_code_all(market="CN"):
     return read(LB.a_path("Market/" + market + "/General/ts_code_all"))
 
-
-def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
-    df = read(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code)))
-    try:
-        df["trade_date"] = df["trade_date"].astype(int)
-        df.set_index(keys="trade_date", inplace=True, drop=True)
-    except:
-        pass
-    return df
-
-
-def get_file(path):
-    try:  # if there is an existing history
-        df = pd.read_csv(path)
-    except:  # if there is no existing history
-        df = pd.DataFrame()
-    return df
-
-
 def get_group_instance(group_instance="asset_E", market="CN"):
-    df = read(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance))
-    return df
-
+    return read(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance))
 
 def get_group_instance_all(assets=["E"]):
     dict_result = {}
-
     dict_group_label_pair = c_groups_dict(assets=assets, a_ignore=["asset", "industry3"])
     for group, instance_array in dict_group_label_pair.items():
         for instance in instance_array:
-            df = get_group_instance(group_instance=group + "_" + str(instance))
-            dict_result[group + "_" + str(instance)] = df
+            dict_result[group + "_" + str(instance)] = get_group_instance(group_instance=group + "_" + str(instance))
     return dict_result
 
-
 def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
-    a_path = LB.a_path("Market/" + market + "/Asset/E/D_Fun/" + query + "/" + ts_code)
     try:
-        df = read(a_path)
+        df = read(LB.a_path("Market/" + market + "/Asset/E/D_Fun/" + query + "/" + ts_code))
         df = df[columns]
-        df = df.drop_duplicates(subset="end_date", keep="last")
-        return df
+        return df.drop_duplicates(subset="end_date", keep="last")
     except Exception as e:
         print("Error get_assets_E_D_Fun ", query, "not exist for", ts_code, e)
         df = LB.empty_asset_E_D_Fun(query)
-        df = df[columns]
-        return df
-
+        return df[columns]
 
 def get_assets_pledge_stat(ts_code, columns, market="CN"):
-    a_path = LB.a_path("Market/" + market + "/Asset/E/W_pledge_stat/" + ts_code)
     try:
-        df = read(a_path)
-        df = df[columns]
-        return df
+        df = read(LB.a_path("Market/" + market + "/Asset/E/W_pledge_stat/" + ts_code))
+        return df[columns]
     except Exception as e:
         print("Error get_assets_pledge_stat not exist for", ts_code, e)
         df = LB.emty_asset_E_W_pledge_stat()
-        df = df[columns]
-        return df
-
+        return df[columns]
 
 def get_assets_top_holder(ts_code, columns, market="CN"):
-    a_path = LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + ts_code)
     try:
-        df = read(a_path)
-        df = df[columns]
-        return df
+        df = read(LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + ts_code))
+        return df[columns]
     except Exception as e:
         print("Error get_assets_top_holder not exist for", ts_code, e)
         df = LB.empty_asset_E_top_holder()
-        df = df[columns]
-        return df
-
+        return df[columns]
 
 def get_trade_date(start_date="000000", end_date=today(), freq="D", market="CN"):
-    a_path = LB.a_path("Market/" + market + "/General/trade_date_" + freq)
-    df = read(a_path)
+    df = read(LB.a_path("Market/" + market + "/General/trade_date_" + freq))
     df["trade_date"] = df["trade_date"].astype(int)
-    df = df[df["trade_date"].between(int(start_date), int(end_date))]
-    df = LB.df_reindex(df)
-    return df
-
+    return df[df["trade_date"].between(int(start_date), int(end_date))].reset_index()
 
 def get_last_trade_date(freq="D", market="CN"):
     df_trade_date = get_trade_date(start_date="00000000", end_date=LB.today(), freq=freq, market=market)
-    latest_tade_date = str(df_trade_date["trade_date"].tail(1).values.tolist()[0])
-    return latest_tade_date
-
+    return str(df_trade_date["trade_date"].tail(1).values.tolist()[0])
 
 def get_next_trade_date(freq="D", market="CN"):
     df = get_trade_cal_D(a_is_open=[1])  # todo next trade date should be set to 17:00 after tushare has released its new data
-
     df["trade_date"] = df["trade_date"].astype(str)
     last_trade_date = get_last_trade_date(freq, market)
-    df = df[df["trade_date"] > str(last_trade_date)]
-    df = LB.df_reindex(df)
-
-    next_trade_date = df.at[0, "trade_date"]
-    return next_trade_date
+    df = df[df["trade_date"] > str(last_trade_date)].reset_index()
+    return df.at[0, "trade_date"]
 
 
-def get_trade_cal_D(start_date="19900101", end_date="88888888", a_is_open=[0, 1]):
-    a_path = LB.a_path("Market/CN/General/trade_cal_D")
-    df = read(a_path)
+def get_trade_cal_D(start_date="19900101", end_date="88888888", a_is_open=[1]):
+    df = read(LB.a_path("Market/CN/General/trade_cal_D"))
     df.rename(columns={"cal_date": "trade_date"}, inplace=True)
-
     df["trade_date"] = df["trade_date"].astype(int)
-    df = df[(df["is_open"].isin(a_is_open)) & (df["trade_date"].between(int(start_date), int(end_date)))]
-    df = df[["trade_date"]]
-
-    return df
-
+    return df.loc[(df["is_open"].isin(a_is_open)) & (df["trade_date"].between(int(start_date), int(end_date))), "trade_date"]
 
 def get_stock_market_all(market="CN"):
     df = read(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
@@ -1309,26 +877,20 @@ def get_stock_market_all(market="CN"):
         df["trade_date"] = df["trade_date"].astype(int)
     except:
         pass
-    df.set_index(keys="trade_date", drop=True, inplace=True)
-    return df
-
+    return df.set_index(keys="trade_date", drop=True, inplace=True)
 
 def get_industry_classify(level, market="CN"):
     return read(LB.a_path("Market/" + market + "/General/industry_" + level))
 
-
 def get_industry_index(index, level, market="CN"):
     return read(LB.a_path("Market/" + market + "/General/industry/" + level + "/" + index))
-
 
 def get_date(trade_date, assets=["E"], freq="D", market="CN"):
     if len(assets) != 1:
         return get_date_all()
     else:
         df = read(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)))
-        df.set_index(keys="ts_code", inplace=True, drop=True)
-        return df
-
+        return df.set_index(keys="ts_code", inplace=True, drop=True)
 
 def get_date_all(trade_date, assets=["E", "I", "FD"], freq="D", format=".feather", market="CN"):
     if len(assets) == 1:
@@ -1337,70 +899,38 @@ def get_date_all(trade_date, assets=["E", "I", "FD"], freq="D", format=".feather
         raise NotImplementedError('This function is not implemented yet')
     # TODO implement it
 
-
 def get_date_E_oth(trade_date, oth_name, market="CN"):
     return read(LB.a_path("Market/" + market + "/Date/E/" + oth_name + "/" + str(trade_date)))
-
 
 def get_market(freq, market="CN"):
     return read(LB.a_path("Market/" + market + "/Date/market/" + freq + ".csv"))
 
-
 # needs to be optimized for speed and efficiency
 def add_static_data(df, assets=["E", "I", "FD"], market="CN"):
-    # all static code except name
     df_result = pd.DataFrame()
-
-    if assets == c_assets():  # accelerate the process if requesting all data
-        df_result = get_ts_code_all()
-    else:  # if the process requires individual asset data
-        for asset in assets:
-            df_asset = get_ts_code(asset)
-            df_result = df_result.append(df_asset, sort=False, ignore_index=True)
-
-    df = pd.merge(df, df_result, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
-    return df
-
+    for asset in assets:
+        df_asset = get_ts_code(asset)
+        df_result = df_result.append(df_asset, sort=False, ignore_index=True)
+    return pd.merge(df, df_result, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
 # require: trade_date
 # function: adds another asset close price
 def add_asset_comparison(df, freq, asset, ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"]):
-    df_performance_comparison = get_asset(ts_code, asset, freq)
-    df_performance_comparison = df_performance_comparison[a_compare_label]
-
-    dict_rename = {column: column + "_" + ts_code for column in a_compare_label}
-    df_performance_comparison = df_performance_comparison.rename(columns=dict_rename)
-
+    dict_rename = {column: f"{column}_{ts_code}" for column in a_compare_label}
+    df_compare = get_asset(ts_code, asset, freq)[a_compare_label]
+    df_compare.rename(columns=dict_rename, inplace=True)
     # doing groups this need int, doing backtest this need without
     # df["trade_date"] = df["trade_date"].astype(int)
-    # df_performance_comparison["trade_date"] = df_performance_comparison["trade_date"].astype(int)
-
+    # df_compare["trade_date"] = df_compare["trade_date"].astype(int)
     LB.columns_remove(df, [label + "_" + ts_code for label in a_compare_label])
-    df = pd.merge(df, df_performance_comparison, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
-    return df
-
+    return pd.merge(df, df_compare, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
 
 def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", market="CN"):
     path = "Market/CN/Backtest_Single/" + analysis + "/EIFD_D_final.xlsx"
     df_analysis = pd.read_excel(path, sheet_name="Overview")
-
     final_score_label = ["ts_code"] + [s for s in df_analysis.columns if "final_" + analysis + "_rank" in s]
     df_analysis = df_analysis[final_score_label]
-
-    df = pd.merge(df, df_analysis, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
-    return df
-
-
-def check_tushare_upto_date():
-    try:
-        latest_trade_date = LB.today()
-        df_tushare = update_assets_EI_D_reindex_reverse(ts_code="000001.SH", freq="D", asset="I", start_date="000000", end_date=today(), adj="hfq")
-        latest_tushare_date = df_tushare.at[len(df_tushare) - 1, "trade_date"]
-        print("today is", latest_trade_date, ". tushare is on", latest_tushare_date)
-        return str(latest_trade_date) == str(latest_tushare_date)
-    except:
-        return False
-
+    return pd.merge(df, df_analysis, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
 def preload(load="asset", step=1, query=""):
     dict_result = {}
@@ -1422,9 +952,7 @@ def preload(load="asset", step=1, query=""):
                 dict_result[iterator] = df
         except:
             pass
-
     bar.close()
-
     return dict_result
 
 
@@ -1457,8 +985,9 @@ def update_all_in_one(big_update=False):
         update_general_trade_date(freq, big_update=big_update)  # big: override - small: override
 
     # 2.1. ASSET - FUNDAMENTALS
-    # update_assets_E_D_Fun(start_date="00000000", end_date=today(), step=1, big_update=big_update)  # big: override - small: skip
+    update_assets_E_D_Fun(start_date="00000000", end_date=today(), step=1, big_update=big_update)  # big: override - small: skip
     # update_assets_E_W_pledge_stat(start_date="00000000", step=1, big_update=big_update)  # big: override - small: skip
+
     a_steps = [1, 2, 3, 5, 11, -1, -2, -3, -7]
     multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": big_update}, a_steps=a_steps)
     multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": big_update}, a_steps=a_steps)
@@ -1478,26 +1007,12 @@ def update_all_in_one(big_update=False):
     update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide
 
     # 3.4. DATE - TREND
-    Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=big_update)  # big: override - small: override
+    ICreate.trend(df=get_stock_market_all(), ibase="close", market_suffix="market.")  # big: override - small: override
 
     # 4.1. CUSTOM - INDEX
-    # update_custom_index(big_update=big_update)
+    update_custom_index(big_update=big_update)
 
 
-@njit
-def std(xs):
-    # compute the mean
-    mean = 0
-    for x in xs:
-        mean += x
-    mean /= len(xs)
-    # compute the variance
-    ms = 0
-    for x in xs:
-        ms += (x - mean) ** 2
-    variance = ms / len(xs)
-    std = math.sqrt(variance)
-    return std
 
 
 # speed order=remove apply and loc, use vectorize where possible
@@ -1505,23 +1020,11 @@ def std(xs):
 # 2. List comprehension
 # 3. apply
 #4. loc
-
-
-
 if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
-        # TODO add concept
-        # TODO invalid continuation of bye when storing asset, DB read error
-        big_update = False
-
-        # update_all_in_one(big_update)
-        df = get_asset()
-        df = df[["pct_chg"]]
-        df = df.loc[0:20]
-        for i in range(0, 10000):
-            print(i)
+        print("h")
 
     except Exception as e:
         traceback.print_exc()
