@@ -16,7 +16,7 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def backtest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
-    current_trend = LB.c_freq()
+    current_trend = LB.c_bfreq()
     beta_against = "_000001.SH"
 
     a_time = []

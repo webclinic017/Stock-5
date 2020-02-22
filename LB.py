@@ -62,16 +62,18 @@ def plot_autocorrelation(series):
     pyplot.show()
 
 
-def standard_indi_name(ibase, deri, dict_variables):
+def standard_indi_name(ibase, deri, dict_variables={}):
     result = f"{ibase}.{deri}"
     variables = ""
     for key, enum_val in dict_variables.items():
         if key not in ["df", "ibase"]:
+            # if issubclass(enum_val, enum.Enum):
             try:
                 variables = variables + f"{key}={enum_val.value},"
             except:
                 variables = variables + f"{key}={enum_val},"
-    result = result + f"({variables})"
+    if variables:
+        result = result + f"({variables})"
     return result
 
 def fibonacci(n):
@@ -354,11 +356,14 @@ def handle_save_exception(e, path):
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
+            time.sleep(2)
     elif type(e) == PermissionError:
+        print(f"try to close {path}")
         close_file(path)
+        time.sleep(5)
     else:
         traceback.print_exc()
-    time.sleep(2)
+
 
 def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False, skip_csv=False):  # utf-8_sig
     if reset_index:
@@ -450,10 +455,11 @@ class SFreq(enum.Enum):
     # Y="Y"
 
 
-def c_freq():
-    return [e.value for e in Freq]
+def c_bfreq():
+    return [e.value for e in BFreq]
 
-class Freq(enum.Enum):
+
+class BFreq(enum.Enum):
     #f1 = 1
     f2 = 2
     f5 = 5
@@ -461,6 +467,18 @@ class Freq(enum.Enum):
     f20 = 20
     f60 = 60
     f240 = 240
+
+
+def c_sfreq():
+    return [e.value for e in SFreq]
+
+
+class SFreq(enum.Enum):
+    # f1 = 1
+    f2 = 2
+    f5 = 5
+    f10 = 10
+
 
 def c_rolling_freqs_fibonacci():
     return [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]

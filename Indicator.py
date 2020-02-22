@@ -48,16 +48,16 @@ def increaselimit(increase=1):
                 df_gainlimit.dropna(inplace=True)
 
                 for gain in ["pgain", "fgain"]:
-                    for freq in LB.c_freq():
+                    for freq in LB.c_bfreq():
                         df_result_asset.at[ts_code, f"days{days}_{gain}{freq}"] = df_gainlimit[f"{gain}{freq}"].mean()
             except:
                 for gain in ["pgain", "fgain"]:
-                    for freq in LB.c_freq():
+                    for freq in LB.c_bfreq():
                         df_result_asset.at[ts_code, f"days{days}_{gain}{freq}"] = np.nan
 
     for gain in ["pgain", "fgain"]:
         for days in [1, 2, 3, 5, 10, -1, -2, -3, -5, -10]:
-            for freq in LB.c_freq():
+            for freq in LB.c_bfreq():
                 df_summary_asset.at[f"days{days}", f"{gain}{freq}"] = df_result_asset[f"days{days}_{gain}{freq}"].mean()
 
     path = "Market/CN/Indicator/increaselimit.xlsx" if increase == 1 else "Market/CN/Indicator/decreaselimit.xlsx"
@@ -77,28 +77,28 @@ def overma():
         except:
             continue
 
-        for rolling_freq in LB.c_freq():
+        for rolling_freq in LB.c_bfreq():
             Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
-        for lower in LB.c_freq():
-            for upper in LB.c_freq():
+        for lower in LB.c_bfreq():
+            for upper in LB.c_bfreq():
                 mean = df.loc[df[f"close{upper}"] > df[f"close{lower}"], "fgain2"].mean()
                 df_result_asset.at[ts_code, f"lower{lower}_upper{upper}"] = mean
 
     # asset summary
-    for lower in LB.c_freq():
-        for upper in LB.c_freq():
+    for lower in LB.c_bfreq():
+        for upper in LB.c_bfreq():
             df_summary_asset.at[f"close{lower}", f"close{upper}_over"] = df_result_asset[f"lower{lower}_upper{upper}"].mean()
 
     # date summary
     df_result_date = pd.DataFrame()
     df_stock_market_all = DB.get_stock_market_all()
 
-    for rolling_freq in LB.c_freq():
+    for rolling_freq in LB.c_bfreq():
         Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
-    for lower in LB.c_freq():
-        for upper in LB.c_freq():
+    for lower in LB.c_bfreq():
+        for upper in LB.c_bfreq():
             mean = df_stock_market_all.loc[df_stock_market_all[f"close{upper}"] > df_stock_market_all[f"close{lower}"], "fgain2"].mean()
             df_result_date.at[f"close{lower}", f"closer{upper}_over"] = mean
 
@@ -120,19 +120,19 @@ def crossma():
             continue
 
         # add ma
-        for rolling_freq in LB.c_freq():
+        for rolling_freq in LB.c_bfreq():
             Indicator_Create.mean(df=df, rolling_freq=rolling_freq, add_from="close")
 
         # add flag above ma and find cross over point
-        for lower in LB.c_freq():
-            for upper in LB.c_freq():
+        for lower in LB.c_bfreq():
+            for upper in LB.c_bfreq():
                 if lower != upper:
                     df[f"upper{upper}_abv_lower{lower}"] = ((df[f"close{upper}"] > df[f"close{lower}"]).astype(int))
                     df[f"upper{upper}_cross_lower{lower}"] = (df[f"upper{upper}_abv_lower{lower}"].diff()).replace(0, np.nan)
 
         # calculate future pgain based on crossover
-        for lower in LB.c_freq():
-            for upper in LB.c_freq():
+        for lower in LB.c_bfreq():
+            for upper in LB.c_bfreq():
                 if lower != upper:
                     for cross in [1, -1]:
                         mean = df.loc[df[f"upper{upper}_cross_lower{lower}"] == cross, "fgain2"].mean()
@@ -140,8 +140,8 @@ def crossma():
 
     # asset summary
     for cross in [1, -1]:
-        for lower in LB.c_freq():
-            for upper in LB.c_freq():
+        for lower in LB.c_bfreq():
+            for upper in LB.c_bfreq():
                 try:
                     df_summary_asset.at[f"close{lower}", f"close{upper}_cross{cross}"] = df_result_asset[f"upper{upper}_cross{cross}_lower{lower}"].mean()
                 except:
@@ -150,20 +150,20 @@ def crossma():
     # date
     df_result_date = pd.DataFrame()
     df_stock_market_all = DB.get_stock_market_all()
-    for rolling_freq in LB.c_freq():
+    for rolling_freq in LB.c_bfreq():
         Indicator_Create.mean(df=df_stock_market_all, rolling_freq=rolling_freq, add_from="close")
 
     # add flag above ma and find cross over point
-    for lower in LB.c_freq():
-        for upper in LB.c_freq():
+    for lower in LB.c_bfreq():
+        for upper in LB.c_bfreq():
             if lower != upper:
                 df_stock_market_all[f"upper{upper}_abv_lower{lower}"] = ((df_stock_market_all[f"close{upper}"] > df_stock_market_all[f"close{lower}"]).astype(int))
                 df_stock_market_all[f"upper{upper}_cross_lower{lower}"] = (df_stock_market_all[f"upper{upper}_abv_lower{lower}"].diff()).replace(0, np.nan)
 
     # date summary
     for cross in [1, -1]:
-        for lower in LB.c_freq():
-            for upper in LB.c_freq():
+        for lower in LB.c_bfreq():
+            for upper in LB.c_bfreq():
                 try:
                     df_result_date.at[f"close{lower}", f"close{upper}_cross{cross}"] = df_stock_market_all.loc[df_stock_market_all[f"upper{upper}_cross_lower{lower}"] == cross, "fgain2"].mean()
                 except:
@@ -241,7 +241,7 @@ def auto_corr_multiple():
         #             condition_count=len(df_filtere.loc[df_filtere["fgain2"].between(fgain_lower,fgain_upper)])
         #             dict_df[pgain].at[ts_code,f"{pgain}_{pgain_lower,pgain_upper}_fgain2_{fgain_lower,fgain_upper}"]=condition_count/total_counts
 
-    for ma in LB.c_freq():
+    for ma in LB.c_bfreq():
         Indicator_Create.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
 
     df_mean = pd.DataFrame()

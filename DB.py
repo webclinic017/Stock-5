@@ -15,7 +15,7 @@ import cProfile
 from tqdm import tqdm
 
 from Indicator_Create import trend
-from LB import c_assets, c_freq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
+from LB import c_assets, c_bfreq, c_date_oth, c_assets_fina_function_dict, c_industry_level, c_op, c_candle, c_groups_dict, multi_process, today
 
 pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
@@ -367,7 +367,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 # For all Pri indices and derivates
 def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
     complete_new_update = True if len(df_saved) == 0 else False
-    traceback_freq_big = c_freq()
+    traceback_freq_big = c_bfreq()
     traceback_freq_small = [2, 5]
 
     if asset == "E":
@@ -389,7 +389,7 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E"):
         Indicator_Create.fgain(df, rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # add trend for individual stocks
-    trend(df=df, ibase="close", a_all=[1] + c_freq(), thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
+    trend(df=df, ibase="close", a_all=[1] + c_bfreq(), thresh=0.5, dict_ops=c_op(), op_sign="gt", thresh_log=-0.043, thresh_rest=0.7237, for_analysis=False, market_suffix="")
     print(f"calculating resistance...")
 
     # df = support_resistance_horizontal(df_asset=df)
@@ -1097,7 +1097,7 @@ def Setup_date_trend_multiple(run_once_as_date_summary=True, big_update=True):
         "thresh_log": -0.043,
         "thresh_rest": 0.7237,
         "op_sign": "gt",  # ["<"，">"]
-        "all_comb": [1] + c_freq(),  # tested, that the higher the ma, the less useful. somewhere between is da best
+        "all_comb": [1] + c_bfreq(),  # tested, that the higher the ma, the less useful. somewhere between is da best
         "minmax": 0.5
     }
 
