@@ -17,6 +17,9 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
             df_fgain_mean.at[ts_code, fgain] = dict_ts_code_mean[fgain] = df[fgain].mean()
             # general ts_code pearson with fgain
             df_fgain_mean.at[ts_code, f"{fgain}_pearson"] = df[column].corr(df[fgain], method="pearson")
+            df_fgain_mean.at[ts_code, f"{fgain}_std"] = df[column].std()
+            df_fgain_mean.at[ts_code, f"{fgain}_skew"] = df[column].skew()
+            df_fgain_mean.at[ts_code, f"{fgain}_kurt"] = df[column].kurt()
     except:
         print("wtf.should not happend TODO")
         return
@@ -43,13 +46,11 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
     except Exception as e:
         print("Occurence did not work")
 
-    # evaluate after probability/ occurence TODO
-
     # evaluate after seasonality
-    for trend_freq in LB.c_bfreq():
-        for trend in [1, 0]:
-            for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
-                df_fgain_mean.at[ts_code, f"{fgain}_trend{trend_freq}{trend}"] = df.loc[df[f"trend{trend_freq}"] == trend, fgain].mean() / dict_ts_code_mean[fgain]
+    # for trend_freq in LB.c_bfreq():
+    #     for trend in [1, 0]:
+    #         for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
+    #             df_fgain_mean.at[ts_code, f"{fgain}_trend{trend_freq}{trend}"] = df.loc[df[f"trend{trend_freq}"] == trend, fgain].mean() / dict_ts_code_mean[fgain]
 
 
 setting = {

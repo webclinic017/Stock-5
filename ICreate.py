@@ -9,14 +9,17 @@ import glob
 import talib
 import itertools
 from multiprocessing import Process
+from scipy import signal
 import inspect
+import matplotlib.pyplot as plt
 import enum
+from sklearn.preprocessing import MinMaxScaler
 from LB import *
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 # BOTTLE NECK modify here
-class IBase(enum.Enum):
+class IBase(enum.Enum):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
     open = "open"
     high = "high"
     low = "low"
@@ -52,7 +55,8 @@ class IBase(enum.Enum):
     vol = "vol"
     turnover_rate = "turnover_rate"
 
-class IDeri(enum.Enum):
+
+class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no other IDeri
     # create = "create"
     # count = "count"
     # sum = "sum"
@@ -68,12 +72,12 @@ class IDeri(enum.Enum):
     # kurt = "kurt"
 
     # technical Derivation
-    rsi = "rsi"
-    mom = "mom"
-    rocr = "rocr"
-    # ppo = "ppo" for some reason not existing in talib
-    cmo = "cmo"
-    apo = "apo"
+    # rsi = "rsi"
+    # mom = "mom"
+    # rocr = "rocr"
+    # # ppo = "ppo" for some reason not existing in talib
+    # cmo = "cmo"
+    # apo = "apo"
     # boll="boll"
     # ema="ema"
     # sma="sma"
@@ -84,12 +88,16 @@ class IDeri(enum.Enum):
     # pct_change="pct_change"
     # divmean="divmean"
     # divmabs="divabs"
+    # scale ="scale" #normalize value to 1 and 0
     # abv="abv"
     # cross="cross"
 
-    # custom
-    # trend="trend"
+    # second level IDERI, need other functions as argument
+    trend = "trend"  # RSI CMO
     # rs="rs"
+    # cross over
+    # divergence
+    #overma
 
 # clip,autocorr,cummax
 def get_func(name: str):
@@ -106,72 +114,28 @@ class RE(enum.Enum):
     r = "r"
     e = "e"
 
-
-
 def open(df: pd.DataFrame, ibase: str): return ibase
-
 def high(df: pd.DataFrame, ibase: str): return ibase
-
 def close(df: pd.DataFrame, ibase: str): return ibase
-
-
 def low(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pct_chg(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pe_ttm(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pb(df: pd.DataFrame, ibase: str): return ibase
-
-
 def ps_ttm(df: pd.DataFrame, ibase: str): return ibase
-
-
 def dv_ttm(df: pd.DataFrame, ibase: str): return ibase
-
-
 def n_cashflow_act(df: pd.DataFrame, ibase: str): return ibase
-
-
 def n_cashflow_inv_act(df: pd.DataFrame, ibase: str): return ibase
-
-
 def n_cash_flows_fnc_act(df: pd.DataFrame, ibase: str): return ibase
-
-
 def profit_dedt(df: pd.DataFrame, ibase: str): return ibase
-
-
 def netprofit_yoy(df: pd.DataFrame, ibase: str): return ibase
-
-
 def or_yoy(df: pd.DataFrame, ibase: str): return ibase
-
-
 def grossprofit_margin(df: pd.DataFrame, ibase: str): return ibase
-
-
 def netprofit_margin(df: pd.DataFrame, ibase: str): return ibase
-
-
 def debt_to_assets(df: pd.DataFrame, ibase: str): return ibase
-
-
 def total_mv(df: pd.DataFrame, ibase: str): return ibase
-
-
 def vol(df: pd.DataFrame, ibase: str): return ibase
-
-
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pjup(df: pd.DataFrame, ibase: str):
     add_to = ibase
     add_column(df, add_to, "pct_chg", 1)
@@ -248,6 +212,10 @@ def cdl(df: pd.DataFrame, ibase: str):
     return ibase
 
 
+def crossover_test(df: pd.DataFrame, ibase: str, ideri1: IDeri, ideri2: IDeri, ideri1_freq: SFreq, ideri2_freq: SFreq):
+    pass
+
+
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
 # 1.Step Create RSI or Abv_ma
 # 2.Step Create Phase
@@ -264,13 +232,25 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     phase_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}phase")
     trend_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
 
+    func = talib.RSI
+    # RSI and CMO are the best. CMO is a modified RSI
+    # RSI,CMO,MOM,ROC,ROCR100,TRIX
+
+    #df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
+
     for i in a_all:  # RSI 1
         try:
-            if i == 1:  # TODO RSI 1 need to be generallized for every indicator. if rsi1 > RSI2, then it is 1, else 0. something like that
-                df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
+            if i == 1:
+                df[f"{rsi_name}{i}"] = (df[ibase].pct_change() > 0).astype(int)
+                # df[ rsi_name + "1"] = 0
+                #df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
             else:
-                df[f"{rsi_name}{i}"] = talib.RSI(df[ibase], timeperiod=i) / 100
-        except:  # if error happens here, then no need to continue
+                df[f"{rsi_name}{i}"] = func(df[ibase], timeperiod=i) / 100
+
+                # normalization causes error
+                # df[f"{rsi_name}{i}"] = (df[f"{rsi_name}{i}"]-df[f"{rsi_name}{i}"].min())/ (df[f"{rsi_name}{i}"].max()-df[f"{rsi_name}{i}"].min())
+        except Exception as e:  # if error happens here, then no need to continue
+            print("error" ,e)
             df[trend_name] = np.nan
             return trend_name
 
@@ -286,11 +266,8 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
         df.loc[(df[phase_name + freq_high] == 1) & (df[phase_name + freq_low] == 1), trendfreq_name] = 1
         df.loc[(df[phase_name + freq_high] == 0) & (df[phase_name + freq_low] == 0), trendfreq_name] = 0
 
-        # fill na based on the trigger points
-        df[trendfreq_name].fillna(method='bfill', inplace=True)
-        last_trade = df.at[df.last_valid_index(), trendfreq_name]
-        fill = 0 if last_trade == 1 else 1
-        df[trendfreq_name].fillna(value=fill, inplace=True)
+        # fill na based on the trigger points. bfill makes no sense here
+        df[trendfreq_name].fillna(method='ffill', inplace=True)
 
     # remove RSI and phase Columns to make it cleaner
     a_remove = []
@@ -315,8 +292,8 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
 #         df[add_to]=np.nan
 #     return add_to
 
-def cmo(df: pd.DataFrame, ibase: str, ffreq: SFreq, sfreq: SFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.cmo, func=talib.CMO, fastperiod=ffreq.value, slowperiod=sfreq.value)
+def cmo(df: pd.DataFrame, ibase: str, freq: BFreq):
+    return deri_tec(df=df, ibase=ibase, ideri=IDeri.cmo, func=talib.CMO, timeperiod=freq.value)
 
 
 def apo(df: pd.DataFrame, ibase: str, ffreq: SFreq, sfreq: SFreq):
@@ -465,12 +442,83 @@ def function_all_combinations(func):
     return explode_settings(result_dict)
 
 
+def trendtest():
+    import DB
+    df = DB.get_asset()
+    df = df[["close"]]
+    df_copy = df.copy()
+
+    trend(df=df, ibase="close")
+    df.to_csv("all in one calc.csv")
+
+    startday = 19920508
+    for trade_day in df_copy.index:
+        if int(trade_day) < startday:
+            continue
+        df_loc = df_copy.loc[19910129:trade_day]
+
+        trend(df=df_loc, ibase="close")
+
+        for i in LB.c_bfreq():
+            # rsi
+            prev = df.loc[19910129:trade_day, f"close.trend{i}"]
+            now = df_loc[f"close.trend{i}"]
+
+            if prev.equals(now):
+                pass
+                print(f"{trade_day} different trend same")
+            else:
+                where_not_same = (prev != (now))
+                print(where_not_same.index)
+                print(f"{trade_day} different trend NOT same")
+                df_loc.to_csv("real simulated.csv")
+                return
+
+
+
+
+        
 if __name__ == '__main__':
+    # TODO test with rolling window if trend is really good
+    trendtest()
+
+    # cross over brute force
+    # define all main deri function. scale it if nessesary
+    # define second cross option: ibase:str, deri, variable
+
+    # if crossover then buy / sell signal
+
+    #if both are 1 then buy buy signal
+
+
+
+
     # first only add all ideri that uses one column
     # then add all ideri that uses multiple columns
-    import DB
-
-    df = DB.get_asset()
+    # import DB
+    # scaler=MinMaxScaler()
+    #
+    # df = DB.get_asset()
+    # tren_mean_return = df.loc[df["trend2"] == 1, "fgain2"].mean()
+    # print("trend mean", tren_mean_return)
+    # df=df[["close","fgain2"]]
+    # for i in [2,5,10,20,60,240]:
+    #     df[f"cmo{i}"]=talib.CMO(df["close"],timeperiod=i)
+    #     df[f"cmo{i}_mean"]=df[f"cmo{i}"].mean()
+    #     df[f"cmo{i}_buy"]=(df[f"cmo{i}"]> df[f"cmo{i}_mean"]).astype(int)
+    #
+    # mean_return=df.loc[(df["cmo2_buy"]==1)& (df["cmo5_buy"]==1),"fgain2"].mean()
+    # print("oocc", len(df[(df["cmo2_buy"]==1)]))
+    # print("cmo 2，5 mean",mean_return)
+    #
+    #
+    # mean_return = df.loc[(df["cmo5_buy"] == 1) & (df["cmo10_buy"] == 1), "fgain2"].mean()
+    #
+    # print("cmo 5,10 mean", mean_return)
+    # df = df[["close", "cmo240","cmo240_buy"]]
+    # df.reset_index(inplace=True, drop=True)
+    # df.plot(legend=True)
+    # plt.show()
 
     #then bruteforce ideri that can be used on ideri
     pass
