@@ -73,7 +73,7 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
     # kurt = "kurt"
 
     # technical Derivation
-    # rsi = "rsi"
+    rsi = "rsi"
     # mom = "mom"
     # rocr = "rocr"
     # # ppo = "ppo" for some reason not existing in talib
