@@ -25,6 +25,7 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
     low = "low"
     close = "close"
     pct_chg = "pct_chg"
+    oc_pct_chg = "oc_pct_chg"
     # fgain = "fgain"
     # # pgain = "pgain"
     # pjup = "pjup"
@@ -66,7 +67,7 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
     # std = "std"
     # min = "min"
     # max = "max"
-    # corr = "corr"
+    corr = "corr"
     # cov = "cov"
     # skew = "skew"
     # kurt = "kurt"
@@ -94,6 +95,7 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
 
     # second level IDERI, need other functions as argument
     trend = "trend"  # RSI CMO
+    beta = "beta"
     # rs="rs"
     # cross over
     # divergence
@@ -138,26 +140,39 @@ def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
-def pjup(df: pd.DataFrame, ibase: str):
-    add_to = ibase
+# TODO test jump up with different gap threshhold
+
+
+def oc_pct_chg(df: pd.DataFrame):
+    add_to = "co_pct_chg"
+    add_column(df, add_to, "pct_chg", 1)
+    df[add_to] = (df["open"] / df["close"].shift(1))
+    return add_to
+
+
+def pjup(df: pd.DataFrame):
+    add_to = "pjup"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return add_to
 
-def pjdown(df: pd.DataFrame, ibase: str):
-    add_to = ibase
+
+def pjdown(df: pd.DataFrame):
+    add_to = "pjdown"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -2)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
     return add_to
 
-def period(df: pd.DataFrame, ibase: str):
-    add_to = ibase
+
+def period(df: pd.DataFrame):
+    add_to = "period"
     add_column(df, add_to, "ts_code", 1)
     df[add_to] = (range(1, len(df.index) + 1))
     return add_to
 
-def ivola(df: pd.DataFrame, ibase: str):
-    add_to = ibase
+
+def ivola(df: pd.DataFrame):
+    add_to = "ivola"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
     return add_to
@@ -172,7 +187,6 @@ def pgain(df: pd.DataFrame, freq: BFreq):
     except:
         df[add_to] = np.nan
     return add_to
-
 
 def fgain(df: pd.DataFrame, freq: BFreq):
     add_to = f"fgain{freq}"
@@ -372,6 +386,7 @@ def support_resistance_horizontal(start_window=240, rolling_freq=1, step=10, thr
 #         df[add_to]=np.nan
 #     return add_to
 
+
 def cmo(df: pd.DataFrame, ibase: str, freq: BFreq):
     return deri_tec(df=df, ibase=ibase, ideri=IDeri.cmo, func=talib.CMO, timeperiod=freq.value)
 
@@ -482,14 +497,15 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
     elif ideri == "max":
         df[add_to] = reFunc(df[ibase], freq).max()
     elif ideri == "corr":
-        df[add_to] = reFunc(df[ibase], freq).corr()
+        from DB import get_asset
+        df_sh = get_asset(ts_code="000001.SH", asset="I")
+        df[add_to] = reFunc(df[ibase], freq).corr(df_sh["close"])
     elif ideri == "cov":
         df[add_to] = reFunc(df[ibase], freq).cov()
     elif ideri == "skew":
         df[add_to] = reFunc(df[ibase], freq).skew()
     elif ideri == "kurt":
         df[add_to] = reFunc(df[ibase], freq).kurt()
-
     return add_to
 
 
@@ -559,8 +575,11 @@ def trendtest():
 
         
 if __name__ == '__main__':
-    # TODO test with rolling window if trend is really good
-    trendtest()
+    # TODO test jump up with different gap threshhold
+    # TODO Try to get trend better with only catching the phase 1 and not phase 3. need some differatiating between phase
+    # TODO make a statistical test to see if phase 1 is really better
+    # TODO E.G fgain if all phases are strict 1.
+    #trendtest()
 
     # cross over brute force
     # define all main deri function. scale it if nessesary

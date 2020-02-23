@@ -188,11 +188,11 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
-    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), index=False, skip_feather=True)
-    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), index=False, skip_feather=True)
-    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), reset_index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), skip_feather=True)
+    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), skip_feather=True)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=False, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), index=False, skip_feather=True)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), skip_feather=True)
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)
@@ -531,7 +531,7 @@ def btest_once(settings=[{}]):
     path = LB.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
     df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
-    LB.to_csv_feather(df_backtest_summ, index=False, a_path=path, skip_feather=True)
+    LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True)
 
 
 def btest_multiple(loop_indicator=1):

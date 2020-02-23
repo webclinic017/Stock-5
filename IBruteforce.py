@@ -157,7 +157,7 @@ def bruteforce_iterate():
                 df_sample = dict_df_asset["000001.SZ"].copy()
                 print("one setting is", {**one_setting})
                 deri_function(df=df_sample, ibase=ibase.value, **one_setting)
-                LB.to_csv_feather(df=df_sample, index=True, reset_index=False, a_path=LB.a_path(path), skip_feather=True)
+                LB.to_csv_feather(df=df_sample, a_path=LB.a_path(path), index_relevant=False, skip_feather=True)
 
                 # Initialize ALL ts_code and fgain result for THIS COLUMN, THIS DERIVATION, THIS SETTING
                 dict_fgain_mean_detail = {f"fgain{freq}": pd.DataFrame() for freq in LB.c_bfreq()}
@@ -181,7 +181,7 @@ def bruteforce_iterate():
                     df.index.name = "ts_code"
                     path = setting["path_general"] + f"{ibase_name}/{ideri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_{key}"
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
-                    LB.to_csv_feather(df=df, index=True, reset_index=False, a_path=LB.a_path(path), skip_feather=True)
+                    LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=False, skip_feather=True)
 
         # save Summary after one columns all derivation is finished
         # row_summary = df.mean()

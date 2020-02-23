@@ -14,7 +14,7 @@ def get(function, dict_arg, df_if_empty=pd.DataFrame()):
         try:
             print("Tushare", function.__name__, message, kwargs)
         except:
-            print("Tushare", message, "BUT TUSHARE FUNCTION NAME NOT DISPLAYED!", kwargs)
+            print("Tushare", message, "BUT NO FUNCTION NAME!", kwargs)
 
     for _ in range(200):
         try:

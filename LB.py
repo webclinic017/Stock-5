@@ -8,6 +8,7 @@ import talib
 import smtplib
 from email.message import EmailMessage
 import os
+import math
 from win32com.client import Dispatch
 import traceback
 import API_Tushare
@@ -28,16 +29,23 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 # decorator functions must be at top
 
-def only_big_update():
-    pass
+def only_big_update(func):
+    def this_invisible_func(*args, **kwargs):
+        if "big_update" in [*kwargs]:
+            if kwargs["big_update"]:
+                return func(*args, **kwargs)  # only return original function if kwargs has keyword "big_update" and big_update is true
+        return
 
+    return this_invisible_func
+
+
+# TODO very dangerous function, check it often
 def try_ignore(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print("A small Try Ignore error", e)
-            return None
+            return
     return this_function_will_never_be_seen
 
 
@@ -238,7 +246,7 @@ def df_reindex(df):
     return df.reset_index(drop=True, inplace=False)
 
 
-def df_drop_duplicated_reindex(df, column_name):
+def df_drop_duplicated_reindex(df, column_name):  #TODO needs to be deleted
     df[column_name] = df[column_name].astype(int)
     df = df.drop_duplicates(subset=column_name)
     df = df_reindex(df)
@@ -377,19 +385,17 @@ def handle_save_exception(e, path):
         traceback.print_exc()
 
 
-def to_csv_feather(df, a_path, encoding='utf-8_sig', index=False, reset_index=True, drop=True, skip_feather=False, skip_csv=False):  # utf-8_sig
-    if reset_index:
-        df.reset_index(drop=drop, inplace=True)
+# reset index no matter what becaus of feather format. Drop index depends if index is relevant. CSV store index is always false
+def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv=False):  # utf-8_sig
+    df.reset_index(drop=(not index_relevant), inplace=True)  #reset index no matter what because feather can only store normal index. if index relevant then dont drop
     df = df.infer_objects()
-
     if not skip_csv:
         for _ in range(10):
             try:
-                df.to_csv(a_path[0], index=index, encoding=encoding)
+                df.to_csv(a_path[0], index=False, encoding='utf-8_sig')
                 break
             except Exception as e:
                 handle_save_exception(e, a_path[0])
-
     if not skip_feather:
         try:
             df.to_feather(a_path[1])
