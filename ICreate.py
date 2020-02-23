@@ -55,7 +55,7 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
 
     # oth
     period = "period"
-    # total_share = "total_share"
+    total_share = "total_share"
     total_mv = "total_mv"
     pledge_ratio = "pledge_ratio"
     vol = "vol"
@@ -231,7 +231,7 @@ def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
     add_to = LB.standard_indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": SFreq, "Sfreq2": SFreq})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
-    df[add_to] = (df[add_to].diff()).replace(0, np.nan)
+    df[add_to] = (df[add_to].diff()).fillna(0)
     return add_to
 
 
