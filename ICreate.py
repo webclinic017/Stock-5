@@ -25,11 +25,11 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
     low = "low"
     close = "close"
     pct_chg = "pct_chg"
-    oc_pct_chg = "oc_pct_chg"
+    co_pct_chg = "co_pct_chg"
     # fgain = "fgain"
     # # pgain = "pgain"
-    # pjup = "pjup"
-    # pjdown = "pjdown"
+    pjup = "pjup"
+    pjdown = "pjdown"
     ivola = "ivola"
     # cdl = "cdl"
 
@@ -38,6 +38,10 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
     pb = "pb"
     ps_ttm = "ps_ttm"
     dv_ttm = "dv_ttm"
+    total_cur_assets = "total_cur_assets"
+    total_assets = "total_assets"
+    total_cur_liab = "total_cur_liab"
+    total_liab = "total_liab"
     n_cashflow_act = "n_cashflow_act"
     n_cashflow_inv_act = "n_cashflow_inv_act"
     n_cash_flows_fnc_act = "n_cash_flows_fnc_act"
@@ -47,6 +51,7 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
     grossprofit_margin = "grossprofit_margin"
     netprofit_margin = "netprofit_margin"
     debt_to_assets = "debt_to_assets"
+    turn_days = "turn_days"
 
     # oth
     period = "period"
@@ -67,13 +72,13 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
     # std = "std"
     # min = "min"
     # max = "max"
-    corr = "corr"
+    # corr = "corr"
     # cov = "cov"
     # skew = "skew"
     # kurt = "kurt"
 
     # technical Derivation
-    rsi = "rsi"
+    #rsi = "rsi"
     # mom = "mom"
     # rocr = "rocr"
     # # ppo = "ppo" for some reason not existing in talib
@@ -93,9 +98,11 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
     # abv="abv"
     # cross="cross"
 
+
     # second level IDERI, need other functions as argument
-    trend = "trend"  # RSI CMO
-    beta = "beta"
+    # trend = "trend"  # RSI CMO
+    overma = "overma"
+    crossma = "crossma"
     # rs="rs"
     # cross over
     # divergence
@@ -220,8 +227,19 @@ def cdl(df: pd.DataFrame, ibase: str):
     return ibase
 
 
-def crossover_test(df: pd.DataFrame, ibase: str, ideri1: IDeri, ideri2: IDeri, ideri1_freq: SFreq, ideri2_freq: SFreq):
-    pass
+def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
+    add_to = LB.standard_indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": SFreq, "Sfreq2": SFreq})
+    add_column(df, add_to, ibase, 1)
+    df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
+    df[add_to] = (df[add_to].diff()).replace(0, np.nan)
+    return add_to
+
+
+def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
+    add_to = LB.standard_indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": SFreq, "Sfreq2": SFreq})
+    add_column(df, add_to, ibase, 1)
+    df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
+    return add_to
 
 
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
@@ -245,7 +263,6 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     # RSI,CMO,MOM,ROC,ROCR100,TRIX
 
     #df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
-
     for i in a_all:  # RSI 1
         try:
             if i == 1:

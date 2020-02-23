@@ -20,6 +20,8 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
             df_fgain_mean.at[ts_code, f"{fgain}_std"] = df[column].std()
             df_fgain_mean.at[ts_code, f"{fgain}_skew"] = df[column].skew()
             df_fgain_mean.at[ts_code, f"{fgain}_kurt"] = df[column].kurt()
+            for lag in [2, 20, 240]:
+                df_fgain_mean.at[ts_code, f"{fgain}_autocorr{lag}"] = df[column].autocorr(lag)
     except:
         print("wtf.should not happend TODO")
         return

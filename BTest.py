@@ -88,7 +88,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     # df_port_c add trend2,10,20,60,240
     a_current_trend_label = []
     for i in current_trend:  # do not add trend1 since it does not exist
-        a_current_trend_label.append(f"market_trend{i}")
+        a_current_trend_label.append(f"close.market.trend{i}")
     df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
 
     # tab_overview
@@ -183,7 +183,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
                     pass
 
     # split chart into pct_chg and comp_chg for easier reading
-    a_trend_label = ["market_trend" + str(x) for x in current_trend if x != 1]
+    a_trend_label = [f"close.market.trend{x}" for x in current_trend if x != 1]
     df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
@@ -192,7 +192,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), skip_feather=True)
     LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=False, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), skip_feather=True)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), index_relevant=False, skip_feather=True)
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)
@@ -242,17 +242,19 @@ def btest_once(settings=[{}]):
 
     # 0.3 PREPARATION- INITIALIZE Iterables derived from Setting
     df_trade_dates = DB.get_trade_date(start_date=start_date, end_date=end_date, freq=freq)
+    df_trade_dates["tomorrow"] = df_trade_dates.index.values
+    df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
     df_group_instance_all = DB.get_group_instance_all(assets=["E"])
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
 
     # 0.4 PREPARATION- INITIALIZE Changeables for the loop
-    a_dict_trade_h = [{df_trade_dates.at[0, "trade_date"]: {"sell": [], "hold": [], "buy": []}} for _ in settings]  # trade history for each setting
+    a_dict_trade_h = [{df_trade_dates.index[0]: {"sell": [], "hold": [], "buy": []}} for _ in settings]  # trade history for each setting
     dict_capital = {setting_count: {"cash": settings[0]["p_capital"]} for setting_count in range(0, len(settings))}  # only used in iteration, saved in trade_h
 
     # Main Loop
-    for today, tomorrow in zip(df_trade_dates["trade_date"], df_trade_dates["trade_date"].shift(-1).fillna(-1).astype(int)):
+    for today, tomorrow in zip(df_trade_dates.index, df_trade_dates["tomorrow"]):
 
         if btest_break.btest_break:
             print("BREAK loop")
@@ -539,7 +541,7 @@ def btest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20100201",
+        "start_date": "20180201",
         "end_date": LB.today(),
         "freq": "D",
         "market": "CN",
@@ -603,7 +605,7 @@ def btest_multiple(loop_indicator=1):
     for p_maxsize in [2, 12]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight1 = {  # ascending True= small, False is big
-                "trend": [False, 100, 1],  # very important for this strategy
+                "close.trend": [False, 100, 1],  # very important for this strategy
                 "pct_chg": [True, 5, 1],  # very important for this strategy
                 "pgain2": [True, 3, 1],  # very important for this strategy
                 "pgain5": [True, 2, 1],  # very important for this strategy

@@ -376,7 +376,7 @@ def handle_save_exception(e, path):
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
-            time.sleep(2)
+            time.sleep(1)
     elif type(e) == PermissionError:
         print(f"try to close {path}")
         close_file(path)
@@ -493,8 +493,8 @@ def c_sfreq():
 class SFreq(enum.Enum):
     # f1 = 1
     f2 = 2
-    f5 = 5
-    f10 = 10
+    f20 = 20
+    f240 = 240
 
 
 def c_rolling_freqs_fibonacci():

@@ -36,7 +36,7 @@ def update_general_trade_date(freq="D", market="CN", big_update=True):
 
         df = df[["trade_date"]]
         df = update_general_trade_date_stockcount(df)  # adds E,I,FD count
-        df = update_general_trade_date_seasonal_score(df, freq, market)  # adds seasonal score for each day
+        # df = update_general_trade_date_seasonal_score(df, freq, market)  # TODO adds seasonal score for each day
         LB.to_csv_feather(df, a_path, index_relevant=False)
 
 
@@ -458,27 +458,16 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
     trade_dates = get_trade_date("00000000", LB.today(), freq)
 
     # get the latest column of the asset file
-    if asset == "E":
-        code = "000001.SZ"
-    elif asset == "I":
-        code = "000001.SH"
-    else:
-        code = "150001.SZ"
-    example_df = get_asset(code, asset, freq)
-    example_column = list(example_df.columns)
+    code = "000001.SZ" if asset == "E" else "000001.SH" if asset == "I" else "150001.SZ"
+    example_column = list(get_asset(code, asset, freq).columns)
 
     # makes searching for one day in asset time series faster. BUT can only be used with step=1 and ONLY using ONE THREAD
     print("Update date preparing for setup. Please wait...")
     dict_list_date = {ts_code: list_date for ts_code, list_date in zip(df_ts_codes.index, df_ts_codes["list_date"])}
     dict_df = {ts_code: get_asset(ts_code=ts_code) for ts_code in df_ts_codes.index}
 
-    if step == 1:  # step 1 means iterate forward, -1 means iterate backwards
-        dict_lookup_table = {ts_code: 0 for ts_code, df in dict_df.items()}
-    elif step == -1:
-        dict_lookup_table = {ts_code: len(df) - 1 for ts_code, df in dict_df.items()}
-    else:
-        print("ERROR, STEP MUST BE 1 or -1.")
-        return
+    init_counter = 0 if step == 1 else -1 if step == --1 else 0
+    dict_lookup_table = {ts_code: init_counter for ts_code, df in dict_df.items()}
 
     for trade_date in trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
         a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "/" + str(trade_date))
@@ -683,7 +672,7 @@ def update_custom_index(assets=["E"], big_update=True):
     last_trade_date = get_last_trade_date("D")
     example_df = dict_group_instance_saved["asset_E"]
     try:
-        last_saved_date = example_df.at[len(example_df) - 1, "trade_date"]
+        last_saved_date = example_df.index[-1]
     except:
         last_saved_date = "19990101"
 
@@ -693,11 +682,11 @@ def update_custom_index(assets=["E"], big_update=True):
 
     # initialize trade_date
     df_trade_date = get_trade_date(end_date=today(), freq="D")
-    df_trade_date = df_trade_date[df_trade_date["trade_date"] > int(last_saved_date)]
+    df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
     print("START UPDATE GROUP since", last_saved_date)
 
     # loop over date and get mean
-    for trade_date in df_trade_date["trade_date"]:  # for each day
+    for trade_date in df_trade_date.index:  # for each day
         print(trade_date, "Updating GROUP")
         df_date = get_date(trade_date=trade_date, assets=assets, freq="D")
         for group, a_instance in c_groups_dict(assets=assets).items():  # for each group
@@ -710,7 +699,6 @@ def update_custom_index(assets=["E"], big_update=True):
         df_update = pd.DataFrame(a_update_instance)
         if not df_saved.empty:
             df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
-
         LB.to_csv_feather(df_update, LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/" + key))
         print(key, "UPDATED")
 
@@ -747,8 +735,8 @@ def get(a_path=[], set_index=""):  # if step is -1, read feather first
     try:
         df = pd.read_feather(path=a_path[1])
         if set_index:
-            if set_index == "trade_date":
-                df["trade_date"] = df["trade_date"].astype(int)
+            if set_index in ["trade_date", "cal_date", "end_date"]:
+                df[set_index] = df[set_index].astype(int)
             df.set_index(keys=set_index, drop=True, inplace=True)
         return df
     except Exception as e:
@@ -756,8 +744,8 @@ def get(a_path=[], set_index=""):  # if step is -1, read feather first
     try:
         df = pd.read_csv(filepath_or_buffer=a_path[0])
         if set_index:
-            if set_index == "trade_date":
-                df["trade_date"] = df["trade_date"].astype(int)
+            if set_index in ["trade_date", "cal_date", "end_date"]:
+                df[set_index] = df[set_index].astype(int)
             df.set_index(keys=set_index, drop=True, inplace=True)
         return df
     except Exception as e:
@@ -822,7 +810,7 @@ def get_assets_pledge_stat(ts_code, columns, market="CN"):
 def get_assets_top_holder(ts_code, columns, market="CN"):
     df = get(LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + ts_code), set_index="end_date")
     if df.empty:
-        print("Error get_assets_top_holder not exist for", ts_code, e)
+        print("Error get_assets_top_holder not exist for", ts_code)
         df = LB.empty_asset_E_top_holder()
     return df[columns]
 
@@ -920,7 +908,7 @@ def preload(load="asset", step=1, query=""):
 
     bar = tqdm(range(len(df_listing)))
     bar.set_description(f"loading {load}...")
-    for iterator, i in zip(df_listing[key], bar):
+    for iterator, i in zip(df_listing.index, bar):
         try:
             df = func(iterator)
             df = df[(df["period"] > 240)]
@@ -979,16 +967,19 @@ def update_all_in_one(big_update=False):
     #
     # # 3.2. DATE - DF
     date_step = [1, -1] if big_update else [1, -1]
-    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=date_step)  # big: smart decide - small: smart decide
+    #multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=date_step)  # big: smart decide - small: smart decide
     #
     # # 3.3. DATE - BASE
-    # update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide
+    #update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide
     #
     # # 3.4. DATE - TREND
-    # ICreate.trend(df=get_stock_market_all(), ibase="close", market_suffix="market.")  # big: override - small: override
+    df = get_stock_market_all()
+    ICreate.trend(df=df, ibase="close", market_suffix="market.")  # big: override - small: override
+    LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
+
     #
     # # 4.1. CUSTOM - INDEX
-    # update_custom_index(big_update=big_update)
+    #update_custom_index(big_update=big_update)
 
 
 # speed order=remove apply and loc, use vectorize where possible
