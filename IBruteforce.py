@@ -4,7 +4,8 @@ import pandas as pd
 import DB
 import ICreate
 import LB
-
+import random
+import traceback
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
@@ -20,9 +21,11 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
             df_fgain_mean.at[ts_code, f"{fgain}_std"] = df[column].std()
             df_fgain_mean.at[ts_code, f"{fgain}_skew"] = df[column].skew()
             df_fgain_mean.at[ts_code, f"{fgain}_kurt"] = df[column].kurt()
+            df_fgain_mean.at[ts_code, f"{fgain}_nd_pct"] = len(df[df[column].notna() | df[column] != 0.0]) / len(df)
             for lag in [2, 20, 240]:
                 df_fgain_mean.at[ts_code, f"{fgain}_autocorr{lag}"] = df[column].autocorr(lag)
-    except:
+    except Exception as e:
+        print("error", e)
         print("wtf.should not happend TODO")
         return
 
@@ -57,7 +60,8 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
 
 setting = {
     "target": "asset",  # date
-    "step": 100,  # 1 or any other integer
+    "preload_step": 10,  # 1 or any other integer
+    "sample_size": 20,  # 1 or any other integer
     "group_result": False,
     "path_general": "Market/CN/Bruteforce/result/",
     "path_result": "Market/CN/Bruteforce/",
@@ -105,7 +109,7 @@ def bruteforce_summary(folderPath, summarypath):
 
     for key, df in dict_fgain.items():
         a_path = LB.a_path(summarypath + f"{key}")
-        LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True)
+        LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True, index_relevant=False)
 
         # print(os.path.join(subFolderRoot, fileName))
 
@@ -113,7 +117,7 @@ def bruteforce_summary(folderPath, summarypath):
 
 # Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
 def bruteforce_iterate():
-    dict_df_asset = DB.preload(load=setting["target"], step=setting["step"], query="trade_date > 20050101")
+    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query="trade_date > 20050101")
 
     e_ibase = ICreate.IBase
     e_ideri = ICreate.IDeri
@@ -166,16 +170,12 @@ def bruteforce_iterate():
 
                 # for each possible asset
                 print(f"START: ibase={ibase.value} ideri={ideri.value} setting=" + str({**one_setting}))
-                for ts_code, df_asset in dict_df_asset.items():
-                    # create new derived indicator ON THE FLY
-                    df_asset_copy = df_asset.copy()  # maybe can be saved, but is risky. Copy is safer but slower
+                dict_df_asset_sample = {x: dict_df_asset[x] for x in random.sample([x for x in dict_df_asset.keys()], setting["sample_size"])}
+                for ts_code, df_asset in dict_df_asset_sample.items():
+                    # create new derived indicator ON THE FLY and Evaluate
                     print("ts_code", ts_code)
-                    if df_asset.empty:
-                        print("empty", ts_code)
+                    df_asset_copy = df_asset.copy()  # maybe can be saved, but is risky. Copy is safer but slower
                     deri_column = deri_function(df=df_asset_copy, ibase=ibase.value, **one_setting)
-
-
-                    # evaluate new derived indicator
                     bruteforce_eval_fgain(df=df_asset_copy, ts_code=ts_code, column=deri_column, dict_fgain_mean_detail=dict_fgain_mean_detail)
 
                 # save evaluated results
@@ -185,15 +185,9 @@ def bruteforce_iterate():
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
                     LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=False, skip_feather=True)
 
-        # save Summary after one columns all derivation is finished
-        # row_summary = df.mean()
-        # row_summary["bruteforce"] = f"{ibase}_corr_{key}"
-        # dict_df_summary[key] = dict_df_summary[key].append(row_summary, sort=False, ignore_index=True)
-        # Util.to_csv_feather(df=dict_df_summary[key], skip_feather=True, a_path=Util.a_path(setting["path_result"] + f"{key}_summary"))
-
 
 if __name__ == '__main__':
-    # TODO generate test file
+    # TODO generate test cases
     # USE Sound theory harmonic to find the best frequency
     # import Indicator_Create
     df = DB.get_asset()

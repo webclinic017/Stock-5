@@ -55,7 +55,7 @@ def update_general_trade_date_seasonal_score(df_trade_date, freq="D", market="CN
                 ]
 
     # transform all trade_date into different format
-    for group in a_groups:  # TODO remove applyhere
+    for group in a_groups:
         df_trade_date[group[1]] = df_trade_date["trade_date"].apply(lambda x: group[0](x)).astype(str)
         df_score_board = pd.read_excel(xls, sheet_name=group[1], converters={group[1]: lambda x: str(x)})
         df_score_board = df_score_board.fillna(0.0)  # if no information about certain period, assume the change is 0
@@ -287,7 +287,8 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
             for df_fun, fun_name in zip([df_balancesheet, df_cashflow, df_indicator, df_pledge_stat], ["bala", "cash", "indi", "pledge"]):
                 df_fun.index.name = "trade_date"
                 df_fun.index = df_fun.index.astype(int)
-                df[list(df_fun.columns)] = df_fun[list(df_fun.columns)]  # TODO merge vs loc performance
+                # df[list(df_fun.columns)] = df_fun[list(df_fun.columns)]
+                df = pd.merge(df, df_fun, how="left", on="trade_date", sort=False).set_index("trade_date")  # just added might be wrong
 
             # append old df and drop duplicates
             if not df_saved.empty:
@@ -943,7 +944,7 @@ def update_all_in_one(big_update=False):
         update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
-    multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": big_update}, a_steps=small_steps)  # SMART
+    multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
 
     # 1.3. GENERAL - TS_CODE
     for asset in c_assets():
@@ -955,19 +956,19 @@ def update_all_in_one(big_update=False):
         update_general_trade_date(freq, big_update=big_update)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
-    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": big_update}, a_steps=big_steps)  # SMART
+    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
     multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=[1])
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=middle_steps)  # big: smart decide - small: smart decide
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # big: smart decide - small: smart decide
 
     # 3.1. DATE - OTH
-    multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
+    #multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
     date_step = [1, -1] if big_update else [1, -1]
-    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": big_update}, a_steps=date_step)  # big: smart decide - small: smart decide
+    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # big: smart decide - small: smart decide
 
     # 3.3. DATE - BASE
     update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide

@@ -11,6 +11,7 @@ from datetime import datetime
 import traceback
 import copy
 import cProfile
+import operator
 import threading
 import matplotlib
 from numba import njit
@@ -158,7 +159,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
         df_port_overview[column + "_asset_weight"] = a_weight[2]
 
     # add overview for compare asset
-    for i in range(len(p_compare), len(p_compare)):  # TODO add it back when nessesary
+    for i in range(len(p_compare), len(p_compare)):
         competitor_ts_code = p_compare[i][1]
         df_port_overview.at[i + 1, "strategy"] = competitor_ts_code
         df_port_overview.at[i + 1, "pct_chg_mean"] = df_port_c["pct_chg_" + competitor_ts_code].mean()
@@ -296,7 +297,7 @@ def btest_once(settings=[{}]):
 
             # 1.1 FILTER
             a_filter = True
-            for column, a_op in setting["f_query"].items():  # very slow and expensive for small operation because parsing the string takes long
+            for column, a_op in setting["f_query_asset"].items():  # very slow and expensive for small operation because parsing the string takes long
                 print("filter", column)
                 func = a_op[0]
                 a_filter = a_filter & func(df_today[column], a_op[1])
@@ -472,10 +473,6 @@ def btest_once(settings=[{}]):
                     df_select_tomorrow["reserved_capital"] = current_capital / buyable_size
 
                 for hold_count, (ts_code, row) in enumerate(df_select_tomorrow.iterrows(), start=1):
-                    # 6.9 BUY WEIGHT: # TODO weight vs score, buy good vs buy none
-                    # if trend >0.7, add weight
-                    # the market_trend weight = portfolio/cash ratio
-
                     buy_open = row["open"]
                     buy_close = row["close"]
                     buy_pct_chg_comp_chg = buy_close / buy_open
@@ -557,7 +554,8 @@ def btest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query": {"period": [LB.c_op()["ge"], 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query_date": {},  # filter days vs filter assets
 
         "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important
@@ -615,17 +613,6 @@ def btest_multiple(loop_indicator=1):
             a_settings.append(setting_copy)
             print(setting_copy["s_weight1"])
 
-    # for f_query in ["rs_abv", "rs_und"]:
-    # for counter in [0,1,2,3,4,5,6,7]:
-    # for abv_cross in ["abv","cross"]:
-
-    # setting_copy = copy.deepcopy(setting_base)
-    # s_weight1 = {  # ascending True= small, False is big
-    #     "trend": [False, 1, 1],  # very important for this strategy
-    # }
-    # setting_copy["s_weight1"] = s_weight1
-    # a_settings.append(setting_copy)
-    # print(setting_copy["s_weight1"])
 
     print("Total Settings:", len(a_settings))
     btest_once(settings=a_settings)
@@ -638,14 +625,6 @@ if __name__ == '__main__':
         pr.enable()
 
         btest_multiple(5)
-
-        # TODO hypothesis where the bug is
-        # 1 trend reads future data
-        # 2 backtest provides future data
-        # 3 ignore log ignores data that are important
-        # 4 pgain 2 and 5 decides the small nuance for tomorrow
-        # date file aggregates wrong
-
 
         pr.disable()
         # pr.print_stats(sort='file')

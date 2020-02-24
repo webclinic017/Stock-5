@@ -83,7 +83,6 @@ def plot_autocorrelation(series):
 
 
 def standard_indi_name(ibase, deri, dict_variables={}):
-    result = f"{ibase}.{deri}"
     variables = ""
     for key, enum_val in dict_variables.items():
         if key not in ["df", "ibase"]:
@@ -93,8 +92,9 @@ def standard_indi_name(ibase, deri, dict_variables={}):
             except:
                 variables = variables + f"{key}={enum_val},"
     if variables:
-        result = result + f"({variables})"
-    return result
+        return f"{ibase}.{deri}" + f"({variables})"
+    else:
+        return f"{ibase}.{deri}"
 
 def fibonacci(n):
     if n < 0:

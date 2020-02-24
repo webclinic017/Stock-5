@@ -147,7 +147,6 @@ def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
-# TODO test jump up with different gap threshhold
 
 
 def oc_pct_chg(df: pd.DataFrame):
@@ -157,7 +156,7 @@ def oc_pct_chg(df: pd.DataFrame):
     return add_to
 
 
-def pjup(df: pd.DataFrame):
+def pjup(df: pd.DataFrame):  # TODO test if 2 pct gap is better
     add_to = "pjup"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
@@ -228,7 +227,7 @@ def cdl(df: pd.DataFrame, ibase: str):
 
 
 def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.standard_indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": SFreq, "Sfreq2": SFreq})
+    add_to = LB.standard_indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     df[add_to] = (df[add_to].diff()).fillna(0)
@@ -236,7 +235,7 @@ def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
 
 
 def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.standard_indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": SFreq, "Sfreq2": SFreq})
+    add_to = LB.standard_indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
@@ -293,6 +292,7 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
 
         # fill na based on the trigger points. bfill makes no sense here
         df[trendfreq_name].fillna(method='ffill', inplace=True)
+        #TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
 
     # remove RSI and phase Columns to make it cleaner
     a_remove = []
@@ -592,10 +592,6 @@ def trendtest():
 
         
 if __name__ == '__main__':
-    # TODO test jump up with different gap threshhold
-    # TODO Try to get trend better with only catching the phase 1 and not phase 3. need some differatiating between phase
-    # TODO make a statistical test to see if phase 1 is really better
-    # TODO E.G fgain if all phases are strict 1.
     #trendtest()
 
     # cross over brute force
