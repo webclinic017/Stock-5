@@ -948,33 +948,33 @@ def update_all_in_one(big_update=False):
 
     # 1.3. GENERAL - TS_CODE
     for asset in c_assets():
-        update_general_ts_code(asset, big_update=big_update)  # ALWAYS UPDATE
+        update_general_ts_code(asset)  # ALWAYS UPDATE
     update_general_ts_code_all()
 
     # 1.5. GENERAL - TRADE_DATE
     for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
-        update_general_trade_date(freq, big_update=big_update)  # ALWAYS UPDATE
+        update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
     multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
     multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # big: smart decide - small: smart decide
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
 
     # 3.1. DATE - OTH
     #multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
     date_step = [1, -1] if big_update else [1, -1]
-    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # big: smart decide - small: smart decide
+    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
 
     # 3.3. DATE - BASE
-    update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # big: override - small: smart decide
+    update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
 
     # 3.4. DATE - TREND
-    df = get_stock_market_all()
+    df = get_stock_market_all()  # ALWAS
     ICreate.trend(df=df, ibase="close", market_suffix="market.")  # big: override - small: override
     LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
 
