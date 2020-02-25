@@ -12,18 +12,29 @@ pd.options.mode.chained_assignment = None  # default='warn'
 # evaluate a columns agains fgain in various aspects
 def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
     dict_ts_code_mean = {}
+    df[column] = df[column].astype(float)
     try:
+        std = df[column].std()
+        skew = df[column].skew()
+        kurt = df[column].kurt()
+        nd_pct = len(df[df[column].isna() | df[column] != 0.0]) / len(df)
+        autocorr2 = df[column].autocorr(2)
+        autocorr20 = df[column].autocorr(20)
+        autocorr240 = df[column].autocorr(240)
+
         for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
             # general ts_code pgain
             df_fgain_mean.at[ts_code, fgain] = dict_ts_code_mean[fgain] = df[fgain].mean()
             # general ts_code pearson with fgain
             df_fgain_mean.at[ts_code, f"{fgain}_pearson"] = df[column].corr(df[fgain], method="pearson")
-            df_fgain_mean.at[ts_code, f"{fgain}_std"] = df[column].std()
-            df_fgain_mean.at[ts_code, f"{fgain}_skew"] = df[column].skew()
-            df_fgain_mean.at[ts_code, f"{fgain}_kurt"] = df[column].kurt()
-            df_fgain_mean.at[ts_code, f"{fgain}_nd_pct"] = len(df[df[column].notna() | df[column] != 0.0]) / len(df)
-            for lag in [2, 20, 240]:
-                df_fgain_mean.at[ts_code, f"{fgain}_autocorr{lag}"] = df[column].autocorr(lag)
+            # other overview
+            df_fgain_mean.at[ts_code, f"std"] = std
+            df_fgain_mean.at[ts_code, f"skew"] = skew
+            df_fgain_mean.at[ts_code, f"kurt"] = kurt
+            df_fgain_mean.at[ts_code, f"nd_pct"] = nd_pct
+            df_fgain_mean.at[ts_code, f"autocorr2"] = autocorr2
+            df_fgain_mean.at[ts_code, f"autocorr20"] = autocorr20
+            df_fgain_mean.at[ts_code, f"autocorr240"] = autocorr240
     except Exception as e:
         print("error", e)
         print("wtf.should not happend TODO")
@@ -36,11 +47,12 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
             low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
             df_percentile = df[df[column].between(low_val, high_val)]
             for fgain, df_fgain_mean in dict_fgain_mean_detail.items():
-                df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] = df_percentile[fgain].mean() / dict_ts_code_mean[fgain]
+                value = df_percentile[fgain].mean() / dict_ts_code_mean[fgain]
+                df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] = value
     except:
         print("Quantile did not work")
 
-    # evaluate after occurence bins
+    # evaluate after occurence bins. Bins are able to catch 1 and 0 values, while quantile can not distinct between them
     try:
         o_setting = 4
         s_occurence = df[column].value_counts(bins=o_setting)
@@ -60,8 +72,8 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_mean_detail):
 
 setting = {
     "target": "asset",  # date
-    "preload_step": 10,  # 1 or any other integer
-    "sample_size": 20,  # 1 or any other integer
+    "preload_step": 5,  # 1 or any other integer
+    "sample_size": 500,  # 1 or any other integer
     "group_result": False,
     "path_general": "Market/CN/Bruteforce/result/",
     "path_result": "Market/CN/Bruteforce/",
@@ -110,8 +122,6 @@ def bruteforce_summary(folderPath, summarypath):
     for key, df in dict_fgain.items():
         a_path = LB.a_path(summarypath + f"{key}")
         LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True, index_relevant=False)
-
-        # print(os.path.join(subFolderRoot, fileName))
 
 
 
@@ -183,11 +193,13 @@ def bruteforce_iterate():
                     df.index.name = "ts_code"
                     path = setting["path_general"] + f"{ibase_name}/{ideri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_{key}"
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
-                    LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=False, skip_feather=True)
+                    LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=True, skip_feather=True)
 
 
 if __name__ == '__main__':
     # TODO generate test cases
+
+    # Pjup 1-4 mean fgain 2 is 1.3%, 5-7 mean fgain is 2.2%
     # USE Sound theory harmonic to find the best frequency
     # import Indicator_Create
     df = DB.get_asset()

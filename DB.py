@@ -287,8 +287,8 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
             for df_fun, fun_name in zip([df_balancesheet, df_cashflow, df_indicator, df_pledge_stat], ["bala", "cash", "indi", "pledge"]):
                 df_fun.index.name = "trade_date"
                 df_fun.index = df_fun.index.astype(int)
-                # df[list(df_fun.columns)] = df_fun[list(df_fun.columns)]
-                df = pd.merge(df, df_fun, how="left", on="trade_date", sort=False).set_index("trade_date")  # just added might be wrong
+                df[list(df_fun.columns)] = df_fun[list(df_fun.columns)]
+                # df = pd.merge(df, df_fun, how="left", on="trade_date", sort=False).set_index("trade_date")  # just added might be wrong
 
             # append old df and drop duplicates
             if not df_saved.empty:
@@ -326,13 +326,16 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
         # 3. add my derivative indices and save it
         if not df.empty:
-            update_assets_EIFD_D_technical(df=df, df_saved=df_saved, asset=asset)
+            update_assets_EIFD_D_technical(df=df, asset=asset)
         LB.to_csv_feather(df=df, a_path=a_path)
         print(asset, ts_code, freq, end_date, "UPDATED!", real_latest_trade_date)
 
 
 # For all Pri indices and derivates. ordered after FILO
-def update_assets_EIFD_D_technical(df, df_saved, asset="E", bfreq=c_bfreq()):
+def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
+    ICreate.pct_chg_close(df=df)  # 0.890578031539917 for 300 loop
+    ICreate.pct_chg_open(df=df)  # 0.890578031539917 for 300 loop
+
     for rolling_freq in bfreq[::-1]:
         ICreate.pgain(df=df, freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
     for rolling_freq in bfreq[::-1]:
@@ -341,19 +344,14 @@ def update_assets_EIFD_D_technical(df, df_saved, asset="E", bfreq=c_bfreq()):
     ICreate.period(df=df)  # 0.2 for 300 loop
     ICreate.pjup(df=df)  # 1.0798187255859375 for 300 loop
     ICreate.pjdown(df=df)  # 1.05 independend for 300 loop
-    ICreate.oc_pct_chg(df=df)
-    try:
-        ICreate.rsi(df=df, ibase="dv_ttm", freq=BFreq.f240)
-    except Exception as e:
-        sound("error.mp3")
-        print("error", e)
-        return
+    ICreate.co_pct_chg(df=df)
+
     # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
     if asset == "E":  # else sh_index will try to get corr wit himself during update
         ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f5, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
         ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f10, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
     # add trend for individual stocks
-    ICreate.trend(df=df, ibase="close")
+    # ICreate.trend(df=df, ibase="close")
     # df = support_resistance_horizontal(df_asset=df)
 
 
@@ -467,8 +465,12 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
     dict_list_date = {ts_code: list_date for ts_code, list_date in zip(df_ts_codes.index, df_ts_codes["list_date"])}
     dict_df = {ts_code: get_asset(ts_code=ts_code) for ts_code in df_ts_codes.index}
 
-    init_counter = 0 if step == 1 else -1 if step == --1 else 0
-    dict_lookup_table = {ts_code: init_counter for ts_code, df in dict_df.items()}
+    if step == 1:
+        dict_lookup_table = {ts_code: 0 for ts_code, df in dict_df.items()}
+    elif step == -1:
+        dict_lookup_table = {ts_code: len(df) - 1 for ts_code, df in dict_df.items()}
+    else:
+        return print("error Step msut be 1 or -1")
 
     for trade_date in trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
         a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "/" + str(trade_date))
@@ -495,24 +497,17 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
                 if int(list_date) > int(trade_date):
                     continue
 
+
                 row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
                 try:
                     if int(df_asset.index[row_number]) == int(trade_date):
-                        # a_date.append(df_asset.loc[[row_number]])#.to_numpy().flatten()
-                        # a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
-                        a_date.append(df_asset.loc[trade_date])
+                        a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
                         dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
                 except Exception as e:
                     print("except",e)
                     continue
 
             df_date = pd.DataFrame(data=a_date, columns=example_column)
-            try:  # TODO some bug, ideally remove this step here
-                df_date["dv_ttm.rsi(timeperiod=240,)"] = pd.to_numeric(df_date["dv_ttm.rsi(timeperiod=240,)"])
-            except Exception as e:
-                print("type is ", (df_date["dv_ttm.rsi(timeperiod=240,)"].dtype))
-                print("type is ", (df_date["dv_ttm.rsi(timeperiod=240,)"]))
-                print("date error",e)
             df_date.insert(loc=0, column='trade_date', value=int(trade_date))
             df_date = pd.merge(df_date, df_ts_codes, how='left', on=["ts_code"], suffixes=[False, False], sort=False).set_index("ts_code")
             LB.to_csv_feather(df_date, a_path)
@@ -904,7 +899,6 @@ def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", mark
 def preload(load="asset", step=1, query=""):
     dict_result = {}
     df_listing = get_ts_code()[::step] if load == "asset" else get_trade_date(start_date="20000101")[::step]
-    key = "ts_code" if load == "asset" else "trade_date"
     func = get_asset if load == "asset" else get_date
 
     bar = tqdm(range(len(df_listing)))
@@ -944,42 +938,42 @@ def update_all_in_one(big_update=False):
         update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
-    multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
+    #multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
 
     # 1.3. GENERAL - TS_CODE
-    for asset in c_assets():
-        update_general_ts_code(asset)  # ALWAYS UPDATE
-    update_general_ts_code_all()
-
-    # 1.5. GENERAL - TRADE_DATE
-    for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
-        update_general_trade_date(freq)  # ALWAYS UPDATE
+    # for asset in c_assets():
+    #     update_general_ts_code(asset)  # ALWAYS UPDATE
+    # update_general_ts_code_all()
+    #
+    # # 1.5. GENERAL - TRADE_DATE
+    # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
+    #     update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
-    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
-    multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
+    # multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
+    #multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
+    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
 
     # 3.1. DATE - OTH
     #multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
-    date_step = [1, -1] if big_update else [1, -1]
+    date_step = [-1, 1] if big_update else [-1, 1]
     multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
 
     # 3.3. DATE - BASE
     update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
-
-    # 3.4. DATE - TREND
-    df = get_stock_market_all()  # ALWAS
-    ICreate.trend(df=df, ibase="close", market_suffix="market.")  # big: override - small: override
-    LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
-
-    # 4.1. CUSTOM - INDEX
-    update_custom_index(big_update=big_update)
+    #
+    # # 3.4. DATE - TREND
+    # df = get_stock_market_all()  # ALWAS
+    # ICreate.trend(df=df, ibase="close", market_suffix="market.")  # big: override - small: override
+    # LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
+    #
+    # # 4.1. CUSTOM - INDEX
+    # update_custom_index(big_update=big_update)
 
 
 # speed order=remove apply and loc, use vectorize where possible
@@ -992,7 +986,7 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
-        big_update = True
+        big_update = False
         update_all_in_one(big_update=big_update)
         # TODO add update ts_code back and update it make it fastr
 

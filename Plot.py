@@ -81,6 +81,6 @@ def support_resistance_plot_multiple(step=1):
     #                         for delay in [1, 3, 5, 10, 20]:
 
 if __name__ == '__main__':
-    # create_gif(ts_code="000001.SZ")
+    create_gif(ts_code="test")
     # support_resistance_multiple()
     pass

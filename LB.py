@@ -12,6 +12,8 @@ import math
 from win32com.client import Dispatch
 import traceback
 import API_Tushare
+from pandas.plotting import autocorrelation_plot
+import matplotlib.pyplot as plt
 import atexit
 from time import time, strftime, localtime
 import inspect
@@ -76,11 +78,53 @@ def today():
 
 
 def plot_autocorrelation(series):
-    from pandas.plotting import autocorrelation_plot
-    from matplotlib import pyplot
-    autocorrelation_plot(series)
-    pyplot.show()
+    autocorrelation_plot(series.dropna())
+    plt.show()
 
+
+def plot_chart(df, columns):
+    df = df.copy()
+    df = df[columns]
+    df.reset_index(inplace=True, drop=True)
+    df.plot(legend=True)
+    plt.show()
+    plt.close()
+
+
+def func(df, degree=1, column="close"):
+    s_index = df[column].index
+    y = df[column]
+    weights = np.polyfit(s_index, y, degree)
+    data = pd.Series(index=s_index, data=0)
+    for i, polynom in enumerate(weights):
+        pdegree = degree - i
+        data = data + (polynom * (s_index ** pdegree))
+    return data
+
+
+def plot_polynomials():
+    import DB
+    df_asset = DB.get_asset(ts_code="000938.SZ")
+    df_asset = df_asset.reset_index()
+    window = 265
+    step = 5
+    for i in range(0, 6000, step):
+        df = df_asset[i:i + window]
+        trade_date = df_asset.at[i, "trade_date"]
+
+        df["poly1"] = func(df=df, degree=1, column="close")
+        df["poly2"] = func(df=df, degree=2, column="close")
+        df["poly3"] = func(df=df, degree=3, column="close")
+        df["poly4"] = func(df=df, degree=4, column="close")
+        df["poly5"] = func(df=df, degree=5, column="close")
+        df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
+        df.reset_index(inplace=True, drop=True)
+        newpath = f"Media/Plot/stock/000938.SZ/"
+        if not os.path.exists(newpath):
+            os.makedirs(newpath)
+        plt.savefig(newpath + f"{trade_date}.jpg")
+        df.plot(legend=True)
+    plt.close()
 
 def standard_indi_name(ibase, deri, dict_variables={}):
     variables = ""

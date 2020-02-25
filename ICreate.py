@@ -20,65 +20,65 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 # BOTTLE NECK modify here
 class IBase(enum.Enum):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
-    open = "open"
-    high = "high"
-    low = "low"
-    close = "close"
-    pct_chg = "pct_chg"
-    co_pct_chg = "co_pct_chg"
+    # open = "open"
+    # high = "high"
+    # low = "low"
+    # close = "close"
+    # pct_chg = "pct_chg"
+    # co_pct_chg = "co_pct_chg"
     # fgain = "fgain"
     # # pgain = "pgain"
     pjup = "pjup"
     pjdown = "pjdown"
-    ivola = "ivola"
+    # ivola = "ivola"
     # cdl = "cdl"
 
     # fun
-    pe_ttm = "pe_ttm"
-    pb = "pb"
-    ps_ttm = "ps_ttm"
-    dv_ttm = "dv_ttm"
-    total_cur_assets = "total_cur_assets"
-    total_assets = "total_assets"
-    total_cur_liab = "total_cur_liab"
-    total_liab = "total_liab"
-    n_cashflow_act = "n_cashflow_act"
-    n_cashflow_inv_act = "n_cashflow_inv_act"
-    n_cash_flows_fnc_act = "n_cash_flows_fnc_act"
-    profit_dedt = "profit_dedt"
-    netprofit_yoy = "netprofit_yoy"
-    or_yoy = "or_yoy"
-    grossprofit_margin = "grossprofit_margin"
-    netprofit_margin = "netprofit_margin"
-    debt_to_assets = "debt_to_assets"
-    turn_days = "turn_days"
-
-    # oth
-    period = "period"
-    total_share = "total_share"
-    total_mv = "total_mv"
-    pledge_ratio = "pledge_ratio"
-    vol = "vol"
-    turnover_rate = "turnover_rate"
+    # pe_ttm = "pe_ttm"
+    # pb = "pb"
+    # ps_ttm = "ps_ttm"
+    # dv_ttm = "dv_ttm"
+    # total_cur_assets = "total_cur_assets"
+    # total_assets = "total_assets"
+    # total_cur_liab = "total_cur_liab"
+    # total_liab = "total_liab"
+    # n_cashflow_act = "n_cashflow_act"
+    # n_cashflow_inv_act = "n_cashflow_inv_act"
+    # n_cash_flows_fnc_act = "n_cash_flows_fnc_act"
+    # profit_dedt = "profit_dedt"
+    # netprofit_yoy = "netprofit_yoy"
+    # or_yoy = "or_yoy"
+    # grossprofit_margin = "grossprofit_margin"
+    # netprofit_margin = "netprofit_margin"
+    # debt_to_assets = "debt_to_assets"
+    # turn_days = "turn_days"
+    #
+    # # oth
+    # period = "period"
+    # total_share = "total_share"
+    # total_mv = "total_mv"
+    # pledge_ratio = "pledge_ratio"
+    # vol = "vol"
+    # turnover_rate = "turnover_rate"
 
 
 class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no other IDeri
-    # create = "create"
-    # count = "count"
-    # sum = "sum"
-    # mean = "mean"
-    # median = "median"
-    # var = "var"
-    # std = "std"
-    # min = "min"
-    # max = "max"
-    # corr = "corr"
-    # cov = "cov"
-    # skew = "skew"
-    # kurt = "kurt"
+    create = "create"
+    count = "count"
+    sum = "sum"
+    mean = "mean"
+    median = "median"
+    var = "var"
+    std = "std"
+    min = "min"
+    max = "max"
+    corr = "corr"
+    cov = "cov"
+    skew = "skew"
+    kurt = "kurt"
 
     # technical Derivation
-    #rsi = "rsi"
+    rsi = "rsi"
     # mom = "mom"
     # rocr = "rocr"
     # # ppo = "ppo" for some reason not existing in talib
@@ -100,13 +100,12 @@ class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no 
 
 
     # second level IDERI, need other functions as argument
-    # trend = "trend"  # RSI CMO
+    trend = "trend"  # RSI CMO
     overma = "overma"
     crossma = "crossma"
     # rs="rs"
     # cross over
     # divergence
-    #overma
 
 # clip,autocorr,cummax
 def get_func(name: str):
@@ -123,11 +122,37 @@ class RE(enum.Enum):
     r = "r"
     e = "e"
 
+
+class Gain(enum.Enum):
+    g1 = 1
+    g2 = 2
+    g3 = 3
+    g4 = 4
+    g5 = 5
+    g6 = 6
+    g7 = 7
+    g8 = 8
+    g9 = 9
+    g10 = 10
+
+
+class Lose(enum.Enum):
+    l1 = -1
+    l2 = -2
+    l3 = -3
+    l4 = -4
+    l5 = -5
+    l6 = -6
+    l7 = -7
+    l8 = -8
+    l9 = -9
+    l10 = -10
+
+
 def open(df: pd.DataFrame, ibase: str): return ibase
 def high(df: pd.DataFrame, ibase: str): return ibase
 def close(df: pd.DataFrame, ibase: str): return ibase
 def low(df: pd.DataFrame, ibase: str): return ibase
-def pct_chg(df: pd.DataFrame, ibase: str): return ibase
 def pe_ttm(df: pd.DataFrame, ibase: str): return ibase
 def pb(df: pd.DataFrame, ibase: str): return ibase
 def ps_ttm(df: pd.DataFrame, ibase: str): return ibase
@@ -141,63 +166,97 @@ def or_yoy(df: pd.DataFrame, ibase: str): return ibase
 def grossprofit_margin(df: pd.DataFrame, ibase: str): return ibase
 def netprofit_margin(df: pd.DataFrame, ibase: str): return ibase
 def debt_to_assets(df: pd.DataFrame, ibase: str): return ibase
+
+
+def total_cur_assets(df: pd.DataFrame, ibase: str): return ibase
+
+
+def total_assets(df: pd.DataFrame, ibase: str): return ibase
+
+
+def total_cur_liab(df: pd.DataFrame, ibase: str): return ibase
+
+
+def total_liab(df: pd.DataFrame, ibase: str): return ibase
+
+
+def turn_days(df: pd.DataFrame, ibase: str): return ibase
+
+
+def total_share(df: pd.DataFrame, ibase: str): return ibase
 def total_mv(df: pd.DataFrame, ibase: str): return ibase
 def vol(df: pd.DataFrame, ibase: str): return ibase
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
-
-
-def oc_pct_chg(df: pd.DataFrame):
+def co_pct_chg(df: pd.DataFrame, ibase: str = "co_pct_chg"):
     add_to = "co_pct_chg"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = (df["open"] / df["close"].shift(1))
     return add_to
 
 
-def pjup(df: pd.DataFrame):  # TODO test if 2 pct gap is better
+def pjup(df: pd.DataFrame, ibase: str = "pjup", gain: Gain = Gain.g2):  # TODO test if 2 pct gap is better
     add_to = "pjup"
     add_column(df, add_to, "pct_chg", 1)
-    df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
+    df[add_to] = 0
+    df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= gain.value)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return add_to
 
 
-def pjdown(df: pd.DataFrame):
+def pjdown(df: pd.DataFrame, ibase: str = "pjdown", lose: Lose = Lose.l2):
     add_to = "pjdown"
     add_column(df, add_to, "pct_chg", 1)
-    df[add_to] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -2)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
+    df[add_to] = 0
+    df[add_to] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= lose.value)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
     return add_to
 
 
-def period(df: pd.DataFrame):
+def period(df: pd.DataFrame, ibase: str = "period"):
     add_to = "period"
     add_column(df, add_to, "ts_code", 1)
     df[add_to] = (range(1, len(df.index) + 1))
     return add_to
 
 
-def ivola(df: pd.DataFrame):
+def ivola(df: pd.DataFrame, ibase: str = "ivola"):
     add_to = "ivola"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
     return add_to
 
 
-def pgain(df: pd.DataFrame, freq: BFreq):
-    add_to = f"pgain{freq}"
-    add_column(df, add_to, "pct_chg", 1)
-    # df[add_to+"test"] = (1 + (df["pct_chg"] / 100)).rolling(rolling_freq).apply(pd.Series.prod, raw=False)
-    try:
-        df[add_to] = quick_rolling_prod((1 + (df["pct_chg"] / 100)).to_numpy(), freq)
-    except:
+def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
+    add_to = f"{ibase}.pgain{freq}"
+    add_column(df, add_to, f"pct_chg_{ibase}", 1)
+    try:  # could just use pd.Series.pct_change with periods here
+        # df[add_to] = quick_rolling_prod((1 + (df["pct_chg"] / 100)).to_numpy(), freq)
+        df[add_to] = df[ibase].pct_change(periods=freq)
+    except Exception as e:
+        print("error", e)
         df[add_to] = np.nan
     return add_to
 
-def fgain(df: pd.DataFrame, freq: BFreq):
-    add_to = f"fgain{freq}"
+
+def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
+    add_to = f"{ibase}.fgain{freq}"
+    add_column(df, add_to, f"pct_chg_{ibase}", 1)
+    df[add_to] = df[f"{ibase}.pgain{freq}"].shift(int(-freq))
+    return add_to
+
+
+def pct_chg_close(df: pd.DataFrame, ibase: str = "pct_chg_close"):
+    add_to = f"pct_chg_close"
+    add_column(df, add_to, "close", 1)
+    df[add_to] = (1 + df["close"].pct_change())
+    return add_to
+
+
+def pct_chg_open(df: pd.DataFrame, ibase: str = "pct_chg_open"):
+    add_to = f"pct_chg_open"
     add_column(df, add_to, "pct_chg", 1)
-    df[add_to] = df[f"pgain{freq}"].shift(int(-freq))
+    df[add_to] = (1 + df["open"].pct_change())
     return add_to
 
 def cdl(df: pd.DataFrame, ibase: str):
@@ -593,7 +652,7 @@ def trendtest():
         
 if __name__ == '__main__':
     #trendtest()
-
+    # TODO stock pct_chg open higher or pct_chg close higher?
     # cross over brute force
     # define all main deri function. scale it if nessesary
     # define second cross option: ibase:str, deri, variable

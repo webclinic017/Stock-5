@@ -530,7 +530,7 @@ def btest_once(settings=[{}]):
     path = LB.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
     df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
-    LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True)
+    LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
 
 
 def btest_multiple(loop_indicator=1):
@@ -600,13 +600,10 @@ def btest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for p_maxsize in [2, 12]:
+    for p_maxsize in [12]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight1 = {  # ascending True= small, False is big
-                "close.trend": [False, 100, 1],  # very important for this strategy
-                "pct_chg": [True, 5, 1],  # very important for this strategy
-                "pgain2": [True, 3, 1],  # very important for this strategy
-                "pgain5": [True, 2, 1],  # very important for this strategy
+                "dv_ttm.rsi(timeperiod=240,)": [False, 1, 1],
             }
             setting_copy["s_weight1"] = s_weight1
             setting_copy["p_maxsize"] = p_maxsize
