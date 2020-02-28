@@ -699,7 +699,7 @@ def update_custom_index(assets=["E"], big_update=True):
         print(key, "UPDATED")
 
 
-def ts_code_series_to_excel(df_ts_code, path, sort=["column_name", True], asset=["E"], group_result=True):
+def ts_code_series_to_excel(df_ts_code, path, sort: list = ["column_name", True], asset=["I", "E", "FD"], group_result=True):
     df_ts_code = add_static_data(df_ts_code, assets=asset)
     dict_df = {"Overview": df_ts_code}
 
@@ -713,8 +713,8 @@ def ts_code_series_to_excel(df_ts_code, path, sort=["column_name", True], asset=
                 if sort:
                     df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
                 dict_df[group_column] = df_group
-            except:
-                pass
+            except Exception as e:
+                print("error in group results", e)
     LB.to_excel(path_excel=path, dict_df=dict_df)
 
 
@@ -874,7 +874,8 @@ def add_static_data(df, assets=["E", "I", "FD"], market="CN"):
     df_result = pd.DataFrame()
     for asset in assets:
         df_asset = get_ts_code(asset)
-        df_result = df_result.append(df_asset, sort=False, ignore_index=True)
+        df_result = df_result.append(df_asset, sort=False, ignore_index=False)
+    df.index.name = "ts_code"  # important, otherwise merge will fail
     return pd.merge(df, df_result, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
 
@@ -998,3 +999,12 @@ if __name__ == '__main__':
         LB.sound("error.mp3")
     pr.disable()
     # pr.print_stats(sort='file')
+
+# slice
+# a[-1]    # last item in the array
+# a[-2:]   # last two items in the array
+# a[:-2]   # everything except the last two items
+# a[::-1]    # all items in the array, reversed
+# a[1::-1]   # the first two items, reversed
+# a[:-3:-1]  # the last two items, reversed
+# a[-3::-1]  # everything except the last two items, reversed

@@ -283,83 +283,36 @@ def asset_volatility(start_date, end_date, assets, freq):
     DB.ts_code_series_to_excel(df_result, path=path, sort=["final_volatility_rank", True], asset=assets)
 
 
-# measures the result of a stock
-# works for multiple assets, like assets=["E","FD","I"]
-def asset_bullishness(start_date, end_date, assets, freq):
-    a_result = []
-    for asset in assets:
-        ts_codes = DB.get_ts_code(asset)
+# measures the overall bullishness ofa an asset
+def geometric_mean():
+    from scipy.stats import gmean
+    df_ts_code = DB.get_ts_code_all()
+    df_result = pd.DataFrame()
 
-        for ts_code in ts_codes.ts_code:
-            print("start appending to asset_bullishness", ts_code, asset, freq)
+    for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
+        print("ts_code", ts_code)
+        df_asset = DB.get_asset(ts_code=ts_code, asset=asset)
 
-            # get asset
-            df_asset = DB.get_asset(ts_code, asset, freq)
-            df_asset = df_asset[df_asset["trade_date"].between(int(start_date), int(end_date))]
+        df_result.at[ts_code, "period"] = len(df_asset)
+        try:
+            df_asset = df_asset[(df_asset["period"] > 240)]
+        except:
+            continue
 
-            if df_asset.empty:
-                continue
-            df_asset = LB.df_reindex(df_asset)
+        if len(df_asset) > 100:
+            # assed gained from lifetime
+            df_result.at[ts_code, "comp_gain"] = df_asset["close"].iat[len(df_asset) - 1] / df_asset["close"].iat[0]
 
-            # comp_gain
-            asset_first_period_open = df_asset.open.loc[df_asset.open.first_valid_index()]
-            asset_last_period_close = df_asset.at[len(df_asset) - 1, "close"]
-            asset_period_comp_gain = round(asset_last_period_close / asset_first_period_open, 2)
+            # transforms geometric mean to 1.01 form without 0.
+            helper = 1 + (df_asset["pct_chg"] / 100)
+            gmean_result = gmean(helper)
 
-            # get all label
-            close_abv_m_label_list = [s for s in df_asset.columns if "close_abv_m" in s]
-            df_asset = df_asset[["ts_code", "period", "total_mv", "beta240sh", "pct_chg"] + close_abv_m_label_list]
+            # calculate the average geo mean = the higher the pct_chg geometric mean the better
+            df_result.at[ts_code, "geomean"] = gmean_result
 
-            # calc reduced result
-            period = df_asset.at[len(df_asset) - 1, "period"]
-            beta240sh = df_asset["beta240sh"].mean()
-            total_mv = df_asset["total_mv"].mean()
-            pct_chg = df_asset["pct_chg"].mean()
-
-            close_abv_m_result_list = [df_asset[label].mean() for label in close_abv_m_label_list]
-            df_asset_reduced = [ts_code, period, total_mv, beta240sh, pct_chg] + close_abv_m_result_list + [asset_period_comp_gain]
-            a_result.append(list(df_asset_reduced))
-
-    # create tab Asset View
-    # df_result=pd.DataFrame(a_result,columns=["asset"]+list(df_asset.columns)+["comp_gain"])
-    df_result = pd.DataFrame(a_result, columns=["ts_code", "period", "total_mv", "beta240sh", "pct_chg", "close_abv_m5", "close_abv_m20", "close_abv_m60", "close_abv_m240"] + ["comp_gain"])
-
-    # final score is based on three scores:
-    # 1. normal_score: the longer it can hold above ma the better: per period
-    # score the HIGHER the better,rank the LOWER the better
-    # normalized from 0 to 1, with 0.5 being median
-    df_result["normal_score"] = sum([df_result[label] for label in close_abv_m_label_list]) / len(close_abv_m_label_list)
-    df_result["normal_rank"] = df_result["normal_score"].rank(ascending=False)
-
-    # 2. sustained_score: the longer a company can perform good, the better it is:
-    # score the HIGHER the better,rank the LOWER the better
-    # normalized from -0.5*sqrt(period) to 0.5*sqrt(period)
-    df_result["sustained_score"] = (df_result["normal_score"] - 0.5) * np.sqrt(df_result['period'])
-    df_result["sustained_rank"] = df_result["sustained_score"].rank(ascending=False)
-
-    # 3. efficiency_score: The quicker a company can gain return, the better: per period
-    # score the HIGHER the better,rank the LOWER the better
-    # normalized from
-    df_result["efficiency_score"] = (df_result["comp_gain"] - 1) / df_result["period"]
-    df_result["efficiency_rank"] = df_result["efficiency_score"].rank(ascending=False)
-
-    # combine into final score
-    # score the HIGHER the better,rank the LOWER the better
-    df_result["final_bullishness_rank"] = df_result["normal_rank"] * 0.55 + df_result["sustained_rank"] * 0.15 + df_result["efficiency_rank"] * 0.30
-    df_result["final_bullishness_rank"] = df_result["final_bullishness_rank"].rank(ascending=True)  # not nessesary but makes the ranks all integer, looks better
-
-    # df_result["calculated_beta"]=
-    # add beta for reading
-
-    print("df_result,len", len(df_result))
-    # add static data and sort by final rank, only if there is one asset
-
-    df_result = DB.add_static_data(df_result, assets)
-    df_result.sort_values(by=["final_bullishness_rank"], ascending=True, inplace=True)
-
-    path = "Market/" + "CN" + "/Backtest_Single/" + "bullishness" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
-    DB.ts_code_series_to_excel(df_result, path=path, sort=["final_bullishness_rank", True], asset=assets)
-
+            # calculate the time weight geo mean = former + the longer the a company can do this the better
+            df_result.at[ts_code, "time_geomean"] = gmean_result * len(df_asset)
+    DB.ts_code_series_to_excel(df_ts_code=df_result, sort=["geomean", False], path="bullishness.xlsx", group_result=True)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):

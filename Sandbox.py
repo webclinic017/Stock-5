@@ -7,6 +7,8 @@ import DB
 # set global variable flag
 from ICreate import *
 import builtins as bi
+import Plot
+from scipy.stats import gmean
 
 
 def plot_autocorr():
@@ -290,106 +292,453 @@ def rsi_abv_under_test():
     df_result.to_csv("price over ma3.csv")
 
 
-def simulate_trade_basedon_rsi():
-    df = DB.get_asset()
-    df = df[df.index > 20030101]
-    df["tomorrow"] = df["open"].shift(-2) / df["open"].shift(-1)
-    start_date = 20160101
-    df_trading_result = df.copy()
-    df_trading_result = df_trading_result[df_trading_result.index > start_date]
-    df_trading_result["score"] = 0.0
-    df_past_rsi_table = pd.DataFrame()
-    df_today_rsi = pd.DataFrame()
-    all = [3, 5, 10, 20, 120, 260, 520]
+def sim_no_bins_multiple():
+    def sim_no_bins_once(df_result, ts_code):
+        # create target freq and target period
+        for target in all_target:
+            df_result[f"tomorrow{target}"] = df_result["open"].shift(-target) / df_result["open"].shift(-1)
 
-    start_date = 20180101
-    for trade_date in df.index[::2]:
-        print("trade_date", trade_date)
-        if trade_date < start_date:
+        # pre calculate all rsi
+        for column in all_column:
+            for freq in all_freq:
+                df_result[f"{column}.rsi{freq}"] = talib.RSI(df_result[column], timeperiod=freq)
+
+        # go through each day and measure similarity
+        for trade_date in df_result.index:
+            if trade_date < start_date:
+                continue
+
+            # df_yesterday = df_result.loc[(df_result.index < trade_date)]
+            trade_date_index_loc_minus_past = df_result.index.get_loc(trade_date) - 280
+            date_lookback = df_result.index[trade_date_index_loc_minus_past]
+            df_past_ref = df_result.loc[(df_result.index < date_lookback)]
+            s_final_sim = pd.Series(data=1, index=df_past_ref.index)  # an array of days with the highest or lowest simlarity to today
+
+            print(f"{ts_code} {trade_date}", f"reference until {date_lookback}")
+
+            # check for each rsi column combination their absolute derivation
+            for freq in all_freq:
+                for column in all_column:
+                    freq_today_value = df_result.at[trade_date, f"{column}.rsi{freq}"]
+
+                    # IN yesterdays df you can see how similar one column.freq is to today
+                    column_freq_sim = ((freq_today_value - df_past_ref[f"{column}.rsi{freq}"]).abs()) / 100
+                    column_freq_sim = 1 + column_freq_sim
+                    column_freq_sim = column_freq_sim.fillna(2)  # 1 being lowest, best. 2 or any other number higher 1 being highest, worst
+
+                    column_freq_sim_weight = all_weight[f"{column}.{freq}"]
+                    weighted_column_freq_sim = column_freq_sim ** column_freq_sim_weight
+                    s_final_sim = s_final_sim.multiply(weighted_column_freq_sim, fill_value=1)
+
+            # calculate a final similarity score (make the final score cross columns)
+            # remove the last 240 items to prevent the algo know whats going on future
+            nsmallest = s_final_sim.nsmallest(past_samples)
+            # print(f"on trade_date {trade_date} the most similar days are: {list(nsmallest.index)}")
+            df_similar = df_result.loc[nsmallest.index]
+            df_result.at[trade_date, "similar"] = str(list(nsmallest.index))
+            for target in all_target:
+                df_result.at[trade_date, f"final.rsi.tomorrow{target}.score"] = df_similar[f"tomorrow{target}"].mean()
+
+        LB.to_csv_feather(df_result, LB.a_path(f"sim_no_bins/result/similar_{ts_code}.{str(all_column)}"))
+        return df_result
+
+    # setting
+    all_weight = {
+        "close.2": 0.5,
+        "close.5": 0.7,
+        "close.10": 0.9,
+        "close.20": 1,
+        "close.40": 1.2,
+        "close.60": 1.3,
+        "close.120": 1.4,
+        "close.240": 1.6,
+        # "ivola.2": 0.0,
+        # "ivola.5": 0.0,
+        # "ivola.10": 0.3,
+        # "ivola.20": 0.3,
+        # "ivola.40": 0.3,
+        # "ivola.60": 0.3,
+        # "ivola.120": 0.3,
+        # "ivola.240": 0.3,
+    }
+
+    all_column = ["close"]
+    all_target = [2, 5, 10, 20, 40, 60, 120, 240]  # -60, -1 means future 60 days return to future 1 day, means in
+    all_freq = [10, 20, 120, 240]  # 780, 20, 520， 2, 5,
+    past_samples = 2
+    start_date = 20050101
+
+    df_summary = pd.DataFrame()
+    df_ts_code = DB.get_ts_code()
+    df_ts_code = df_ts_code[df_ts_code.index == "000001.SZ"]
+
+    for ts_code in df_ts_code.index[::100]:
+        df_result = DB.get_asset(ts_code=ts_code)
+        df_result = df_result[df_result["period"] > 240]
+
+        try:
+            df_result = sim_no_bins_once(df_result, ts_code)
+        except:
             continue
 
-        df_today = df[df.index <= trade_date]
+        for target in all_target:
+            try:
+                df_summary.at[ts_code, f"tomorrow{target}_pearson"] = df_result[f"tomorrow{target}"].corr(df_result[f"final.rsi.tomorrow{target}.score"])
+            except:
+                pass
 
-        # calculate RSI
-        dict_rsi_mean = {}
-        for freq in all:
-            df_today[f"rsi{freq}"] = talib.RSI(df_today["close"], timeperiod=freq)
-
-            q1, q2, q3, q4, q5, q6, q7, q8, q9 = list(df_today[f"rsi{freq}"].quantile([0.0, 0.125, 0.250, 0.375, 0.500, 0.625, 0.750, 0.875, 1]))
-            dict_rsi_mean[f"{freq}.1"] = [q1, q2]
-            dict_rsi_mean[f"{freq}.2"] = [q2, q3]
-            dict_rsi_mean[f"{freq}.3"] = [q3, q4]
-            dict_rsi_mean[f"{freq}.4"] = [q4, q5]
-            dict_rsi_mean[f"{freq}.5"] = [q5, q6]
-            dict_rsi_mean[f"{freq}.6"] = [q6, q7]
-            dict_rsi_mean[f"{freq}.7"] = [q7, q8]
-            dict_rsi_mean[f"{freq}.8"] = [q8, q9]
-
-        # first update past rsi table
-        for small in all:
-            for big in all:
-
-                if small < big:
-                    for small_q in [1, 2, 3, 4, 5, 6, 7, 8]:
-                        for big_q in [1, 2, 3, 4, 5, 6, 7, 8]:
-                            small_q_low = dict_rsi_mean[f"{small}.{small_q}"][0]
-                            small_q_high = dict_rsi_mean[f"{small}.{small_q}"][1]
-
-                            high_q_low = dict_rsi_mean[f"{big}.{big_q}"][0]
-                            high_q_high = dict_rsi_mean[f"{big}.{big_q}"][1]
-
-                            df_test = df_today[df_today[f"rsi{small}"].between(small_q_low, small_q_high) & df_today[f"rsi{big}"].between(high_q_low, high_q_high)]
-                            df_past_rsi_table.at[trade_date, f"{small}.{small_q}_{big}.{big_q}"] = (df_test["tomorrow"].mean() - 1) * 100
-
-                            # df_past_rsi_table.at[trade_date, f"{small}.{small_q}_{big}.{big_q}"] = (df_today.loc[df_today[f"rsi{small}"].between(small_q_low, small_q_high) & df_today[f"rsi{big}"].between(high_q_low, high_q_high), "tomorrow"]-1)*100
-
-        # check to which category todays rsi belongs to
-        for freq in all:
-            today_rsi_freq = df_today.at[trade_date, f"rsi{freq}"]
-            for q in [1, 2, 3, 4, 5, 6, 7, 8]:
-                if dict_rsi_mean[f"{freq}.{q}"][0] <= today_rsi_freq <= dict_rsi_mean[f"{freq}.{q}"][1]:
-                    df_today_rsi.at[trade_date, f"rsi{freq}"] = q
-                    break
-            else:
-                df_today_rsi.at[trade_date, f"rsi{freq}"] = 2  # assign middle rsi if no solution was found
-
-        df_today_rsi = df_today_rsi.astype(int)
-
-        # create todays score
-        a_today_score = []
-        for small, big in [(3, 120), (3, 260), (3, 520), (5, 120), (5, 260), (5, 520), (10, 120), (10, 260), (10, 520), (20, 120), (20, 260), (20, 520)]:  # (120,520),(120,780),(260,520),(260,780),(520,780)
-            if small < big:
-                today_small_q = df_today_rsi.at[trade_date, f"rsi{small}"]
-                today_big_q = df_today_rsi.at[trade_date, f"rsi{big}"]
-
-                today_mean_based_on_past = df_past_rsi_table.at[trade_date, f"{small}.{today_small_q}_{big}.{today_big_q}"]
-                a_today_score.append(today_mean_based_on_past)
-
-        df_trading_result.at[trade_date, "score"] = pd.Series(data=a_today_score).mean()
-
-    LB.to_csv_feather(df_trading_result, LB.a_path("trading_result"))
-    LB.to_csv_feather(df_past_rsi_table, LB.a_path("df_past_rsi_table"))
-    LB.to_csv_feather(df_today_rsi, LB.a_path("df_today_rsi"))
+    DB.ts_code_series_to_excel(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], asset=["E"], group_result=True)
 
 
-simulate_trade_basedon_rsi()
+def sim_bins():
+    df_ts_code = DB.get_ts_code()
+    df_result_summary = pd.DataFrame()
+
+    for ts_code in df_ts_code.index[::100]:
+
+        df_result = DB.get_asset(ts_code)
+        df_result = df_result[df_result["period"] > 240]
+        df_result = df_result[df_result.index > 20000101]
+
+        # setting
+        all_column = ["close"]
+        all_target = [2, 5, 10, 20, 40, 60, 120, 240]  # -60, -1 means future 60 days return to future 1 day, means in
+        all_q = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        all_freq = [2, 5, 10, 20, 120, 260, 520]  # 780
+        all_freq_comb = [(2, 120), (2, 260), (2, 520), (5, 120), (5, 260), (5, 520), (10, 120), (10, 260), (10, 520), (20, 120), (20, 260), (20, 520)]  # (2,780),(5,780),(10,780),(20,780),(120,260),(120,520),(120,780),(260,520),(260,780),(520,780)
+
+        # create target freq and target period
+        for target in all_target:
+            df_result[f"tomorrow{target}"] = df_result["open"].shift(-target) / df_result["open"].shift(-1)
+
+        # pre calculate all rsi
+        for column in all_column:
+            for freq in all_freq:
+                # plain pct_chg pearson 0.01, plain tor pearson, 0.07, rsi dv_ttm is crap,ivola very good
+                df_result[f"{column}.rsi{freq}"] = talib.RSI(df_result[column], timeperiod=freq)
+
+        # for each day, check in which bin that rsi is
+        for trade_date in df_result.index:
+            df_today = df_result.loc[(df_result.index < trade_date)]
+            if len(df_today) < 620:
+                continue
+            last_Day = df_today.index[-600]
+            df_today = df_result.loc[(df_result.index < last_Day)]
+            print(f"{ts_code} {trade_date}. last day is {last_Day}", )
+
+            dict_accel = {}
+            # create quantile
+            for column in all_column:
+                for freq in all_freq:
+                    # divide all past values until today by bins/gategories/quantile using quantile:  45<50<55
+                    a_q_result = list(df_today[f"{column}.rsi{freq}"].quantile(all_q))
+                    for counter, item in enumerate(a_q_result):
+                        df_result.at[trade_date, f"{column}.freq{freq}_q{counter}"] = item
+                        dict_accel[f"{column}.freq{freq}_q{counter}"] = item
+
+            # for each day check what category todays rsi belong
+            for column in all_column:
+                for freq in all_freq:
+                    for counter in range(0, len(all_q) - 1):
+                        under_limit = dict_accel[f"{column}.freq{freq}_q{counter}"]
+                        above_limit = dict_accel[f"{column}.freq{freq}_q{counter + 1}"]
+                        today_rsi_value = df_result.at[trade_date, f"{column}.rsi{freq}"]
+                        if under_limit <= today_rsi_value <= above_limit:
+                            df_result.at[trade_date, f"{column}.rsi{freq}_bin"] = int(counter)
+                            break
+
+            # calculate simulated value
+
+            for column in all_column:
+                dict_column_target_results = {key: [] for key in all_target}
+                for small, big in all_freq_comb:
+                    try:
+                        small_bin = df_result.at[trade_date, f"{column}.rsi{small}_bin"]
+                        big_bin = df_result.at[trade_date, f"{column}.rsi{big}_bin"]
+                        df_filtered = df_today[(df_today[f"{column}.rsi{big}_bin"] == big_bin) & (df_today[f"{column}.rsi{small}_bin"] == small_bin)]
+                        for target in dict_column_target_results.keys():
+                            dict_column_target_results[target] = df_filtered[f"tomorrow{target}"].mean()
+                    except Exception as e:
+                        print("error", e)
+
+                for target, a_estimates in dict_column_target_results.items():
+                    df_result.at[trade_date, f"{column}.score{target}"] = pd.Series(data=a_estimates).mean()
+
+        # create sume of all results
+        for freq in all_freq:
+            try:
+                df_result[f"sum.score{freq}"] = bi.sum([df_result[f"{x}.score{freq}"] for x in all_column])
+            except:
+                pass
+
+        # initialize setting result
+        LB.to_csv_feather(df_result, LB.a_path(f"trade/result/trading_result_{ts_code}.{str(all_column)}"))
+
+        for target in all_target:
+            try:
+                pearson = df_result[f"{column}.score{target}"].corr(df_result[f"tomorrow{target}"])
+                df_result_summary.at[ts_code, f"pearson_{target}"] = pearson
+            except:
+                pass
+
+    LB.to_csv_feather(df_result_summary, LB.a_path(f"trade/summary.{str(all_column)}"))
+
+
+# sim_no_bins_multiple()
+# sim_pairwise()
 
 df = DB.get_asset()
-df["ma10"] = df["close"].rolling(10).mean()
-df["trix10"] = talib.TRIX(df["close"], timeperiod=10)
 
-df = df[["close", "open"]]
 
+# period=120
+# df["ma10"] = df["close"].rolling(period).mean()
+# df["mama"],df["fama"] = talib.MAMA(df["close"],0.01,0.2)
+#
+# df.to_csv("test_fama_mama.csv")
+# df = df[["close", "mama","fama","ma10"]]
+# df.reset_index(inplace=True, drop=True)
+# df.plot(legend=True)
+# plt.show()
+# plt.close()
+
+def plot_fft():
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import scipy.fftpack
+    df = DB.get_asset(ts_code="300036.SZ")
+
+    # Number of samplepoints
+    N = 2000
+    # sample spacing
+    T = 1.0 / 800.0
+    x = np.linspace(0.0, N * T, N)
+    y = np.sin(50.0 * 2.0 * np.pi * x) + 0.5 * np.sin(80.0 * 2.0 * np.pi * x)
+    y = df["close"].to_numpy()
+    yf = scipy.fftpack.fft(y)
+    xf = np.linspace(0.0, 1.0 / (2.0 * T), int(N / 2))
+
+    fig, ax = plt.subplots()
+    ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
+    plt.show()
+
+
+def transform(s):
+    eval = (1 + s) / (1 - s)
+    print("val", type(s), s, eval, )
+    trans = 0.5 * math.log(eval)
+
+    return trans
+
+
+def transform_no_np(val):
+    trans = 0.5 * math.log((1 + val) / (1 - val))
+    print("trans is", trans)
+    return trans
+
+
+def fisher_transform(s, timeperiod=5):
+    fisher = s.copy()
+    fisher = fisher.rolling(timeperiod).apply(transform)
+
+    return fisher
+
+
+ts_code = "000002.SZ"
+df = DB.get_asset(ts_code=ts_code)
+df["rsi50"] = talib.RSI(df["close"], timeperiod=50)
+df["fisher"] = df["rsi50"].apply(transform)
+df = df[["close", "fisher"]]
+df.reset_index(inplace=True, drop=True)
+
+df.plot(legend=True)
+plt.show()
+plt.close()
+
+
+def MESA(df):
+    ts_code = "000002.SZ"
+    df = DB.get_asset(ts_code=ts_code)
+    df = df[df.index > 20000101]
+    dict_mean = {}
+    for target in [5, 10, 20, 120, 240]:
+        df[f"tomorrow{target}"] = df["open"].shift(-target) / df["open"].shift(-1)
+        period_mean = df[f"tomorrow{target}"].mean()
+        dict_mean[target] = period_mean
+        print(f"ts_code {ts_code} {target} mean is {period_mean}")
+
+    df["rsi5"] = talib.RSI(df["close"], timeperiod=5)
+    df["rsi10"] = talib.RSI(df["close"], timeperiod=10)
+    df["rsi20"] = talib.RSI(df["close"], timeperiod=20)
+    df["rsi60"] = talib.RSI(df["close"], timeperiod=60)
+    df["rsi120"] = talib.RSI(df["close"], timeperiod=120)
+    df["rsi240"] = talib.RSI(df["close"], timeperiod=240)
+    df["rsi480"] = talib.RSI(df["close"], timeperiod=480)
+    # part 1 instantaneous trendline + Kalman Filter
+    df["trend"] = talib.HT_TRENDLINE(df["close"])  # long and slow
+    df["kalman"] = df["close"].rolling(5).mean()  # fast and short. for now use ma as kalman
+
+    # df["dphase"]=talib.HT_DCPHASE(df["close"])# dominant phase
+    df["dperiod"] = talib.HT_DCPERIOD(df["close"])  # dominant phase
+    df["mode"] = talib.HT_TRENDMODE(df["close"])  # dominant phase
+    df["inphase"], df["quadrature"] = talib.HT_PHASOR(df["close"])  # dominant phase
+
+    df["sine"], df["leadsine"] = talib.HT_SINE(df["close"])
+    # print("rsi 5,10")
+    # df["sine"], df["leadsine"]= (talib.RSI(df["close"],timeperiod=5),talib.RSI(df["close"],timeperiod=10))
+    # df.to_csv("mesa.csv")
+
+    # trend mode general
+    for mode in [1, 0]:
+        df_filtered = df[df["mode"] == mode]
+        for target in [5, 10, 20, 120, 240]:
+            mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+            print(f"trend vs cycle mode. trend mode = {mode}. {target} mean {mean}")
+    # conclusion. Trendmode earns more money than cycle mode. Trend contributes more to the overall stock gain than cycle mode.
+
+    # uptrend price vs trend
+    df_filtered = df[(df["mode"] == 1) & (df["close"] > df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"uptrend mode. {target} mean {mean}")
+    # vs downtrend
+    df_filtered = df[(df["mode"] == 1) & (df["close"] < df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"downtrend mode. {target} mean {mean}")
+    # conclusion uptrendmode is better than downtrendmode. Downtrend mode is better than Cycle mode which is strange
+
+    # sine vs lead sine
+    df_filtered = df[(df["mode"] == 1) & (df["sine"] > df["leadsine"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"sine  above lead {target} mean {mean}")
+    # vs downtrend
+    df_filtered = df[(df["mode"] == 1) & (df["sine"] < df["leadsine"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"sine  under lead  {target} mean {mean}")
+    # conclusion  uptrend (sine>leadsine) >  uptrend (close>trend) > uptrend
+
+    # ma vs hilbert trendline
+    df_filtered = df[(df["mode"] == 1) & (df["kalman"] > df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"kalman over trend {target} mean {mean}")
+    # vs downtrend
+    df_filtered = df[(df["mode"] == 1) & (df["kalman"] < df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"kalman under trend {target} mean {mean}")
+
+    df_filtered = df[(df["mode"] == 1) & (df["sine"] > df["leadsine"]) & (df["close"] > df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"trend mode. sine  above lead {target} mean {mean}")
+    # vs downtrend
+    df_filtered = df[(df["mode"] == 1) & (df["sine"] < df["leadsine"]) & (df["close"] < df["trend"])]
+    for target in [5, 10, 20, 120, 240]:
+        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        print(f"trend mode. sine  under lead  {target} mean {mean}")
+    # conclusion additive: trend+sine>leadsine+close>trend
+
+    df["marker"] = 0
+    # df.loc[(df["mode"] == 1) & (df["sine"] > df["leadsine"])& (df["close"] > df["trend"]), "marker"]=10
+
+    length = 2
+    block_length = int(len(df) / length)
+    a_max_index = []
+    a_min_index = []
+    for period in range(0, length):
+        start = block_length * period
+        end = (block_length * period) + block_length
+        print("period is", start, end)
+        df_step = df[start:end]
+        print("last day", df_step.index[-1])
+        that_period_max = df_step["rsi480"].max()
+        that_period_min = df_step["rsi480"].min()
+        max_index = df_step[df_step["rsi480"] == that_period_max].index[0]
+        min_index = df_step[df_step["rsi480"] == that_period_min].index[0]
+        a_max_index.append(max_index)
+        a_min_index.append(min_index)
+        df.at[max_index, "marker"] = 100
+        df.at[min_index, "marker"] = 50
+
+    # df=df[["close","trend","kalman","sine","leadsine","mode", "marker", "rsi60", "dperiod"]]#dphase quadrature   "dperiod", "inphase",
+    df = df[["close", "trend", "kalman", "sine", "leadsine", "mode", "marker", "rsi240"]]  # dphase quadrature   "dperiod", "inphase",
+    # df=df[["close", "rsi5","rsi10","marker"]]#dphase quadrature   "dperiod", "inphase",
+
+    df.reset_index(inplace=True, drop=True)
+
+    df.plot(legend=True)
+    plt.show()
+    plt.close()
+
+
+def movingaverages_test():
+    df_ts_code = DB.get_ts_code()[::1]
+    func = talib.MIDPOINT  # WMA
+    func_name = func.__name__
+    df_result = pd.DataFrame()
+    periods = [3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610]
+    for ts_code in df_ts_code.index:
+        print("ts_code", ts_code)
+        df_asset = DB.get_asset(ts_code=ts_code)
+
+        try:
+            df_asset = df_asset[(df_asset["period"] > 240) & (df_asset.index > 20000101)]
+            if len(df_asset) < 500:
+                continue
+        except:
+            continue
+
+        # calculate stock geomean
+        helper = 1 + (df_asset["pct_chg"] / 100)
+        df_result.at[ts_code, "geomean"] = gmean(helper)
+        df_result.at[ts_code, "period"] = len(df_asset)
+
+        # calculate future gain
+        dict_mean = {}
+        dict_std = {}
+        for target in periods:
+            df_asset[f"tomorrow{target}"] = df_asset["open"].shift(-target) / df_asset["open"].shift(-1)
+            dict_mean[target] = df_asset[f"tomorrow{target}"].mean()
+            dict_std[target] = df_asset[f"tomorrow{target}"].std()
+
+        for period in periods:
+            df_asset[f"{func_name}.{period}"] = func(df_asset["close"], timeperiod=period)
+            # df_asset[f"{func_name}.{period}"]=func(df_asset["high"],df_asset["low"], timeperiod=period)
+
+        # calculate buy over or under 1 ma
+        for period in periods:
+            df_asset[f"{func_name}.{period}.abv"] = df_asset["close"] > df_asset[f"{func_name}.{period}"]
+
+        for period in periods:
+            for one_zero in [1, 0]:
+                df_filtered = df_asset[df_asset[f"{func_name}.{period}.abv"] == one_zero]
+                df_result.at[ts_code, f"{func_name}.{period}.abv{one_zero}_{period}mean"] = df_filtered[f"tomorrow{period}"].mean() / dict_mean[period]
+                df_result.at[ts_code, f"{func_name}.{period}.abv{one_zero}_{period}std"] = df_filtered[f"tomorrow{period}"].std() / dict_std[period]
+
+    label_mean = []
+    label_std = []
+    for period in periods:
+        for one_zero in [1]:
+            label_mean.append(f"{func_name}.{period}.abv{one_zero}_{period}mean")
+            label_std.append(f"{func_name}.{period}.abv{one_zero}_{period}std")
+
+    for period in periods:
+        for one_zero in [0]:
+            label_mean.append(f"{func_name}.{period}.abv{one_zero}_{period}mean")
+            label_std.append(f"{func_name}.{period}.abv{one_zero}_{period}std")
+
+    df_result = df_result[["period", "geomean"] + label_mean + label_std]
+    DB.ts_code_series_to_excel(df_ts_code=df_result, path=f"ma_test/summary.{func_name}.xlsx", sort=[], asset=["E"], group_result=True)
+
+
+#movingaverages_test()
 #
 # rsi_abv_under_test()
 #
 #
-#
-#
-# #plot_autocorr()
-# df=DB.get_asset(ts_code="000001.SZ")
-# #df=pd.read_csv("Stock_Market.csv")
-# trend(df=df,ibase="close")
 # columns=["close"]
 # for i in  array:
 #     for label in ["rsi","trend"]:
@@ -413,3 +762,6 @@ df = df[["close", "open"]]
 #         df_copy.plot(legend=True)
 #         plt.show()
 #         plt.close()
+#
+#
+MESA(df)
