@@ -335,7 +335,8 @@ def get_linear_regression_s(s_index, s_data):
     s_result = pd.Series(index=s_index, data=s_index * z[0] + z[1])
     return s_result
 
-def get_linear_regression_rise(s_index, s_data):
+
+def get_linear_regression_rise(s_index, s_data):  # actualy it is not rise but slope or steigung something
     z = np.polyfit(s_index, s_data, 1)
     return z[0]
 

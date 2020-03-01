@@ -522,37 +522,198 @@ def plot_fft():
     plt.show()
 
 
-def transform(s):
-    eval = (1 + s) / (1 - s)
-    print("val", type(s), s, eval, )
-    trans = 0.5 * math.log(eval)
-
-    return trans
-
-
-def transform_no_np(val):
-    trans = 0.5 * math.log((1 + val) / (1 - val))
-    print("trans is", trans)
-    return trans
+def normalize_vector(series, min=0, max=1):
+    series_min = series.min()
+    series_max = series.max()
+    new_series = (((max - min) * (series - series_min)) / (series_max - series_min)) + min
+    return new_series
 
 
-def fisher_transform(s, timeperiod=5):
-    fisher = s.copy()
-    fisher = fisher.rolling(timeperiod).apply(transform)
+def normalize_apply(series, min=0, max=1):
+    return normalize_vector(series, min, max).iat[-1]
 
-    return fisher
+
+def fisher_transform_vector(s):
+    norm = normalize_vector(s, min=-1, max=1)
+    expression = (1.000001 + norm) / (1.000001 - norm)
+    return 0.5 * np.log(expression)
+
+
+def fisher_transform_apply(s):
+    return fisher_transform_vector(s).iat[-1]
+
+
+def inverse_fisher_transform_vector(s):
+    norm = normalize_vector(s, min=-1, max=1)
+    exp = np.exp(norm * 2)
+    return (exp - 1) / (exp + 1)
+
+
+def inverse_fisher_transform_apply(s):
+    return inverse_fisher_transform_vector(s).iat[-1]
+
+
+def trendslope_apply(s):
+    return LB.get_linear_regression_rise(s.index, s)
+
 
 
 ts_code = "000002.SZ"
-df = DB.get_asset(ts_code=ts_code)
-df["rsi50"] = talib.RSI(df["close"], timeperiod=50)
-df["fisher"] = df["rsi50"].apply(transform)
-df = df[["close", "fisher"]]
-df.reset_index(inplace=True, drop=True)
+df = DB.get_asset(ts_code=ts_code).reset_index()
+# df=pd.read_csv("fisher.csv")
+df["dperiod"] = talib.HT_DCPERIOD(df["close"])
+df["dphase"] = talib.HT_DCPHASE(df["close"])
+for rsi in [5, 10, 20, 60, 120, 240]:
+    df[f"rsi{rsi}"] = talib.RSI(df["close"], timeperiod=int(rsi))
 
-df.plot(legend=True)
+for period in [120, 240]:
+    df[f"rsi{period}"] = df[f"rsi{period}"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+
+df["rsi.marker"] = np.nan
+df["rsi.helper"] = np.nan
+df["rsi120/rsi240"] = df["rsi120"] / df["rsi240"]
+
+"""this RSI strat seems to work well in trending times and not so well in cyclic time
+    if can not really good differentiate during cyclic times.
+    
+    Trend or cycle can also be measured by the two distance of RSI, if distance is big, then you are in up or downtrend, if distance is small, then you are in cycle
+
+    In order to differentiate between cycle and trend mode, you need to know the cycle and trendmode itself, which is paradox
+    So you need a lot of different indicators, to indicate if you are trend or cycle mode
+    
+    Buy RSI only tells me over or underbought times, It does not differentiate between modes
+    
+    Measure mode by resistance. IF past n period resistance is till there, then you are in cycle mode
+    #if past n period resistance has been broken, then in trend mode
+    RSI gives a bit of lag in the trend. A bit late entry, and a bit late exit. which is no suprise since all momentum indicator do that.
+    So basically, check if past n period RSI was profitable, if yes, then trend mode, if not then Cycle mode.
+    
+    trend mode detection might also be a bit late. maybe in halfway you start to know you are in cycle mode.
+    Measure distance of past period price, If distance is big, then trend mode, if distance small, then cycle mode
+    The problem is here again. The more confirmed the signal, the smoother it needs to be, the more lag it will have. So to know the big trend, it is already laged very much behind. Is it still useful though
+    Still useful. Because knowing the trend late is better than not knowing the trend. You start to know the trend 
+    
+    The problem is not knowing when trend start and when trend ends. Using RSI to do that is not accurate since RSI itself is only useable in trendmode
+    
+    Maybe fisher and inverse fisher can help RSI detect the signals earlier (but then it probably produces more noise)
+    
+    Since you will always have noise. Maybe the sum of noise is the current strenght of the trend. Instead of getting rid of the noise and whipsaws, live with it.
+    Basically, in order to find such a trend vs cycle indicator, that indicator should not rely on any other indicator, be standalone, be leading and have less noise.
+    This would also make other indicator meaning less and redundant. 
+    
+    Maybe counting the overboguht in all period together could create a better signal
+"""
+
+df.loc[(df["rsi120/rsi240"] > 0.91) & (df["rsi240"] > df["rsi240"].mean()), ["rsi.marker", "rsi.helper"]] = (-20, 40)  # to be filled inverse
+
+df.loc[(df["rsi120/rsi240"] < 1.08) & (df["rsi240"] < df["rsi240"].mean()), ["rsi.marker", "rsi.helper"]] = (20, -40)  # to be filled inverse
+
+df["rsi.marker"] = df["rsi.marker"].fillna(method="ffill")
+df.loc[df["rsi.helper"] == 40, "rsi.marker"] = 20
+df.loc[df["rsi.helper"] == -40, "rsi.marker"] = -20
+
+for period in [5, 10, 20, 60, 120, 240, 500, 1000]:
+    df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
+
+df["ma60"] = df["close"].rolling(60).apply(normalize_apply, raw=False)
+df["ma240"] = df["close"].rolling(240).apply(normalize_apply, raw=False)
+df["test"] = np.nan
+
+"""
+brute force slope with following parameters
+long period
+slow period
+if any of them should be above or under mean in 
+if quick/slow >  value or smaller value
+
+"""
+df.loc[((df["trendslope60"] > df["trendslope240"]) & (df["trendslope60"] > 0)), "test"] = 10
+df.loc[((df["trendslope60"] < df["trendslope240"]) & (df["trendslope60"] < 0)), "test"] = -10
+
+# RSI 240 with 120 seems to be better than with 60
+# the slope method produces correct signal during trend
+# and creates useless signals in cycle modes
+df["test"] = df["test"].fillna(method="ffill")
+
+"""
+trendslope 1000 and 500 gives the complete overall division between phases which is really useful
+Since the reversal happens every 3 -4 years , the max day allowed for backlook is limited. In the short run, go with the trend. In the long run, bet against the trend. Because everything is normal distributed in the data is big enough. (=mean reverse)
+"""
+df[[f"close", "ma60", "ma240", "trendslope60", "trendslope240", "test"]].plot(legend=True)  # rsi.marker
 plt.show()
-plt.close()
+
+for period in [240]:
+    print("period", period)
+
+    df[f"close{period}"] = df["close"].rolling(period).apply(normalize_apply, raw=False)
+    df[f"close.fisher{period}"] = df["close"].rolling(period).apply(fisher_transform_apply, raw=False)
+    df[f"close.invfisher{period}"] = df["close"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+    df[f"rsi.norm{period}"] = df[f"rsi{period}"].rolling(period).apply(normalize_apply, raw=False)
+    df[f"rsi.fisher{period}"] = df[f"rsi{period}"].rolling(period).apply(fisher_transform_apply, raw=False)
+    df[f"rsi.invfisher{period}"] = df[f"rsi{period}"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+
+# df.to_csv("fisher_mod.csv")
+# Plot.plot_distribution(df["fisher240.rolling"])
+df["rsi.invfisher240.type"] = np.nan
+
+# 4 crossing types, undercross low, upcross low. undercross high, upcross high
+# buy:
+# upcross low: 2,1,2 : -1, 1 : past -1, now 1
+# upcross high: 3,2,3: -1, 1
+#
+# Sell:
+# undercross low: 1,2,1: 1, -1 : past 1 now -1
+# undercross high: 2,3,2: 1, -1
+border = [-0.5, 0.5]
+
+# create type
+df.loc[df["rsi.invfisher240"] < border[0], "rsi.invfisher240.type"] = 1  # t
+df.loc[df["rsi.invfisher240"].between(border[0], border[1]), "rsi.invfisher240.type"] = 2  # t
+df.loc[df["rsi.invfisher240"] > border[1], "rsi.invfisher240.type"] = 3  # t
+
+# calculate difference = change of type
+df["rsi.invfisher240.typechange"] = (df["rsi.invfisher240.type"].diff()).replace(0, np.nan)
+
+# create a helper df
+df_helper = df[df["rsi.invfisher240.typechange"].notna()]
+
+# take past difference
+df_helper["another_helper"] = df_helper["rsi.invfisher240.typechange"].shift(1)
+
+df_helper["another_helper"] = df_helper["another_helper"].astype(float)
+df_helper["rsi.invfisher240.type"] = df_helper["rsi.invfisher240.type"].astype(float)
+
+df_buy = df_helper[df_helper["another_helper"] < df_helper["rsi.invfisher240.typechange"]]
+df_sell = df_helper[df_helper["another_helper"] > df_helper["rsi.invfisher240.typechange"]]
+print("df_buy", df_sell)
+
+df["marker"] = np.nan
+df.loc[df_buy.index, "marker"] = 30
+df.loc[df_sell.index, "marker"] = -30
+df["marker"] = df["marker"].fillna(method="ffill")
+
+df[[f"rsi240", f"close", "rsi120", "rsi240", "rsi.fisher240", "rsi.invfisher240", "rsi.marker", "rsi.marker_fill", "rsi.invfisher240.type", "dperiod"]].plot(legend=True)
+plt.show()
+
+df.to_csv("sine.csv")
+
+
+# df["rsi60"] = talib.RSI(df["close"], timeperiod=60)
+# df["rsi120"] = talib.RSI(df["close"], timeperiod=120)
+# df["rsi240"] = talib.RSI(df["close"], timeperiod=240)
+# df["fisher60"] = df["rsi60"].rolling(60).apply(fisher_transform,raw=False)
+# df["fisher120"] = df["rsi120"].rolling(120).apply(fisher_transform,raw=False)
+# df["fisher240"] = df["rsi240"].rolling(240).apply(fisher_transform,raw=False)
+#
+# df["marker"]=0.0
+# df.loc[ (df["fisher120"]/df["fisher240"]>1.1),"marker"]=20
+# df = df[["close", "fisher120","fisher240","rsi120","rsi240","marker"]]
+#
+#
+# df.reset_index(inplace=True, drop=True)
+# df.plot(legend=True)
+# plt.show()
+# plt.close()
 
 
 def MESA(df):
@@ -765,3 +926,82 @@ def movingaverages_test():
 #
 #
 MESA(df)
+
+
+def ent(data):
+    import scipy.stats
+    """Calculates entropy of the passed `pd.Series`
+    What pandas can not write in multi code wtf
+    """
+    p_data = data.value_counts()  # counts occurrence of each value
+    entropy = scipy.stats.entropy(p_data)  # get entropy from counts
+    return entropy
+
+
+# tradeoffs & proportional & inverse relations
+
+# The smoother your signal, the longer the lag (solveable by insta trendline, kalman filter)
+# the earlier you want to detect the turnpoint, the more sensitive the indicator needs to be, the more whiplas it creates. (Basically, you need to adjust the period based on probability for the next turning point signal)
+# the better the trend the easier to make money.
+# the more normalize, the morr sensitive, the more recent is the data,   《==》  the more whipsaw, the more noise.
+
+# In Up Trend move, buy and hold
+# In cycle mode buy and sell
+# in downtrend mode, Shortsell and hold
+
+
+# hyper overbought= long period + short period overbought
+# hyper udnerbought = long period + short period underbought
+
+
+"""what john ehlers does not incooperate:
+volume, 
+ANN, 
+fundamentals
+comparative best stock using same technique at one day
+industry comparison
+
+
+maxonmax, low onlow (multi period overlay analysis), 
+"""
+
+
+def bruteforce_slope():
+    ts_code = "000002.SZ"
+    df = DB.get_asset(ts_code=ts_code).reset_index()
+    """
+    brute force slope with following parameters
+    long period
+    slow period
+    if any of them should be above or under mean in 
+    if quick/slow >  value or smaller value
+
+    """
+    df_result = pd.DataFrame()
+    periods = [5, 10, 20, 60, 240, 500]
+    for period in periods:
+        df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
+
+    for small in periods:
+        for big in periods:
+            if small < big:
+
+                for func1 in [(operator.ge, operator.le), (operator.le, operator.ge)]:
+                    for argument2 in periods:
+                        for funct2 in [(operator.ge, operator.le), (operator.le, operator.ge)]:
+                            df.loc[((func1(df[f"trendslope{small}"], df[f"trendslope{big}"])) & (funct2(df[f"trendslope{argument2}"], 0))), "test"] = 10
+
+    # RSI 240 with 120 seems to be better than with 60
+    # the slope method produces correct signal during trend
+    # and creates useless signals in cycle modes
+    df["test"] = df["test"].fillna(method="ffill")
+
+    """
+    trendslope 1000 and 500 gives the complete overall division between phases which is really useful
+    Since the reversal happens every 3 -4 years , the max day allowed for backlook is limited. In the short run, go with the trend. In the long run, bet against the trend. Because everything is normal distributed in the data is big enough. (=mean reverse)
+    """
+    df[[f"close", "ma60", "ma240", "trendslope60", "trendslope240", "test"]].plot(legend=True)  # rsi.marker
+    plt.show()
+
+
+bruteforce_slope()
