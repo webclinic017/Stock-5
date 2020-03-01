@@ -1,5 +1,5 @@
-import tushare as ts
 import pandas as pd
+import tushare as ts
 import numpy as np
 import API_Tushare
 import LB
@@ -293,7 +293,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
             # append old df and drop duplicates
             if not df_saved.empty:
                 df = df_saved.append(df, sort=False)
-            df = df[~df.index.duplicated(keep="last")]  #important
+            df = df[~df.index.duplicated(keep="last")]  # important
 
             # interpolate/fill between empty fina and pledge_stat values
             all_report_label = list(df_balancesheet.columns.values) + list(df_cashflow.columns.values) + list(df_indicator.columns.values) + ["pledge_ratio"]
@@ -440,14 +440,9 @@ def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN"
                 print(counter, ts_code, f"{ts_code} {fina_name} UPDATED")
 
 
-# merges all date file of E,I,FD into one. Do Not confuse with update_all_date!
-def update_date_all():
-    # TODO merge all date files together (with static data)into one file
-    pass
-
 
 def update_date(asset="E", freq="D", market="CN", step=1, big_update=True):
-    for asset in ["E"]:  # TODO add I, FD date
+    for asset in ["E"]:
         update_date_EIFD_DWMYS(asset, freq, big_update=big_update, step=step)
 
 
@@ -497,14 +492,13 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
                 if int(list_date) > int(trade_date):
                     continue
 
-
                 row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
                 try:
                     if int(df_asset.index[row_number]) == int(trade_date):
                         a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
                         dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
                 except Exception as e:
-                    print("except",e)
+                    print("except", e)
                     continue
 
             df_date = pd.DataFrame(data=a_date, columns=example_column)
@@ -643,10 +637,10 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
         df_result = df_saved.append(df_result, sort=False)
 
     # add comp chg and index
-    df_result["comp_chg"] = LB.column_add_comp_chg(df_result["pct_chg"])
+    df_result["comp_chg"] = ICreate.column_add_comp_chg(df_result["pct_chg"])
     for ts_code in comparison_index:
         df_result = add_asset_comparison(df=df_result, freq=freq, asset="I", ts_code=ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"])
-        df_result["comp_chg_" + ts_code] = LB.column_add_comp_chg(df_result["pct_chg_" + ts_code])
+        df_result["comp_chg_" + ts_code] = ICreate.column_add_comp_chg(df_result["pct_chg_" + ts_code])
 
     LB.to_csv_feather(df_result, a_path, index_relevant=False)
     print("Date_Base UPDATED")
@@ -725,27 +719,19 @@ def update_cj_index_000001_SH():
     LB.to_csv_feather(df, a_path)
 
 
-# NOTE: duplicated code but faster and creates less overhead
-def get(a_path=[], set_index=""):  # if step is -1, read feather first
-    # TODO add if trade_date, set to int
-    try:
-        df = pd.read_feather(path=a_path[1])
-        if set_index:
-            if set_index in ["trade_date", "cal_date", "end_date"]:
-                df[set_index] = df[set_index].astype(int)
-            df.set_index(keys=set_index, drop=True, inplace=True)
-        return df
-    except Exception as e:
-        print("read error .feather", e)
-    try:
-        df = pd.read_csv(filepath_or_buffer=a_path[0])
-        if set_index:
-            if set_index in ["trade_date", "cal_date", "end_date"]:
-                df[set_index] = df[set_index].astype(int)
-            df.set_index(keys=set_index, drop=True, inplace=True)
-        return df
-    except Exception as e:
-        print("read error .csv", e)
+
+def get(a_path=[], set_index=""):  # read feather first
+    for counter,func in [(1, [pd.read_feather]), (0, pd.read_csv)]:
+        try:
+            df = func(a_path[counter])
+            if set_index:
+                if set_index in ["trade_date", "cal_date", "end_date"]:
+                    df[set_index] = df[set_index].astype(int)
+                df.set_index(keys=set_index, drop=True, inplace=True)
+            return df
+        except Exception as e:
+            print(f"read error {func.__name__}", e)
+
     print("DB READ File Not Exist!", a_path[0])
     return pd.DataFrame()
 
@@ -756,7 +742,6 @@ def get_ts_code(asset="E", market="CN"):
         df = df[df["delist_date"].isna()]
         df = df[df["market"] == "E"]  # for now, only consider Equity market traded funds
     return df
-
 
 def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
     return get(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code)), set_index="trade_date")
@@ -788,7 +773,7 @@ def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
     df = get(LB.a_path("Market/" + market + "/Asset/E/D_Fun/" + query + "/" + ts_code), set_index="end_date")
     if df.empty:
         print("Error get_assets_E_D_Fun ", query, "not exist for", ts_code)
-        return LB.empty_asset_E_D_Fun(query)[columns]
+        return LB.empty_df(query)[columns]
     else:
         df = df[~df.index.duplicated(keep="last")]
         return df[columns]
@@ -798,7 +783,7 @@ def get_assets_pledge_stat(ts_code, columns, market="CN"):
     df = get(LB.a_path("Market/" + market + "/Asset/E/W_pledge_stat/" + ts_code), set_index="end_date")
     if df.empty:
         print("Error get_assets_pledge_stat not exist for", ts_code)
-        df = LB.emty_asset_E_W_pledge_stat()
+        df = LB.empty_df("pledge_stat")
     df = df[~df.index.duplicated(keep="last")]
     return df[columns]
 
@@ -807,7 +792,7 @@ def get_assets_top_holder(ts_code, columns, market="CN"):
     df = get(LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + ts_code), set_index="end_date")
     if df.empty:
         print("Error get_assets_top_holder not exist for", ts_code)
-        df = LB.empty_asset_E_top_holder()
+        df = LB.empty_df("top_holder")
     return df[columns]
 
 
@@ -922,51 +907,53 @@ def preload(load="asset", step=1, query=""):
 
 def update_all_in_one(big_update=False):
     # there are 3 types of update
+
+    # TODO update completely is to delete all folder. Else update smart
     # 0. ALWAYS UPDATE
     # 1. ONLY ON BIG UPDATE: OVERRIDES EVERY THING EVERY TIME
     # 2. ON BOTH BIG AND SMALL UPDATE: OVERRIDES EVERYTHING EVERY TIME
     # 3. SMART: BIG OR SMALL UPDATE DOES NOT MATTER, ALWAYS CHECK IF FILE NEEDS TO BE UPDATED
-    # TODO currently, the small update, is actually mixed with smart condition. maybe need a third update
+
     big_steps = [1, 2, 3, 5, 7, 9, - 1, -2, -3, -5, -7, -9]
     middle_steps = [1, 2, 3, 5, -1, -2, -3, -5]
     small_steps = [1, 2, -1, -2]
 
     # 1.0. GENERAL - CAL_DATE
-    update_general_trade_cal()  # always update
-
-    # 1.1. GENERAL - INDUSTRY
-    for level in c_industry_level():
-        update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
+    # update_general_trade_cal()  # always update
+    #
+    # # 1.1. GENERAL - INDUSTRY
+    # for level in c_industry_level():
+    #     update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
-    #multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
-
-    # 1.3. GENERAL - TS_CODE
+    # multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
+    #
+    # # 1.3. GENERAL - TS_CODE
     # for asset in c_assets():
     #     update_general_ts_code(asset)  # ALWAYS UPDATE
     # update_general_ts_code_all()
-    #
+    # #
     # # 1.5. GENERAL - TRADE_DATE
     # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
     #     update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
-    # multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
-    #multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
+    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
+    multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-    #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
 
     # 3.1. DATE - OTH
-    #multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
+    # multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
-    date_step = [-1, 1] if big_update else [-1, 1]
-    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
-
-    # 3.3. DATE - BASE
-    update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+    # date_step = [-1, 1] if big_update else [-1, 1]
+    # multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
+    #
+    # # 3.3. DATE - BASE
+    # update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
     #
     # # 3.4. DATE - TREND
     # df = get_stock_market_all()  # ALWAS
@@ -983,6 +970,7 @@ def update_all_in_one(big_update=False):
 # 3. apply
 # 4. loc
 if __name__ == '__main__':
+    # TODO update all in one so that it can run from zero to hero in one run
     # TODO make update general ts_code state_company faster and not update very damn time
     pr = cProfile.Profile()
     pr.enable()

@@ -13,104 +13,114 @@ from scipy import signal
 import inspect
 import matplotlib.pyplot as plt
 import enum
+from enum import auto
 from sklearn.preprocessing import MinMaxScaler
 from LB import *
+
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
 # BOTTLE NECK modify here
 class IBase(enum.Enum):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
-    # open = "open"
-    # high = "high"
-    # low = "low"
-    # close = "close"
-    # pct_chg = "pct_chg"
-    # co_pct_chg = "co_pct_chg"
-    # fgain = "fgain"
-    # # pgain = "pgain"
-    pjup = "pjup"
-    pjdown = "pjdown"
-    # ivola = "ivola"
-    # cdl = "cdl"
+    # pri
+    open = auto()
+    high = auto()
+    low = auto()
+    close = auto()
+    pct_chg = auto()
+    co_pct_chg = auto()
+    fgain = auto()
+    pgain = auto()
+    pjup = auto()
+    pjdown = auto()
+    ivola = auto()
+    cdl = auto()
 
     # fun
-    # pe_ttm = "pe_ttm"
-    # pb = "pb"
-    # ps_ttm = "ps_ttm"
-    # dv_ttm = "dv_ttm"
-    # total_cur_assets = "total_cur_assets"
-    # total_assets = "total_assets"
-    # total_cur_liab = "total_cur_liab"
-    # total_liab = "total_liab"
-    # n_cashflow_act = "n_cashflow_act"
-    # n_cashflow_inv_act = "n_cashflow_inv_act"
-    # n_cash_flows_fnc_act = "n_cash_flows_fnc_act"
-    # profit_dedt = "profit_dedt"
-    # netprofit_yoy = "netprofit_yoy"
-    # or_yoy = "or_yoy"
-    # grossprofit_margin = "grossprofit_margin"
-    # netprofit_margin = "netprofit_margin"
-    # debt_to_assets = "debt_to_assets"
-    # turn_days = "turn_days"
-    #
-    # # oth
-    # period = "period"
-    # total_share = "total_share"
-    # total_mv = "total_mv"
-    # pledge_ratio = "pledge_ratio"
-    # vol = "vol"
-    # turnover_rate = "turnover_rate"
+    pe_ttm = auto()
+    pb = auto()
+    ps_ttm = auto()
+    dv_ttm = auto()
+    total_cur_assets = auto()
+    total_assets = auto()
+    total_cur_liab = auto()
+    total_liab = auto()
+    n_cashflow_act = auto()
+    n_cashflow_inv_act = auto()
+    n_cash_flows_fnc_act = auto()
+    profit_dedt = auto()
+    netprofit_yoy = auto()
+    or_yoy = auto()
+    grossprofit_margin = auto()
+    netprofit_margin = auto()
+    debt_to_assets = auto()
+    turn_days = auto()
+
+    # oth
+    period = auto()
+    total_share = auto()
+    total_mv = auto()
+    pledge_ratio = auto()
+    vol = auto()
+    turnover_rate = auto()
 
 
-class IDeri(enum.Enum):  #first level Ideri = IDeri that only uses ibase and no other IDeri
-    create = "create"
-    count = "count"
-    sum = "sum"
-    mean = "mean"
-    median = "median"
-    var = "var"
-    std = "std"
-    min = "min"
-    max = "max"
-    corr = "corr"
-    cov = "cov"
-    skew = "skew"
-    kurt = "kurt"
+class IDeri(enum.Enum):  # first level Ideri = IDeri that only uses ibase and no other IDeri
+    # statistic
+    create = auto()
+    count = auto()
+    sum = auto()
+    mean = auto()
+    median = auto()
+    var = auto()
+    std = auto()
+    min = auto()
+    max = auto()
+    corr = auto()
+    cov = auto()
+    skew = auto()
+    kurt = auto()
 
     # technical Derivation
-    rsi = "rsi"
-    # mom = "mom"
-    # rocr = "rocr"
+    rsi = auto()
+    # mom = auto()
+    # rocr = auto()
     # # ppo = "ppo" for some reason not existing in talib
-    # cmo = "cmo"
-    # apo = "apo"
-    # boll="boll"
-    # ema="ema"
-    # sma="sma"
+    # cmo = auto()
+    # apo = auto()
+    # boll=auto()
+    # ema=auto()
+    # sma=auto()
 
     # transform = normalize and standardize
-    # net="net"
-    # rank="rank"
-    # pct_change="pct_change"
-    # divmean="divmean"
-    # divmabs="divabs"
-    # scale ="scale" #normalize value to 1 and 0
-    # abv="abv"
-    # cross="cross"
-
+    # net=auto()
+    # rank=auto()
+    # pct_change=auto()
+    # divmean=auto()
+    # divmabs=auto()
+    # scale =auto() #normalize value to 1 and 0
+    # abv=auto()
+    # cross=auto()
 
     # second level IDERI, need other functions as argument
-    trend = "trend"  # RSI CMO
-    overma = "overma"
-    crossma = "crossma"
-    # rs="rs"
+    trend = auto()  # RSI CMO
+
+    # generating buy or not buy signals : 1, 0 and np.nan
+    over = auto()  # s1 over s2
+    cross = auto()  # s1 cross s2
+    overthres = auto()  # s1 over certain thresh
+    # rs=auto()
     # cross over
     # divergence
 
+
 # clip,autocorr,cummax
+
 def get_func(name: str):
     return globals()[name]
 
+
+# NOT MODELLING FREQ AS ENUM because Every indicator always have many freqs. So it is not function specific
 class Trend2Weight(enum.Enum):
     t8 = 0.08
     t16 = 0.16
@@ -118,9 +128,10 @@ class Trend2Weight(enum.Enum):
     t64 = 0.64
     t128 = 1.28
 
+
 class RE(enum.Enum):
-    r = "r"
-    e = "e"
+    r = auto()
+    e = auto()
 
 
 class Gain(enum.Enum):
@@ -150,21 +161,53 @@ class Lose(enum.Enum):
 
 
 def open(df: pd.DataFrame, ibase: str): return ibase
+
+
 def high(df: pd.DataFrame, ibase: str): return ibase
+
+
 def close(df: pd.DataFrame, ibase: str): return ibase
+
+
 def low(df: pd.DataFrame, ibase: str): return ibase
+
+
 def pe_ttm(df: pd.DataFrame, ibase: str): return ibase
+
+
 def pb(df: pd.DataFrame, ibase: str): return ibase
+
+
 def ps_ttm(df: pd.DataFrame, ibase: str): return ibase
+
+
 def dv_ttm(df: pd.DataFrame, ibase: str): return ibase
+
+
 def n_cashflow_act(df: pd.DataFrame, ibase: str): return ibase
+
+
 def n_cashflow_inv_act(df: pd.DataFrame, ibase: str): return ibase
+
+
 def n_cash_flows_fnc_act(df: pd.DataFrame, ibase: str): return ibase
+
+
 def profit_dedt(df: pd.DataFrame, ibase: str): return ibase
+
+
 def netprofit_yoy(df: pd.DataFrame, ibase: str): return ibase
+
+
 def or_yoy(df: pd.DataFrame, ibase: str): return ibase
+
+
 def grossprofit_margin(df: pd.DataFrame, ibase: str): return ibase
+
+
 def netprofit_margin(df: pd.DataFrame, ibase: str): return ibase
+
+
 def debt_to_assets(df: pd.DataFrame, ibase: str): return ibase
 
 
@@ -184,9 +227,17 @@ def turn_days(df: pd.DataFrame, ibase: str): return ibase
 
 
 def total_share(df: pd.DataFrame, ibase: str): return ibase
+
+
 def total_mv(df: pd.DataFrame, ibase: str): return ibase
+
+
 def vol(df: pd.DataFrame, ibase: str): return ibase
+
+
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
+
+
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
@@ -259,6 +310,7 @@ def pct_chg_open(df: pd.DataFrame, ibase: str = "pct_chg_open"):
     df[add_to] = (1 + df["open"].pct_change())
     return add_to
 
+
 def cdl(df: pd.DataFrame, ibase: str):
     a_positive_columns = []
     a_negative_columns = []
@@ -320,20 +372,20 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     # RSI and CMO are the best. CMO is a modified RSI
     # RSI,CMO,MOM,ROC,ROCR100,TRIX
 
-    #df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
+    # df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
     for i in a_all:  # RSI 1
         try:
             if i == 1:
                 df[f"{rsi_name}{i}"] = (df[ibase].pct_change() > 0).astype(int)
                 # df[ rsi_name + "1"] = 0
-                #df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
+                # df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
             else:
                 df[f"{rsi_name}{i}"] = func(df[ibase], timeperiod=i) / 100
 
                 # normalization causes error
                 # df[f"{rsi_name}{i}"] = (df[f"{rsi_name}{i}"]-df[f"{rsi_name}{i}"].min())/ (df[f"{rsi_name}{i}"].max()-df[f"{rsi_name}{i}"].min())
         except Exception as e:  # if error happens here, then no need to continue
-            print("error" ,e)
+            print("error", e)
             df[trend_name] = np.nan
             return trend_name
 
@@ -351,7 +403,7 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
 
         # fill na based on the trigger points. bfill makes no sense here
         df[trendfreq_name].fillna(method='ffill', inplace=True)
-        #TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
+        # TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
 
     # remove RSI and phase Columns to make it cleaner
     a_remove = []
@@ -463,6 +515,26 @@ def support_resistance_horizontal(start_window=240, rolling_freq=1, step=10, thr
 #     return add_to
 
 
+# TODO EACH IDERI CAN EITHER RETURN NAME and modify inplace, or return series
+#  n*x**i +  (n-1)*(x-1)**(i-1)...
+def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreate
+    s_index = df[column].index
+    y = df[column]
+    weights = np.polyfit(s_index, y, degree)
+    data = pd.Series(index=s_index, data=0)
+    for i, polynom in enumerate(weights):
+        pdegree = degree - i
+        data = data + (polynom * (s_index ** pdegree))
+    return data
+
+
+# IMPORTANT NORMALIZE DOES NOT ADD LABEL
+def norm(df: pd.DataFrame, ibase: str, min=0, max=1):
+    series_min = df[ibase].min()
+    series_max = df[ibase].max()
+    return (((max - min) * (df[ibase] - series_min)) / (series_max - series_min)) + min
+
+
 def cmo(df: pd.DataFrame, ibase: str, freq: BFreq):
     return deri_tec(df=df, ibase=ibase, ideri=IDeri.cmo, func=talib.CMO, timeperiod=freq.value)
 
@@ -495,6 +567,18 @@ def deri_tec(df: pd.DataFrame, ibase: str, ideri: IDeri, func, **kwargs):
     add_column(df, add_to, ibase, 1)
     df[add_to] = func(df[ibase], **kwargs)
     return add_to
+
+
+def cumprod(df: pd.DataFrame, ibase: str):
+    ideri = "cumprod"
+    add_to = LB.standard_indi_name(ibase=ibase, deri=ideri)
+    df[add_to] = (1 + (df[ibase] / 100)).cumprod()
+    return add_to
+
+
+def column_add_comp_chg(pct_chg_series):  # TODO needs to be deleted
+    cun_pct_chg_series = 1 + (pct_chg_series / 100)
+    return cun_pct_chg_series.cumprod()
 
 
 def count(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
@@ -585,7 +669,6 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
     return add_to
 
 
-
 # input a dict with all variables. Output a list of all possible combinations
 def explode_settings(dict_one_indicator_variables):
     # 1. only get values form above dict
@@ -647,11 +730,8 @@ def trendtest():
                 return
 
 
-
-
-        
 if __name__ == '__main__':
-    #trendtest()
+    # trendtest()
     # TODO stock pct_chg open higher or pct_chg close higher?
     # cross over brute force
     # define all main deri function. scale it if nessesary
@@ -659,10 +739,7 @@ if __name__ == '__main__':
 
     # if crossover then buy / sell signal
 
-    #if both are 1 then buy buy signal
-
-
-
+    # if both are 1 then buy buy signal
 
     # first only add all ideri that uses one column
     # then add all ideri that uses multiple columns
@@ -691,5 +768,5 @@ if __name__ == '__main__':
     # df.plot(legend=True)
     # plt.show()
 
-    #then bruteforce ideri that can be used on ideri
+    # then bruteforce ideri that can be used on ideri
     pass

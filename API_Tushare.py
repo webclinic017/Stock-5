@@ -33,8 +33,9 @@ def get(function, dict_arg, df_if_empty=pd.DataFrame()):
             traceback.print_exc()
             time.sleep(10)
 
+
 def my_pro_bar(asset: str, ts_code: str, freq: str, start_date: str, end_date: str, adj="qfq", factors=[]):
-    return get(function=ts.pro_bar, dict_arg=locals(), df_if_empty=LB.empty_asset_Tushare())
+    return get(function=ts.pro_bar, dict_arg=locals(), df_if_empty=LB.empty_df("pro_bar"))
 
 
 def my_query(api_name="", ts_code="000001.SZ", start_date="00000000", end_date="00000000"):
@@ -54,31 +55,31 @@ def my_trade_cal(api_name="trade_cal", start_date="00000000", end_date="00000000
 
 
 def my_holdertrade(ann_date, fields="ts_code,ann_date,holder_name,holder_type,in_de,change_vol,change_ratio,after_share,after_ratio,avg_price,total_share,begin_date,close_date"):
-    return get(function=pro.stk_holdertrade, dict_arg=locals(), df_if_empty=LB.empty_date_Oth("holdertrade"))
+    return get(function=pro.stk_holdertrade, dict_arg=locals(), df_if_empty=LB.empty_df("holdertrade"))
 
 
 def my_pledge_stat(ts_code="000001.SZ"):
-    return get(function=pro.pledge_stat, dict_arg=locals(), df_if_empty=LB.emty_asset_E_W_pledge_stat())
+    return get(function=pro.pledge_stat, dict_arg=locals(), df_if_empty=LB.empty_df("pledge_stat"))
 
 
 def my_cashflow(ts_code, start_date, end_date):
-    return get(function=pro.cashflow, dict_arg=locals(), df_if_empty=LB.empty_asset_E_D_Fun("cashflow"))
+    return get(function=pro.cashflow, dict_arg=locals(), df_if_empty=LB.empty_df("cashflow"))
 
 
 def my_fina_indicator(ts_code, start_date, end_date):
-    return get(function=pro.fina_indicator, dict_arg=locals(), df_if_empty=LB.empty_asset_E_D_Fun("fina_indicator"))
+    return get(function=pro.fina_indicator, dict_arg=locals(), df_if_empty=LB.empty_df("fina_indicator"))
 
 
 def my_balancesheet(ts_code, start_date, end_date):
-    return get(function=pro.balancesheet, dict_arg=locals(), df_if_empty=LB.empty_asset_E_D_Fun("balancesheet"))
+    return get(function=pro.balancesheet, dict_arg=locals(), df_if_empty=LB.empty_df("balancesheet"))
 
 
 def my_income(ts_code, start_date, end_date):
-    return get(function=pro.income, dict_arg=locals(), df_if_empty=LB.empty_date_Oth("income"))
+    return get(function=pro.income, dict_arg=locals(), df_if_empty=LB.empty_df("income"))
 
 
 def my_block_trade(trade_date):
-    return get(function=pro.block_trade, dict_arg=locals(), df_if_empty=LB.empty_date_Oth("block_trade"))
+    return get(function=pro.block_trade, dict_arg=locals(), df_if_empty=LB.empty_df("block_trade"))
 
 
 def my_share_float(ann_date):

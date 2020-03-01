@@ -9,10 +9,11 @@ import smtplib
 from email.message import EmailMessage
 import os
 import math
+from enum import auto
 from win32com.client import Dispatch
 import traceback
 import API_Tushare
-from pandas.plotting import autocorrelation_plot
+
 import matplotlib.pyplot as plt
 import atexit
 from time import time, strftime, localtime
@@ -30,7 +31,6 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 # decorator functions must be at top
-
 def only_big_update(func):
     def this_invisible_func(*args, **kwargs):
         if "big_update" in [*kwargs]:
@@ -48,6 +48,7 @@ def try_ignore(func):
             return func(*args, **kwargs)
         except Exception as e:
             return
+
     return this_function_will_never_be_seen
 
 
@@ -59,6 +60,7 @@ def except_empty_df(func):
             return pd.DataFrame()
 
     return this_function_will_never_be_seen
+
 
 def wrap_line(func):
     def line(lines=50):
@@ -77,55 +79,6 @@ def today():
     return str(datetime.now().date()).replace("-", "")
 
 
-def plot_autocorrelation(series):
-    autocorrelation_plot(series.dropna())
-    plt.show()
-
-
-def plot_chart(df, columns):
-    df = df.copy()
-    df = df[columns]
-    df.reset_index(inplace=True, drop=True)
-    df.plot(legend=True)
-    plt.show()
-    plt.close()
-
-
-def func(df, degree=1, column="close"):
-    s_index = df[column].index
-    y = df[column]
-    weights = np.polyfit(s_index, y, degree)
-    data = pd.Series(index=s_index, data=0)
-    for i, polynom in enumerate(weights):
-        pdegree = degree - i
-        data = data + (polynom * (s_index ** pdegree))
-    return data
-
-
-def plot_polynomials():
-    import DB
-    df_asset = DB.get_asset(ts_code="000938.SZ")
-    df_asset = df_asset.reset_index()
-    window = 265
-    step = 5
-    for i in range(0, 6000, step):
-        df = df_asset[i:i + window]
-        trade_date = df_asset.at[i, "trade_date"]
-
-        df["poly1"] = func(df=df, degree=1, column="close")
-        df["poly2"] = func(df=df, degree=2, column="close")
-        df["poly3"] = func(df=df, degree=3, column="close")
-        df["poly4"] = func(df=df, degree=4, column="close")
-        df["poly5"] = func(df=df, degree=5, column="close")
-        df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
-        df.reset_index(inplace=True, drop=True)
-        newpath = f"Media/Plot/stock/000938.SZ/"
-        if not os.path.exists(newpath):
-            os.makedirs(newpath)
-        plt.savefig(newpath + f"{trade_date}.jpg")
-        df.plot(legend=True)
-    plt.close()
-
 def standard_indi_name(ibase, deri, dict_variables={}):
     variables = ""
     for key, enum_val in dict_variables.items():
@@ -139,6 +92,7 @@ def standard_indi_name(ibase, deri, dict_variables={}):
         return f"{ibase}.{deri}" + f"({variables})"
     else:
         return f"{ibase}.{deri}"
+
 
 def fibonacci(n):
     if n < 0:
@@ -166,15 +120,10 @@ def fibonacci_weight(n):
     return array
 
 
-def empty_asset_Tushare(asset="E"):
-    if (asset == "E"):
+def empty_df(query):
+    if query == "pro_bar":
         return pd.DataFrame(columns=["ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol"])
-    else:
-        return pd.DataFrame(columns=["ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol"])
-
-
-def empty_date_Oth(query):
-    if query == "holdertrade":
+    elif query == "holdertrade":
         return pd.DataFrame(columns=["ts_code", "ann_date", "holder_name", "holder_type", "in_de", "change_vol", "change_ratio", "after_share", "after_ratio", "avg_price", "total_share", "begin_date", "close_date"])
     elif query == "share_float":
         return pd.DataFrame(columns=["ts_code", "ann_date", "float_date", "float_share", "float_ratio", "holder_name", "share_type"])
@@ -182,10 +131,11 @@ def empty_date_Oth(query):
         return pd.DataFrame(columns=["ts_code", "ann_date", "end_date", "proc", "exp_date", "vol", "amount", "high_limit", "low_limit"])
     elif query == "block_trade":
         return pd.DataFrame(columns=["ts_code", "trade_date", "price", "vol", "amount", "buyer", "seller"])
-
-
-def empty_asset_E_D_Fun(query):
-    if query == "balancesheet":
+    elif query == "pledge_stat":
+        return pd.DataFrame(columns=["ts_code", "end_date", "pledge_count", "unrest_pledge", "rest_pledge", "total_share", "pledge_ratio"])
+    elif query == "top_holder":
+        return pd.DataFrame(columns=["ts_code", "ann_date", "end_date", "holder_name", "hold_amount", "hold_ratio"])
+    elif query == "balancesheet":
         return pd.DataFrame(
             columns=["ts_code", "ann_date", "f_ann_date", "end_date", "report_type", "comp_type", "total_share", "cap_rese", "undistr_porfit", "surplus_rese", "special_rese", "money_cap", "trad_asset", "notes_receiv", "accounts_receiv", "oth_receiv", "prepayment", "div_receiv", "int_receiv",
                      "inventories", "amor_exp", "nca_within_1y", "sett_rsrv", "loanto_oth_bank_fi", "premium_receiv", "reinsur_receiv", "reinsur_res_receiv", "pur_resale_fa", "oth_cur_assets", "total_cur_assets", "fa_avail_for_sale", "htm_invest", "lt_eqt_invest", "invest_real_estate",
@@ -219,14 +169,6 @@ def empty_asset_E_D_Fun(query):
                      "roic", "roe_yearly", "roa2_yearly", "debt_to_assets", "assets_to_eqt", "dp_assets_to_eqt", "ca_to_assets", "nca_to_assets", "tbassets_to_totalassets", "int_to_talcap", "eqt_to_talcapital", "currentdebt_to_debt", "longdeb_to_debt", "ocf_to_shortdebt", "debt_to_eqt",
                      "eqt_to_debt", "eqt_to_interestdebt", "tangibleasset_to_debt", "tangasset_to_intdebt", "tangibleasset_to_netdebt", "ocf_to_debt", "turn_days", "roa_yearly", "roa_dp", "fixed_assets", "profit_to_op", "q_saleexp_to_gr", "q_gc_to_gr", "q_roe", "q_dt_roe", "q_npta",
                      "q_ocf_to_sales", "basic_eps_yoy", "dt_eps_yoy", "cfps_yoy", "op_yoy", "ebt_yoy", "netprofit_yoy", "dt_netprofit_yoy", "ocf_yoy", "roe_yoy", "bps_yoy", "assets_yoy", "eqt_yoy", "tr_yoy", "or_yoy", "q_sales_yoy", "q_op_qoq", "equity_yoy"])
-
-
-def emty_asset_E_W_pledge_stat():
-    return pd.DataFrame(columns=["ts_code", "end_date", "pledge_count", "unrest_pledge", "rest_pledge", "total_share", "pledge_ratio"])
-
-
-def empty_asset_E_top_holder():
-    return pd.DataFrame(columns=["ts_code", "ann_date", "end_date", "holder_name", "hold_amount", "hold_ratio"])
 
 
 def get_trade_date_datetime(trade_date):
@@ -281,8 +223,7 @@ def get_trade_date_datetime_weekofyear(trade_date):
 
 
 def df_reverse_reindex(df):
-    df = df.reindex(index=df.index[::-1])
-    df = df.set_index(pd.Series(range(0, len(df.index))))
+    df = df.reindex(index=df.index[::-1]).set_index(pd.Series(range(0, len(df.index))))
     return df
 
 
@@ -290,34 +231,17 @@ def df_reindex(df):
     return df.reset_index(drop=True, inplace=False)
 
 
-def df_drop_duplicated_reindex(df, column_name):  #TODO needs to be deleted
+def df_drop_duplicated_reindex(df, column_name):
     df[column_name] = df[column_name].astype(int)
     df = df.drop_duplicates(subset=column_name)
     df = df_reindex(df)
     return df
 
 
-# skip rolling values that are already calculated and only treat nan values
-def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.mean):
-    nan_series = df.loc[df[add_to].isna(), add_to]  # check out all nan values
-    for index, value in nan_series.iteritems():  # iterarte over all nan value
-        get_rolling_frame = df[add_from][index - rolling_freq + 1:index + 1]  # get the custom made rolling object
-        df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
-
-
-@jit
-def quick_rolling_prod(xs, n):
-    cxs = np.cumprod(xs)
-    nans = np.empty(n)
-    nans[:] = np.nan
-    nans[n - 1] = 1.
-    a = np.concatenate((nans, cxs[:len(cxs) - n]))
-    return cxs / a
-
-
 @try_ignore
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
     df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
+
 
 def columns_remove(df, columns_array):
     for column in columns_array:
@@ -326,19 +250,14 @@ def columns_remove(df, columns_array):
         except Exception as e:
             pass
 
-def column_add_comp_chg(pct_chg_series):
-    cun_pct_chg_series = 1 + (pct_chg_series / 100)
-    return cun_pct_chg_series.cumprod()
 
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
-    s_result = pd.Series(index=s_index, data=s_index * z[0] + z[1])
-    return s_result
+    return pd.Series(index=s_index, data=s_index * z[0] + z[1])
 
 
-def get_linear_regression_rise(s_index, s_data):  # actualy it is not rise but slope or steigung something
-    z = np.polyfit(s_index, s_data, 1)
-    return z[0]
+def get_linear_regression_slope(s_index, s_data):
+    return np.polyfit(s_index, s_data, 1)[0]  # if degree is 1, then [0] is slope
 
 
 def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan because std returns nan too often
@@ -347,11 +266,10 @@ def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan becau
     s1 = s1.copy()  # nessesary for some reason . dont delete it
     s2 = s2.copy()
 
-
     # calculate beta by only using the non na days = smallest amount of days where both s1 s2 are trading
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
-    correl = asset_all[s1_name].corr(asset_all[s2_name], method="pearson")
-    return correl
+    return asset_all[s1_name].corr(asset_all[s2_name], method="pearson")
+
 
 def open_file(filepath):
     filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
@@ -369,6 +287,7 @@ def close_file(filepath):
     xl = Dispatch('Excel.Application')
     wb = xl.Workbooks.Open(filepath)
     wb.Close(True)
+
 
 def groups_dict_to_string_iterable(dict_groups: dict):
     result = ""
@@ -402,17 +321,22 @@ def groups_dict_to_string_iterable(dict_groups: dict):
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
 
-def get_numeric_df_columns(df):
-    return list(get_numeric_df(df).columns.values)
+
+def line_print(text, lines=40):
+    print("=" * lines)
+    print(text)
+    print("=" * lines)
+
 
 def shutdown_windows():
     os.system('shutdown -s')
+
 
 def sound(file="error.mp3"):
     playsound("Media/Sound/" + file)
 
 
-def a_path(path: str = ""):  #TODO use os path library instead of my own
+def a_path(path: str = ""):
     return [x for x in [path + ".csv", path + ".feather"]]
 
 
@@ -432,7 +356,7 @@ def handle_save_exception(e, path):
 
 # reset index no matter what becaus of feather format. Drop index depends if index is relevant. CSV store index is always false
 def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv=False):  # utf-8_sig
-    df.reset_index(drop=(not index_relevant), inplace=True)  #reset index no matter what because feather can only store normal index. if index relevant then dont drop
+    df.reset_index(drop=(not index_relevant), inplace=True)  # reset index no matter what because feather can only store normal index. if index relevant then dont drop
     df = df.infer_objects()
     if not skip_csv:
         for _ in range(10):
@@ -459,11 +383,6 @@ def to_excel(path_excel, dict_df):
         except Exception as e:
             handle_save_exception(e, path_excel)
 
-
-def line_print(text, lines=40):
-    print("=" * lines)
-    print(text)
-    print("=" * lines)
 
 def send_mail(trade_string="what to buy and sell"):
     sender_email = "sizhe.huang@guanyueinternational.com"
@@ -498,24 +417,15 @@ def multi_process(func, a_kwargs, a_steps=[]):
     [process.start() for process in a_process]
     [process.join() for process in a_process]
 
+
 def c_assets():
     return [e.value for e in Assets]
 
+
 class Assets(enum.Enum):
-    I = "I"
-    E = "E"
-    FD = "FD"
-
-
-def c_SFreq():
-    return [e.value for e in SFreq]  # return ["D", "W", "M", "Y", "S"]
-
-
-class SFreq(enum.Enum):
-    D = "D"
-    # W="W"
-    # S="S"
-    # Y="Y"
+    I = auto()
+    E = auto()
+    FD = auto()
 
 
 def c_bfreq():
@@ -523,7 +433,7 @@ def c_bfreq():
 
 
 class BFreq(enum.Enum):
-    #f1 = 1
+    # f1 = 1
     f2 = 2
     f5 = 5
     f10 = 10
@@ -535,15 +445,13 @@ class BFreq(enum.Enum):
 def c_sfreq():
     return [e.value for e in SFreq]
 
+
 class SFreq(enum.Enum):
     # f1 = 1
     f2 = 2
     f20 = 20
     f240 = 240
 
-
-def c_rolling_freqs_fibonacci():
-    return [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377]
 
 def c_group_score_weight():
     return {"area": 0.10,
@@ -553,11 +461,13 @@ def c_group_score_weight():
             "state_company": 0.05,
             "is_hs": 0.05}  # "industry3": 0.20,
 
+
 def c_date_oth():
     return {"block_trade": API_Tushare.my_block_trade,
             "holdertrade": API_Tushare.my_holdertrade,
             "repurchase": API_Tushare.my_repurchase,
             "share_float": API_Tushare.my_share_float}
+
 
 def c_assets_fina_function_dict():
     return {"fina_indicator": API_Tushare.my_fina_indicator,
@@ -565,8 +475,10 @@ def c_assets_fina_function_dict():
             "balancesheet": API_Tushare.my_balancesheet,
             "cashflow": API_Tushare.my_cashflow}
 
+
 def c_industry_level():
     return ['1', '2', '3']
+
 
 def c_op():
     return {"plus": operator.add,
@@ -577,71 +489,72 @@ def c_op():
             "le": operator.le,
             "eq": operator.eq}
 
+
 def c_candle():
     # array = [function, candle positive return use, candle negative return use]
     # e.g. "CDLDOJISTAR": [talib.CDLDOJISTAR, -100, 0] : for POSITIVE return WHEN -100 occurs. and 0 means not used for negative return
     return {"CDL2CROWS": [talib.CDL2CROWS, 0, 0],
-                    "CDL3BLACKCROWS": [talib.CDL3BLACKCROWS, 0, 0],
-                    "CDL3INSIDE": [talib.CDL3INSIDE, 0, 0],
-                    "CDL3LINESTRIKE": [talib.CDL3LINESTRIKE, 0, 0],
-                    "CDL3OUTSIDE": [talib.CDL3OUTSIDE, 0, 0],
-                    "CDL3STARSINSOUTH": [talib.CDL3STARSINSOUTH, 0, 0],
-                    "CDL3WHITESOLDIERS": [talib.CDL3WHITESOLDIERS, 0, 0],
-                    "CDLABANDONEDBABY": [talib.CDLABANDONEDBABY, 0, 0],
-                    "CDLADVANCEBLOCK": [talib.CDLADVANCEBLOCK, -100, 0],
-                    "CDLBELTHOLD": [talib.CDLBELTHOLD, 100, -100],
-                    "CDLBREAKAWAY": [talib.CDLBREAKAWAY, 0, 0],
-                    "CDLCLOSINGMARUBOZU": [talib.CDLCLOSINGMARUBOZU, 100, -100],
-                    "CDLCONCEALBABYSWALL": [talib.CDLCONCEALBABYSWALL, 0, 0],
-                    "CDLCOUNTERATTACK": [talib.CDLCOUNTERATTACK, 0, 0],
-                    "CDLDARKCLOUDCOVER": [talib.CDLDARKCLOUDCOVER, 0, 0],
-                    "CDLDOJI": [talib.CDLDOJI, 100, 0],
-                    "CDLDOJISTAR": [talib.CDLDOJISTAR, -100, 0],
-                    "CDLDRAGONFLYDOJI": [talib.CDLDRAGONFLYDOJI, 0, 0],
-                    "CDLENGULFING": [talib.CDLENGULFING, 100, -100],
-                    "CDLEVENINGDOJISTAR": [talib.CDLEVENINGDOJISTAR, 0, 0],
-                    "CDLEVENINGSTAR": [talib.CDLEVENINGSTAR, 0, 0],
-                    "CDLGAPSIDESIDEWHITE": [talib.CDLGAPSIDESIDEWHITE, 0, 0],
-                    "CDLGRAVESTONEDOJI": [talib.CDLGRAVESTONEDOJI, 0, 0],
-                    "CDLHAMMER": [talib.CDLHAMMER, 0, 0],
-                    "CDLHANGINGMAN": [talib.CDLHANGINGMAN, 0, -100],
-                    "CDLHARAMI": [talib.CDLHARAMI, 100, -100],
-                    "CDLHARAMICROSS": [talib.CDLHARAMICROSS, 0, -100],
-                    "CDLHIGHWAVE": [talib.CDLHIGHWAVE, 0, -100],
-                    "CDLHIKKAKE": [talib.CDLHIKKAKE, 100, 0],
-                    "CDLHIKKAKEMOD": [talib.CDLHIKKAKEMOD, 0, 0],
-                    "CDLHOMINGPIGEON": [talib.CDLHOMINGPIGEON, 0, 0],
-                    "CDLIDENTICAL3CROWS": [talib.CDLIDENTICAL3CROWS, 0, 0],
-                    "CDLINNECK": [talib.CDLINNECK, 0, 0],
-                    "CDLINVERTEDHAMMER": [talib.CDLINVERTEDHAMMER, 0, 0],
-                    "CDLKICKING": [talib.CDLKICKING, 0, 0],
-                    "CDLKICKINGBYLENGTH": [talib.CDLKICKINGBYLENGTH, 0, 0],
-                    "CDLLADDERBOTTOM": [talib.CDLLADDERBOTTOM, 0, 0],
-                    "CDLLONGLEGGEDDOJI": [talib.CDLLONGLEGGEDDOJI, 0, 0],
-                    "CDLLONGLINE": [talib.CDLLONGLINE, 100, -100],
-                    "CDLMARUBOZU": [talib.CDLMARUBOZU, 100, -100],
-                    "CDLMATCHINGLOW": [talib.CDLMATCHINGLOW, 0, 0],
-                    "CDLMATHOLD": [talib.CDLMATHOLD, 0, 0],
-                    "CDLMORNINGDOJISTAR": [talib.CDLMORNINGDOJISTAR, 0, 0],
-                    "CDLMORNINGSTAR": [talib.CDLMORNINGSTAR, 0, 0],
-                    "CDLONNECK": [talib.CDLONNECK, 0, 0],
-                    "CDLPIERCING": [talib.CDLPIERCING, 0, 0],
-                    "CDLRICKSHAWMAN": [talib.CDLRICKSHAWMAN, 0, 0],
-                    "CDLRISEFALL3METHODS": [talib.CDLRISEFALL3METHODS, 0, 0],
-                    "CDLSEPARATINGLINES": [talib.CDLSEPARATINGLINES, 0, 0],
-                    "CDLSHOOTINGSTAR": [talib.CDLSHOOTINGSTAR, -100, 0],
-                    "CDLSHORTLINE": [talib.CDLSHORTLINE, 100, -100],
-                    "CDLSPINNINGTOP": [talib.CDLSPINNINGTOP, 0, -100],
-                    "CDLSTALLEDPATTERN": [talib.CDLSTALLEDPATTERN, 0, 0],
-                    "CDLSTICKSANDWICH": [talib.CDLSTICKSANDWICH, 0, 0],
-                    "CDLTAKURI": [talib.CDLTAKURI, 0, 0],
-                    "CDLTASUKIGAP": [talib.CDLTASUKIGAP, 0, 0],
-                    "CDLTHRUSTING": [talib.CDLTHRUSTING, 0, -100],
-                    "CDLTRISTAR": [talib.CDLTRISTAR, 0, 0],
-                    "CDLUNIQUE3RIVER": [talib.CDLUNIQUE3RIVER, 0, 0],
-                    "CDLUPSIDEGAP2CROWS": [talib.CDLUPSIDEGAP2CROWS, 0, 0],
-                    "CDLXSIDEGAP3METHODS": [talib.CDLXSIDEGAP3METHODS, 0, 0],
-                    }
+            "CDL3BLACKCROWS": [talib.CDL3BLACKCROWS, 0, 0],
+            "CDL3INSIDE": [talib.CDL3INSIDE, 0, 0],
+            "CDL3LINESTRIKE": [talib.CDL3LINESTRIKE, 0, 0],
+            "CDL3OUTSIDE": [talib.CDL3OUTSIDE, 0, 0],
+            "CDL3STARSINSOUTH": [talib.CDL3STARSINSOUTH, 0, 0],
+            "CDL3WHITESOLDIERS": [talib.CDL3WHITESOLDIERS, 0, 0],
+            "CDLABANDONEDBABY": [talib.CDLABANDONEDBABY, 0, 0],
+            "CDLADVANCEBLOCK": [talib.CDLADVANCEBLOCK, -100, 0],
+            "CDLBELTHOLD": [talib.CDLBELTHOLD, 100, -100],
+            "CDLBREAKAWAY": [talib.CDLBREAKAWAY, 0, 0],
+            "CDLCLOSINGMARUBOZU": [talib.CDLCLOSINGMARUBOZU, 100, -100],
+            "CDLCONCEALBABYSWALL": [talib.CDLCONCEALBABYSWALL, 0, 0],
+            "CDLCOUNTERATTACK": [talib.CDLCOUNTERATTACK, 0, 0],
+            "CDLDARKCLOUDCOVER": [talib.CDLDARKCLOUDCOVER, 0, 0],
+            "CDLDOJI": [talib.CDLDOJI, 100, 0],
+            "CDLDOJISTAR": [talib.CDLDOJISTAR, -100, 0],
+            "CDLDRAGONFLYDOJI": [talib.CDLDRAGONFLYDOJI, 0, 0],
+            "CDLENGULFING": [talib.CDLENGULFING, 100, -100],
+            "CDLEVENINGDOJISTAR": [talib.CDLEVENINGDOJISTAR, 0, 0],
+            "CDLEVENINGSTAR": [talib.CDLEVENINGSTAR, 0, 0],
+            "CDLGAPSIDESIDEWHITE": [talib.CDLGAPSIDESIDEWHITE, 0, 0],
+            "CDLGRAVESTONEDOJI": [talib.CDLGRAVESTONEDOJI, 0, 0],
+            "CDLHAMMER": [talib.CDLHAMMER, 0, 0],
+            "CDLHANGINGMAN": [talib.CDLHANGINGMAN, 0, -100],
+            "CDLHARAMI": [talib.CDLHARAMI, 100, -100],
+            "CDLHARAMICROSS": [talib.CDLHARAMICROSS, 0, -100],
+            "CDLHIGHWAVE": [talib.CDLHIGHWAVE, 0, -100],
+            "CDLHIKKAKE": [talib.CDLHIKKAKE, 100, 0],
+            "CDLHIKKAKEMOD": [talib.CDLHIKKAKEMOD, 0, 0],
+            "CDLHOMINGPIGEON": [talib.CDLHOMINGPIGEON, 0, 0],
+            "CDLIDENTICAL3CROWS": [talib.CDLIDENTICAL3CROWS, 0, 0],
+            "CDLINNECK": [talib.CDLINNECK, 0, 0],
+            "CDLINVERTEDHAMMER": [talib.CDLINVERTEDHAMMER, 0, 0],
+            "CDLKICKING": [talib.CDLKICKING, 0, 0],
+            "CDLKICKINGBYLENGTH": [talib.CDLKICKINGBYLENGTH, 0, 0],
+            "CDLLADDERBOTTOM": [talib.CDLLADDERBOTTOM, 0, 0],
+            "CDLLONGLEGGEDDOJI": [talib.CDLLONGLEGGEDDOJI, 0, 0],
+            "CDLLONGLINE": [talib.CDLLONGLINE, 100, -100],
+            "CDLMARUBOZU": [talib.CDLMARUBOZU, 100, -100],
+            "CDLMATCHINGLOW": [talib.CDLMATCHINGLOW, 0, 0],
+            "CDLMATHOLD": [talib.CDLMATHOLD, 0, 0],
+            "CDLMORNINGDOJISTAR": [talib.CDLMORNINGDOJISTAR, 0, 0],
+            "CDLMORNINGSTAR": [talib.CDLMORNINGSTAR, 0, 0],
+            "CDLONNECK": [talib.CDLONNECK, 0, 0],
+            "CDLPIERCING": [talib.CDLPIERCING, 0, 0],
+            "CDLRICKSHAWMAN": [talib.CDLRICKSHAWMAN, 0, 0],
+            "CDLRISEFALL3METHODS": [talib.CDLRISEFALL3METHODS, 0, 0],
+            "CDLSEPARATINGLINES": [talib.CDLSEPARATINGLINES, 0, 0],
+            "CDLSHOOTINGSTAR": [talib.CDLSHOOTINGSTAR, -100, 0],
+            "CDLSHORTLINE": [talib.CDLSHORTLINE, 100, -100],
+            "CDLSPINNINGTOP": [talib.CDLSPINNINGTOP, 0, -100],
+            "CDLSTALLEDPATTERN": [talib.CDLSTALLEDPATTERN, 0, 0],
+            "CDLSTICKSANDWICH": [talib.CDLSTICKSANDWICH, 0, 0],
+            "CDLTAKURI": [talib.CDLTAKURI, 0, 0],
+            "CDLTASUKIGAP": [talib.CDLTASUKIGAP, 0, 0],
+            "CDLTHRUSTING": [talib.CDLTHRUSTING, 0, -100],
+            "CDLTRISTAR": [talib.CDLTRISTAR, 0, 0],
+            "CDLUNIQUE3RIVER": [talib.CDLUNIQUE3RIVER, 0, 0],
+            "CDLUPSIDEGAP2CROWS": [talib.CDLUPSIDEGAP2CROWS, 0, 0],
+            "CDLXSIDEGAP3METHODS": [talib.CDLXSIDEGAP3METHODS, 0, 0],
+            }
 
 
 def c_groups_dict(assets=c_assets(), a_ignore=[]):
@@ -690,8 +603,7 @@ def c_groups_dict(assets=c_assets(), a_ignore=[]):
     asset = {key: value for key, value in asset.items() if key not in a_ignore}
     return asset
 
-def c_setting_path():  # TODO create setting
-    return "D:/GoogleDrive/私人/私人 Stock 2.0/"
+
 
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
@@ -701,10 +613,29 @@ def secondsToStr(elapsed=None):
 def log(message, elapsed=None):
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
 
+
 def endlog():
     sound("finished_all.mp3")
     log("END", secondsToStr(time.time() - start))
     time.sleep(2)
+
+
+# skip rolling values that are already calculated and only treat nan values
+def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.mean):
+    nan_series = df.loc[df[add_to].isna(), add_to]  # check out all nan values
+    for index, value in nan_series.iteritems():  # iterarte over all nan value
+        get_rolling_frame = df[add_from][index - rolling_freq + 1:index + 1]  # get the custom made rolling object
+        df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
+
+
+@jit
+def quick_rolling_prod(xs, n):
+    cxs = np.cumprod(xs)
+    nans = np.empty(n)
+    nans[:] = np.nan
+    nans[n - 1] = 1.
+    a = np.concatenate((nans, cxs[:len(cxs) - n]))
+    return cxs / a
 
 
 @numba.njit  # try to use njit

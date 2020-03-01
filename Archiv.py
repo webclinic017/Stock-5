@@ -229,7 +229,7 @@ def asset_volatility(start_date, end_date, assets, freq):
             close_std_label_list = [s for s in df_asset.columns if "close_std" in s]
             ivola_std_label_list = [s for s in df_asset.columns if "ivola_std" in s]
             turnover_rate_std_label_list = [s for s in df_asset.columns if "turnover_rate_std" in s]
-            beta_list = [s for s in df_asset.columns if "beta" in s]  # TODO add beta for E,I
+            beta_list = [s for s in df_asset.columns if "beta" in s]
 
             std_label_list = close_std_label_list + ivola_std_label_list + turnover_rate_std_label_list + beta_list
             df_asset = df_asset[["ts_code", "period"] + std_label_list]
@@ -283,8 +283,8 @@ def asset_volatility(start_date, end_date, assets, freq):
     DB.ts_code_series_to_excel(df_result, path=path, sort=["final_volatility_rank", True], asset=assets)
 
 
-# measures the overall bullishness ofa an asset
-def geometric_mean():
+# measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
+def asset_bullishness():
     from scipy.stats import gmean
     df_ts_code = DB.get_ts_code_all()
     df_result = pd.DataFrame()

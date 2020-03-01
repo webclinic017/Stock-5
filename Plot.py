@@ -10,6 +10,8 @@ import os
 import datetime
 import imageio
 import glob
+from pandas.plotting import autocorrelation_plot
+import ICreate
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -85,9 +87,41 @@ def plot_distribution(series):
     plt.hist(series)  # use this to draw histogram of your data
     plt.show()
 
+def plot_autocorrelation(series):
+    autocorrelation_plot(series.dropna())
+    plt.show()
 
-def plot_chart():
-    pass
+def plot_chart(df, columns):
+    df_copy = df[columns]
+    df_copy.reset_index(inplace=True, drop=True)
+    df_copy.plot(legend=True)
+    plt.show()
+    plt.close()
+
+def plot_polynomials(): # this needs to be generalized
+    import DB
+    df_asset = DB.get_asset(ts_code="000938.SZ")
+    df_asset = df_asset.reset_index()
+    window = 265
+    step = 5
+    for i in range(0, 6000, step):
+        df = df_asset[i:i + window]
+        trade_date = df_asset.at[i, "trade_date"]
+
+        df["poly1"] = ICreate.polynomial_series(df=df, degree=1, column="close")
+        df["poly2"] = ICreate.polynomial_series(df=df, degree=2, column="close")
+        df["poly3"] = ICreate.polynomial_series(df=df, degree=3, column="close")
+        df["poly4"] = ICreate.polynomial_series(df=df, degree=4, column="close")
+        df["poly5"] = ICreate.polynomial_series(df=df, degree=5, column="close")
+        df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
+        df.reset_index(inplace=True, drop=True)
+        newpath = f"Media/Plot/stock/000938.SZ/"
+        if not os.path.exists(newpath):
+            os.makedirs(newpath)
+        plt.savefig(newpath + f"{trade_date}.jpg")
+        df.plot(legend=True)
+    plt.close()
+
 
 
 if __name__ == '__main__':

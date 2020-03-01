@@ -11,13 +11,6 @@ import Plot
 from scipy.stats import gmean
 
 
-def plot_autocorr():
-    df = pd.read_csv("Stock_Market.csv")
-    df = LB.get_numeric_df(df)
-    for column in df.columns:
-        print(column)
-        plot_autocorrelation(df[column])
-
 
 array = [2, 5, 10, 20, 40, 60, 120, 240]
 
@@ -208,11 +201,11 @@ def plot_polynomials():
         df = df_asset[i:i + window]
         trade_date = df_asset.at[i, "trade_date"]
 
-        df["poly1"] = func(df=df, degree=1, column="close")
-        df["poly2"] = func(df=df, degree=2, column="close")
-        df["poly3"] = func(df=df, degree=3, column="close")
-        df["poly4"] = func(df=df, degree=4, column="close")
-        df["poly5"] = func(df=df, degree=5, column="close")
+        df["poly1"] = polynomial_series(df=df, degree=1, column="close")
+        df["poly2"] = polynomial_series(df=df, degree=2, column="close")
+        df["poly3"] = polynomial_series(df=df, degree=3, column="close")
+        df["poly4"] = polynomial_series(df=df, degree=4, column="close")
+        df["poly5"] = polynomial_series(df=df, degree=5, column="close")
         df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
         df.reset_index(inplace=True, drop=True)
         newpath = f"Media/Plot/stock/000938.SZ/"
@@ -554,8 +547,7 @@ def inverse_fisher_transform_apply(s):
 
 
 def trendslope_apply(s):
-    return LB.get_linear_regression_rise(s.index, s)
-
+    return LB.get_linear_regression_slope(s.index, s)
 
 
 ts_code = "000002.SZ"
@@ -895,7 +887,7 @@ def movingaverages_test():
     DB.ts_code_series_to_excel(df_ts_code=df_result, path=f"ma_test/summary.{func_name}.xlsx", sort=[], asset=["E"], group_result=True)
 
 
-#movingaverages_test()
+# movingaverages_test()
 #
 # rsi_abv_under_test()
 #

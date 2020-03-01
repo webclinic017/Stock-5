@@ -13,6 +13,7 @@ import copy
 import cProfile
 import operator
 import threading
+import ICreate
 import matplotlib
 from numba import njit
 from numba import jit
@@ -84,7 +85,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     # add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
-        df_port_c["comp_chg_" + competitor[1]] = LB.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
+        df_port_c["comp_chg_" + competitor[1]] = ICreate.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
     # df_port_c add trend2,10,20,60,240
     a_current_trend_label = []
@@ -554,7 +555,7 @@ def btest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int #TODO create custom ffilter
+        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
         "f_query_date": {},  # filter days vs filter assets
 
         "s_weight1": {  # ascending True= small, False is big
