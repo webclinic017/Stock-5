@@ -236,8 +236,6 @@ def vol(df: pd.DataFrame, ibase: str): return ibase
 
 
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
-
-
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 

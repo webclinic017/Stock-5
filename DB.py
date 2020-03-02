@@ -730,7 +730,7 @@ def get(a_path=[], set_index=""):  # read feather first
                 df.set_index(keys=set_index, drop=True, inplace=True)
             return df
         except Exception as e:
-            print(f"read error {func.__name__}", e)
+            print(f"read error {func}", e)
 
     print("DB READ File Not Exist!", a_path[0])
     return pd.DataFrame()
