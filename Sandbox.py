@@ -929,8 +929,13 @@ maxonmax, low onlow (multi period overlay analysis),
 """
 
 
+def normalize_std_apply(s):
+    s = normalize_vector(s)
+    return s.std()
+
+
 def bruteforce_slope():
-    ts_code = "000002.SZ"
+    ts_code = "000001.SZ"
     df = DB.get_asset(ts_code=ts_code).reset_index()
 
 
@@ -941,44 +946,67 @@ def bruteforce_slope():
     if any of them should be above or under mean in 
     if quick/slow >  value or smaller value
 
+
+    But first distinguish between normal time and crazy time
+    Basically the old trend moethod does a pretty good job at dividing PAST framges into gategories. So it is a pretty good classifier. BUT
+    the most well known frame is unknown because it is uncertain what will come next. 
+    
+    method 1: trend very good for past but useless to predict future.
+    method 2: using naive technique, very inconsistent, but has predictability directly for the future. 
+    
+    Maybe use trend to identify turning points in the past. And then check how heavy they are. Are they very heavy or not so heavy. Then we can 
+    Basically, Everything is unstable. At high bought point it can be even more high bout, at low can ven go lower. The only thing that is stable is the  mean reverse  at very long run, this should be the only fixed thing we should start with.
+    
+    1. Stock slope since begin. 
+    2. Stock slope past begin /2 : if max trend is up, trend, then buy when max slope /2  is low. 
+    3. Stock slope max 1/3
+    
     """
     df_result = pd.DataFrame()
     periods = [5, 10, 20, 60, 240, 500]
-    for period in periods:
+    for period in [2]:
         df[f"tomorrow{period}"]= df["open"].shift(-period) / df["open"].shift(-1)
 
     for period in periods: #expensive
         df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
 
+    for period in periods:
+        df[f"trendslope_std{period}"] = df[f"trendslope{period}"].rolling(period).apply(normalize_std_apply, raw=False)
+
+    df.to_csv("init.csv")
     for small in periods:
         for big in periods:
-            if small < big:
-
-                for func1 in [(operator.ge, operator.le),( operator.le, operator.ge)]:
-                    for func2 in [(operator.ge, operator.le),( operator.le, operator.ge)]:
-                        for argument2 in periods:
-
+            for func1 in [(operator.ge, operator.le)]:
+                for func2 in [(operator.ge, operator.le), (operator.le, operator.ge)]:
+                    for argument2 in periods:
+                        for argument3 in [0, 0.05, 0.1, 0.15]:
                             df_copy=df.copy()
-                            df_copy.loc[((func1[0](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[0](df_copy[f"trendslope{argument2}"], 0))), "test"] = 10
-                            df_copy.loc[((func1[1](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[1](df_copy[f"trendslope{argument2}"], 0))), "test"] = -10
+                            df_copy.loc[((func1[0](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[0](df_copy[f"trendslope{argument2}"], argument3))), "test"] = 10
+                            df_copy.loc[((func1[1](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[1](df_copy[f"trendslope{argument2}"], -argument3))), "test"] = -10
 
-                            if small== 240 and big==500 and func1[0].__name__=="ge" and func2[0].__name__=="ge":
+                            if small == 20 and big == 5 and func1[0].__name__ == "ge" and func2[0].__name__ == "ge" and argument2 == 5 and argument3 == 0.15:
+                                df_egal = df_copy[df_copy["test"] == 10]
+                                geomean_T = gmean(df_egal[f"tomorrow2"].dropna())
+                                print("tomorrow2 gain is", geomean_T)
                                 df_copy["test"] = df_copy["test"].fillna(method="ffill")
-                                df_copy[[f"close", f"trendslope{small}", f"trendslope{big}", "test"]].plot(legend=True)  # rsi.marker
+                                df_copy = df_copy[[f"close", f"trendslope{small}", f"trendslope{big}", f"tomorrow2", "test"]]
+                                df_copy.plot(legend=True)  # rsi.marker
+                                df_copy.to_csv("sample.csv")
                                 plt.show()
                                 plt.close()
 
-                            #save result
-                            df_T=df_copy[df_copy["test"]== 10]
-                            df_F=df_copy[df_copy["test"]== -10]
+                        # save result
+                        df_T = df_copy[df_copy["test"] == 10]
+                        df_F = df_copy[df_copy["test"] == -10]
 
-                            for period in periods:
-                                geomean_T=gmean(df_T[f"tomorrow{period}"].dropna())
-                                geomean_F=gmean(df_F[f"tomorrow{period}"].dropna())
-                                geomean_diff=abs(geomean_T-geomean_F)
+                        for period in [2]:
+                            geomean_T = gmean(df_T[f"tomorrow{period}"].dropna())
+                            geomean_F = gmean(df_F[f"tomorrow{period}"].dropna())
+                            geomean_diff = abs(geomean_T - geomean_F)
 
-                                s_result=pd.Series({"small":small,"big":big, "func1[0]":func1[0].__name__,"func1[1]":func1[1].__name__,"func2[0]":func2[0].__name__,"func2[1]":func2[1].__name__, "argument2":argument2, "fgain_period":period,"geomean_F":geomean_F,"geomean_T":geomean_T,"geomean_diff":geomean_diff} )
-                                df_result=df_result.append(s_result,ignore_index=True)
+                            s_result = pd.Series({"small": small, "big": big, "func1[0]": func1[0].__name__, "func1[1]": func1[1].__name__, "func2[0]": func2[0].__name__, "func2[1]": func2[1].__name__, "argument2": argument2, "fgain_period": period, "argument3": argument3, "geomean_F": geomean_F,
+                                                  "geomean_T": geomean_T, "geomean_diff": geomean_diff})
+                            df_result = df_result.append(s_result, ignore_index=True)
 
 
     # RSI 240 with 120 seems to be better than with 60
@@ -993,6 +1021,33 @@ def bruteforce_slope():
     df_result.to_csv("bruteforce.csv")
 
 
+def bruteforce_slope_adaptive():
+    ts_code = "000001.SZ"
+    df = DB.get_asset(ts_code=ts_code).reset_index()
+
+    periods = [5, 10, 20, 60, 240, 500]
+    for period in [2]:
+        df[f"tomorrow{period}"] = df["open"].shift(-period) / df["open"].shift(-1)
+
+    for period in periods:  # expensive
+        df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
+
+    df["buy"] = np.nan
+    df["sell"] = np.nan
+    # 1 /2 h
+    dict_adaptive_period_min = {2, 4, 8, 16, 32, 64}
+
+    window_min = 500
+    for i in range(0, len(df)):
+        if i < window_min * 2:
+            continue
+
+        start_date = df.index[i]
+        end_date = df.index[i + window_min]
+        df_past = df.loc[start_date:end_date]
+
+    df.to_csv("bruteforce_adaptive_period.csv")
 # df = DB.get_asset()
 # MESA(df)
-bruteforce_slope()
+# bruteforce_slope()
+bruteforce_slope_adaptive()

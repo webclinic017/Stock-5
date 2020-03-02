@@ -721,7 +721,7 @@ def update_cj_index_000001_SH():
 
 
 def get(a_path=[], set_index=""):  # read feather first
-    for counter,func in [(1, [pd.read_feather]), (0, pd.read_csv)]:
+    for counter, func in [(1, pd.read_feather), (0, pd.read_csv)]:
         try:
             df = func(a_path[counter])
             if set_index:
