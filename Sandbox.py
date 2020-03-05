@@ -9,8 +9,11 @@ from ICreate import *
 import builtins as bi
 import Plot
 from scipy.stats import gmean
+from finta import TA
 
+import sys
 
+sys.setrecursionlimit(1000000)
 
 array = [2, 5, 10, 20, 40, 60, 120, 240]
 
@@ -481,8 +484,6 @@ def sim_bins():
 # sim_pairwise()
 
 
-
-
 # period=120
 # df["ma10"] = df["close"].rolling(period).mean()
 # df["mama"],df["fama"] = talib.MAMA(df["close"],0.01,0.2)
@@ -526,24 +527,26 @@ def normalize_apply(series, min=0, max=1):
     return normalize_vector(series, min, max).iat[-1]
 
 
-def fisher_transform_vector(s):
+# Fisher Transform Apply
+def FT_Apply(s):
     norm = normalize_vector(s, min=-1, max=1)
     expression = (1.000001 + norm) / (1.000001 - norm)
     return 0.5 * np.log(expression)
 
 
-def fisher_transform_apply(s):
-    return fisher_transform_vector(s).iat[-1]
+def FT_APPYL(s):
+    return FT_Apply(s).iat[-1]
 
 
-def inverse_fisher_transform_vector(s):
+# Inverse Fisher Transform
+def IFT(s):
     norm = normalize_vector(s, min=-1, max=1)
     exp = np.exp(norm * 2)
     return (exp - 1) / (exp + 1)
 
 
-def inverse_fisher_transform_apply(s):
-    return inverse_fisher_transform_vector(s).iat[-1]
+def IFT_Apply(s):
+    return IFT(s).iat[-1]
 
 
 def trendslope_apply(s):
@@ -560,7 +563,7 @@ def whatever():
         df[f"rsi{rsi}"] = talib.RSI(df["close"], timeperiod=int(rsi))
 
     for period in [120, 240]:
-        df[f"rsi{period}"] = df[f"rsi{period}"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+        df[f"rsi{period}"] = df[f"rsi{period}"].rolling(period).apply(IFT_Apply, raw=False)
 
     df["rsi.marker"] = np.nan
     df["rsi.helper"] = np.nan
@@ -639,11 +642,11 @@ def whatever():
         print("period", period)
 
         df[f"close{period}"] = df["close"].rolling(period).apply(normalize_apply, raw=False)
-        df[f"close.fisher{period}"] = df["close"].rolling(period).apply(fisher_transform_apply, raw=False)
-        df[f"close.invfisher{period}"] = df["close"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+        df[f"close.fisher{period}"] = df["close"].rolling(period).apply(FT_APPYL, raw=False)
+        df[f"close.invfisher{period}"] = df["close"].rolling(period).apply(IFT_Apply, raw=False)
         df[f"rsi.norm{period}"] = df[f"rsi{period}"].rolling(period).apply(normalize_apply, raw=False)
-        df[f"rsi.fisher{period}"] = df[f"rsi{period}"].rolling(period).apply(fisher_transform_apply, raw=False)
-        df[f"rsi.invfisher{period}"] = df[f"rsi{period}"].rolling(period).apply(inverse_fisher_transform_apply, raw=False)
+        df[f"rsi.fisher{period}"] = df[f"rsi{period}"].rolling(period).apply(FT_APPYL, raw=False)
+        df[f"rsi.invfisher{period}"] = df[f"rsi{period}"].rolling(period).apply(IFT_Apply, raw=False)
 
     # df.to_csv("fisher_mod.csv")
     # Plot.plot_distribution(df["fisher240.rolling"])
@@ -689,7 +692,6 @@ def whatever():
     plt.show()
 
     df.to_csv("sine.csv")
-
 
     # df["rsi60"] = talib.RSI(df["close"], timeperiod=60)
     # df["rsi120"] = talib.RSI(df["close"], timeperiod=120)
@@ -888,9 +890,6 @@ def movingaverages_test():
     DB.ts_code_series_to_excel(df_ts_code=df_result, path=f"ma_test/summary.{func_name}.xlsx", sort=[], asset=["E"], group_result=True)
 
 
-
-
-
 def ent(data):
     import scipy.stats
     """Calculates entropy of the passed `pd.Series`
@@ -934,120 +933,348 @@ def normalize_std_apply(s):
     return s.std()
 
 
-def bruteforce_slope():
-    ts_code = "000001.SZ"
-    df = DB.get_asset(ts_code=ts_code).reset_index()
+# highlight: using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
+"""
+on daily chart, useable freqs are 12*60, 24*60 ,5*60
+"""
 
 
-    """
-    brute force slope with following parameters
-    long period
-    slow period
-    if any of them should be above or under mean in 
-    if quick/slow >  value or smaller value
+def zlmacd(df, ibase, sfreq, bfreq, smfreq):
+    name = f"{ibase, sfreq, bfreq, smfreq}"
+    df[f"zlema1_{name}"] = my_ec_it((df[ibase]), sfreq, 1.8)
+    df[f"zlema2_{name}"] = my_ec_it((df[ibase]), bfreq, 1.8)
+
+    df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
+    df[f"zldea_{name}"] = df[f"zldif_{name}"] - my_ec_it(df[f"zldif_{name}"], smfreq, 1.8)
+
+    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
+    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
+    return name
 
 
-    But first distinguish between normal time and crazy time
-    Basically the old trend moethod does a pretty good job at dividing PAST framges into gategories. So it is a pretty good classifier. BUT
-    the most well known frame is unknown because it is uncertain what will come next. 
-    
-    method 1: trend very good for past but useless to predict future.
-    method 2: using naive technique, very inconsistent, but has predictability directly for the future. 
-    
-    Maybe use trend to identify turning points in the past. And then check how heavy they are. Are they very heavy or not so heavy. Then we can 
-    Basically, Everything is unstable. At high bought point it can be even more high bout, at low can ven go lower. The only thing that is stable is the  mean reverse  at very long run, this should be the only fixed thing we should start with.
-    
-    1. Stock slope since begin. 
-    2. Stock slope past begin /2 : if max trend is up, trend, then buy when max slope /2  is low. 
-    3. Stock slope max 1/3
-    
-    """
-    df_result = pd.DataFrame()
-    periods = [5, 10, 20, 60, 240, 500]
-    for period in [2]:
-        df[f"tomorrow{period}"]= df["open"].shift(-period) / df["open"].shift(-1)
+# highlight: using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
+# not as good as zlmacd
+def slopecross(df, ibase, sfreq, bfreq, smfreq):
+    name = f"{ibase, sfreq, bfreq, smfreq}"
+    df[f"slope1_{name}"] = df[ibase].rolling(sfreq).apply(trendslope_apply, raw=False)
+    df[f"slope2_{name}"] = df[ibase].rolling(bfreq).apply(trendslope_apply, raw=False)
 
-    for period in periods: #expensive
-        df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
+    # df[f"slopediff_{name}"] = df[f"slope1_{name}"] - df[f"slope2_{name}"]
+    # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)
 
-    for period in periods:
-        df[f"trendslope_std{period}"] = df[f"trendslope{period}"].rolling(period).apply(normalize_std_apply, raw=False)
-
-    df.to_csv("init.csv")
-    for small in periods:
-        for big in periods:
-            for func1 in [(operator.ge, operator.le)]:
-                for func2 in [(operator.ge, operator.le), (operator.le, operator.ge)]:
-                    for argument2 in periods:
-                        for argument3 in [0, 0.05, 0.1, 0.15]:
-                            df_copy=df.copy()
-                            df_copy.loc[((func1[0](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[0](df_copy[f"trendslope{argument2}"], argument3))), "test"] = 10
-                            df_copy.loc[((func1[1](df_copy[f"trendslope{small}"], df_copy[f"trendslope{big}"])) & (func2[1](df_copy[f"trendslope{argument2}"], -argument3))), "test"] = -10
-
-                            if small == 20 and big == 5 and func1[0].__name__ == "ge" and func2[0].__name__ == "ge" and argument2 == 5 and argument3 == 0.15:
-                                df_egal = df_copy[df_copy["test"] == 10]
-                                geomean_T = gmean(df_egal[f"tomorrow2"].dropna())
-                                print("tomorrow2 gain is", geomean_T)
-                                df_copy["test"] = df_copy["test"].fillna(method="ffill")
-                                df_copy = df_copy[[f"close", f"trendslope{small}", f"trendslope{big}", f"tomorrow2", "test"]]
-                                df_copy.plot(legend=True)  # rsi.marker
-                                df_copy.to_csv("sample.csv")
-                                plt.show()
-                                plt.close()
-
-                        # save result
-                        df_T = df_copy[df_copy["test"] == 10]
-                        df_F = df_copy[df_copy["test"] == -10]
-
-                        for period in [2]:
-                            geomean_T = gmean(df_T[f"tomorrow{period}"].dropna())
-                            geomean_F = gmean(df_F[f"tomorrow{period}"].dropna())
-                            geomean_diff = abs(geomean_T - geomean_F)
-
-                            s_result = pd.Series({"small": small, "big": big, "func1[0]": func1[0].__name__, "func1[1]": func1[1].__name__, "func2[0]": func2[0].__name__, "func2[1]": func2[1].__name__, "argument2": argument2, "fgain_period": period, "argument3": argument3, "geomean_F": geomean_F,
-                                                  "geomean_T": geomean_T, "geomean_diff": geomean_diff})
-                            df_result = df_result.append(s_result, ignore_index=True)
+    df[f"slope_{name}"] = 0
+    df.loc[(df[f"slope1_{name}"] > df[f"slope2_{name}"]) & (df[f"slope1_{name}"] > 0), f"slope_{name}"] = 10
+    df.loc[(df[f"slope1_{name}"] <= df[f"slope2_{name}"]) & (df[f"slope1_{name}"] <= 0), f"slope_{name}"] = -10
 
 
-    # RSI 240 with 120 seems to be better than with 60
-    # the slope method produces correct signal during trend
-    # and creates useless signals in cycle modes
+def cycle_mom(df, ibase, freq):
+    name = f"{ibase, freq}"
+    # df[f"mom_{name}"] = talib.MOM(df[ibase], timeperiod=freq)
+    df[f"mom_{name}"] = FT_Apply(df[ibase] / df[ibase].shift(freq))
+    df[f"mom_{name}"] = IFT(talib.RSI(df[ibase], timeperiod=freq))
+    # df[f"cycle_{name}"] = talib.HT_DCPERIOD(df[ibase])
+    df[f"sine_{name}"], leadsine = talib.HT_SINE(df[ibase])
+    df["trend"] = talib.HT_TRENDLINE(df["close"])
 
+    df["zlema"] = my_best_ec(df["close"], freq)
+    df["roofing"] = my_roofingfilter_it(df["close"], freq, freq)
+    df["hp"] = my_highpass_it(df["close"], freq)
+    df["ss"] = my_supersmoother_it(df["close"], freq)
+    df["icc"] = my_cyber_cycle(df["high"], df["low"], 7)
 
-    """
-    trendslope 1000 and 500 gives the complete overall division between phases which is really useful
-    Since the reversal happens every 3 -4 years , the max day allowed for backlook is limited. In the short run, go with the trend. In the long run, bet against the trend. Because everything is normal distributed in the data is big enough. (=mean reverse)
-    """
-    df_result.to_csv("bruteforce.csv")
+    df[f"trade"] = 0
+    df.loc[(df[f"sine_{name}"] < -0.7) & (df[f"mom_{name}"] < -0.2), "trade"] = -10
+    df.loc[(df[f"sine_{name}"] >= 0.7) & (df[f"mom_{name}"] >= 0.2), "trade"] = 10
+
+    df_copy = df[["close", f"sine_{name}", "trade", f"mom_{name}", "trend", "ss", "zlema", "hp", "roofing", "icc"]]
+
+    df_copy.plot(legend=True)
+    plt.show()
+    plt.close()
 
 
 def bruteforce_slope_adaptive():
-    ts_code = "000001.SZ"
-    df = DB.get_asset(ts_code=ts_code).reset_index()
+    a_period = [60, 120][::-1]
+    df_ts_code = DB.get_ts_code()
+    df_ts_code = df_ts_code[df_ts_code.index == "000002.SZ"]
+    for ts_code in df_ts_code.index[::1]:
+        print("ts_code", ts_code)
+        df = DB.get_asset(ts_code=ts_code).reset_index()
+        # df = LB.timeseries_to_season(df)
+        df = df[3000:]
 
-    periods = [5, 10, 20, 60, 240, 500]
-    for period in [2]:
-        df[f"tomorrow{period}"] = df["open"].shift(-period) / df["open"].shift(-1)
+        for period in [2]:
+            df[f"tomorrow{period}"] = df["open"].shift(-period) / df["open"].shift(-1)
 
-    for period in periods:  # expensive
-        df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
+        days = 5
+        # window_min = 200
+        # for i in range(0, len(df), 1):
+        #     if i < window_min * 2:
+        #         continue
+        #     if i+ window_min> len(df)-1:
+        #         continue
+        #     start_date = df.index[0]
+        #     end_date = df.index[i + window_min]
+        #     df_past = df.loc[start_date:end_date]
+        #
+        #     print("today", i)
+        #
+        #     close_name=zlmacd(df_past, ibase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
+        #     today_signal=df_past.at[end_date,f"zlmacd_{close_name}"]
+        #     df.at[end_date,f"zlmacd_{close_name}"]=today_signal
+        #
+        # df[ f"zlmacd_{close_name}"]=df[ f"zlmacd_{close_name}"].fillna(method="ffill")
+        #
 
-    df["buy"] = np.nan
-    df["sell"] = np.nan
-    # 1 /2 h
-    dict_adaptive_period_min = {2, 4, 8, 16, 32, 64}
+        # close_name = zlmacd(df, ibase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
+        # ivola_name = zlmacd(df, ibase="close", sfreq=12*days, bfreq=26*days, smfreq=12*days)
+        # df["trade"] = 0
+        # df.loc[(df[f"zlmacd_{close_name}"] == 10) & (df[f"zlmacd_{ivola_name}"] == 10), "trade"] = 10
 
-    window_min = 500
-    for i in range(0, len(df)):
-        if i < window_min * 2:
-            continue
+        cycle_mom(df, ibase="close", freq=12 * days)
+        # df_copy = df[[f"close"] + [x for x in list(df.columns) if "slope_" in x] + [x for x in list(df.columns) if "zlmacd" in x]]
+        df_copy = df[[f"close", "trade"]]
 
-        start_date = df.index[i]
-        end_date = df.index[i + window_min]
-        df_past = df.loc[start_date:end_date]
+        df_copy.plot(legend=True)
+        plt.show()
+        plt.savefig(f"divide/plot/bruteforce_adaptive_period{ts_code}.jpg")
+        df.to_excel(f"divide/xlsx/bruteforce_adaptive_period{ts_code}.xlsx")
+        plt.close()
 
-    df.to_csv("bruteforce_adaptive_period.csv")
+
 # df = DB.get_asset()
 # MESA(df)
 # bruteforce_slope()
+
+
+# rekursive EMA
+def my_ema(s, n):
+    a_result = []
+
+    def my_ema_helper(s, n=n):
+        if len(s) > n:
+            k = 2 / (n + 1)
+            last_day_ema = my_ema_helper(s[:-1], n)
+            # result = last_day_ema + k * (s.iloc[-1] - last_day_ema) #tadoc formula
+            result = k * s.iloc[-1] + (1 - k) * last_day_ema  # ehlers formula
+            a_result.append(result)
+            return result
+        else:
+            # first n values is sma
+            result = s.mean()
+            a_result.append(result)
+            return result
+
+    my_ema_helper(s, n)  # run through and calculate
+    final_result = [np.nan] * (n - 1) + a_result  # fill first n values with nan
+    return final_result
+
+
+# iterative EMA
+def my_ema_it(s, n):
+    a_result = []
+    k = 2 / (n + 1)
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        elif i > n - 1:
+            last_day_ema = a_result[-1]
+            result = k * s.iloc[i] + (1 - k) * last_day_ema  # ehlers formula
+            a_result.append(result)
+
+    return a_result
+
+
+# Rekursive Zerolag EMA
+def my_ec(s, n, gain):
+    a_result = []
+
+    def my_ec_helper(s, n, gain):
+        if len(s) > n:
+            k = 2 / (n + 1)
+            last_day_ema = my_ec_helper(s[:-1], n, gain)
+            today_close = s.iloc[-1]
+            result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
+            a_result.append(result)
+            return result
+        else:
+            # first n values is sma
+            result = s.mean()
+            a_result.append(result)
+            return result
+
+    my_ec_helper(s, n, gain)  # run through and calculate
+    final_result = [np.nan] * (n - 1) + a_result  # fill first n values with nan
+    return final_result
+
+
+# Iterative Zero lag ema
+def my_ec_it(s, n, gain):
+    a_result = []
+    k = 2 / (n + 1)
+    counter = 0
+    for i in range(0, len(s)):
+        if i < n - 1:
+            counter = counter + 1
+            a_result.append(np.nan)
+        elif i == n - 1:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        elif i > n - 1:
+            last_day_ema = a_result[-1]
+            if np.isnan(last_day_ema):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_close = s.iloc[i]
+                result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
+                a_result.append(result)
+
+    return a_result
+
+
+def my_supersmoother_it(s, n):
+    a_result = []
+    a1 = np.exp(-1.414 * 3.1459 / n)
+    b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / n)  # when using 180 degree, the super smoother becomes a super high pass filter
+    c2 = b1
+    c3 = -a1 * a1
+    c1 = 1 - c2 - c3
+
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1 or i == n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            yesterday_ss = a_result[-1]
+            byesterday_ss = a_result[-2]
+            if np.isnan(yesterday_ss) or np.isnan(byesterday_ss):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_close = s.iloc[i]
+                yesterday_close = s.iloc[i - 1]
+                result = c1 * (today_close + yesterday_close) / 2 + c2 * yesterday_ss + c3 * byesterday_ss  # ehlers formula
+                a_result.append(result)
+
+    return a_result
+
+
+# if frequency too short like n = 2, then it will produce overflow.
+def my_highpass_it(s, n):
+    a_result = []
+    alpha1 = (math.cos(np.radians(360) * 0.707 / n) + math.sin(np.radians(360) * 0.707 / n) - 1) / (math.cos(np.radians(360) * 0.707 / n))
+
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1 or i == n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            yesterday_hp = a_result[-1]
+            byesterday_hp = a_result[-2]
+            if np.isnan(yesterday_hp) or np.isnan(byesterday_hp):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_close = s.iloc[i]
+                yesterday_close = s.iloc[i - 1]
+                byesterday_close = s.iloc[i - 2]
+
+                part1 = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (today_close - 2 * yesterday_close + byesterday_close)
+                print("part1", part1)
+
+                part2 = 2 * (1 - alpha1) * yesterday_hp - (1 - alpha1) * (1 - alpha1) * byesterday_hp
+                print(part2)
+                result = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (today_close - 2 * yesterday_close + byesterday_close) + 2 * (1 - alpha1) * yesterday_hp - (1 - alpha1) * (1 - alpha1) * byesterday_hp  # ehlers formula
+                a_result.append(result)
+
+    return a_result
+
+
+# usually hp_n > ss_n
+
+# blocks one side hp and one side lp
+def my_roofingfilter_it(s, hp_n, ss_n):
+    a_result = []
+
+    s_hp = my_highpass_it(s, hp_n)
+    a1 = np.exp(-1.414 * 3.1459 / ss_n)
+    b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / ss_n)
+    c2 = b1
+    c3 = -a1 * a1
+    c1 = 1 - c2 - c3
+
+    for i in range(0, len(s)):
+        if i < ss_n - 1:
+            a_result.append(np.nan)
+        elif i == ss_n - 1 or i == ss_n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            yesterday_result = a_result[-1]
+            byesterday_result = a_result[-2]
+            if np.isnan(yesterday_result) or np.isnan(byesterday_result):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_hp = s_hp[i]
+                yesterday_hp = s_hp[i - 1]
+                result = c1 * (today_hp + yesterday_hp) / 2 + c2 * yesterday_result + c3 * byesterday_result  # ehlers formula
+                a_result.append(result)
+
+    return a_result
+
+
+def my_cyber_cycle(s_high, s_low, n):
+    price = (s_high + s_low) / 2
+    alpha = 0.7
+    smooth = (price + 2 * price.shift(1) + 2 * price.shift(2) + price.shift(3)) / 6
+    a_result = []
+
+    for i in range(0, len(price)):
+        if i < n + 1:
+            result = (price.iloc[i] - 2 * price.iloc[i - 1] + price.iloc[i - 2]) / 4
+            a_result.append(result)
+        else:
+            yesterday_result = a_result[-1]
+            byesterday_result = a_result[-2]
+            if np.isnan(yesterday_result) or np.isnan(byesterday_result):  # if the first n days are also nan
+                result = smooth[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_smooth = smooth.iloc[i]
+                yesterday_smooth = smooth.iloc[i - 1]
+                byesterday_smooth = smooth.iloc[i - 2]
+                result = (1 - 0.5 * alpha) ** 2 * (today_smooth - 2 * yesterday_smooth + byesterday_smooth) + 2 * (1 - alpha) * yesterday_result - (1 - alpha) ** 2 * byesterday_result  # ehlers formula
+                a_result.append(result)
+
+    cycle = pd.Series(data=a_result)
+    icycle = IFT(cycle)
+    return list(icycle)
+
+
+def my_best_ec(s, n, gain_limit=20):
+    least_error = 1000000
+    best_gain = 0
+    for value1 in range(-gain_limit, gain_limit, 2):
+
+        gain = value1 / 10
+        ec = my_ec_it(s, n, gain)
+        error = (s - ec).mean()
+        if abs(error) < least_error:
+            least_error = abs(error)
+            best_gain = gain
+    best_ec = my_ec_it(s, n, best_gain)
+    print("best gain is", best_gain)
+    return best_ec
+
+
 bruteforce_slope_adaptive()
+# the bigger the freq the more predictable, the more useless the data

@@ -328,6 +328,18 @@ def line_print(text, lines=40):
     print("=" * lines)
 
 
+def pairwise_no_overlap(iterables):
+    result = []
+    for i, k in zip(iterables[0::2], iterables[1::2]):
+        result.append((i, k))
+    return result
+
+
+def pairwise_overlap(iterables):
+    return list(zip(iterables, iterables[1:] + iterables[:1]))
+
+
+
 def shutdown_windows():
     os.system('shutdown -s')
 
@@ -652,6 +664,30 @@ def std(xs):
     variance = ms / len(xs)
     std = math.sqrt(variance)
     return std
+
+
+
+def timeseries_to_season(df):
+
+
+    df_copy=df.copy()
+    df_copy["year"] = df_copy.index
+    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x)) #can be way more efficient
+    df_copy["month"] = df_copy.index
+    df_copy["month"] = df_copy["month"].apply(lambda x: get_trade_date_datetime_m(x)) #can be way more efficient
+
+    a_index=[]
+    for year in df_copy["year"].unique():
+        df_year=df_copy[df_copy["year"]==year]
+        for month in [3,6,9,12]:
+            last_season_day=df_year[df_year["month"]==month].last_valid_index()
+            if last_season_day is not None:
+                a_index.append(last_season_day)
+
+    df_result = df_copy.loc[a_index]
+    return df_result
+
+
 
 
 if __name__ == '__main__':

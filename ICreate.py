@@ -349,6 +349,56 @@ def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
 
+def zlmacd(df, ibase, sfreq, bfreq,smfreq):
+    name=f"{sfreq, bfreq,smfreq}"
+    df[f"zlema1_{name}"] =my_best_ec((df[ibase]), sfreq)
+    df[f"zlema2_{name}"] =my_best_ec((df[ibase]), bfreq)
+
+    df[f"zldif_{name}"]= df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
+    #df[f"zldea_{name}"]= df[f"zldif_{name}"] -df[f"zldif_{name}"].rolling(smfreq).mean() # ma as smoother, but tradeoff is lag
+    df[f"zldea_{name}"]= df[f"zldif_{name}"] - my_best_ec(df[f"zldif_{name}"], smfreq)
+
+    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"]=10
+    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"]=-10
+
+def my_ec_it(s,n,gain):
+    a_result = []
+    k = 2 / (n + 1)
+    counter=0
+    for i in range(0, len(s)):
+        if i < n - 1:
+            counter=counter+1
+            a_result.append(np.nan)
+        elif i == n - 1:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        elif i > n - 1:
+            last_day_ema = a_result[-1]
+            if np.isnan(last_day_ema): # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                today_close=s .iloc[i]
+                result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
+                a_result.append(result)
+
+    return a_result
+
+
+def my_best_ec(s,n,gain_limit=50):
+    least_error=1000000
+    best_gain=0
+    for value1 in range(-gain_limit, gain_limit,4):
+
+        gain=value1/10
+        ec=my_ec_it(s,n,gain)
+        error= (s-ec).mean()
+        print(value1, len(s),len(ec), (error),n)
+        if abs(error) < least_error:
+            least_error= abs(error)
+            best_gain=gain
+    best_ec=my_ec_it(s,n,best_gain)
+    return best_ec
 
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
 # 1.Step Create RSI or Abv_ma
