@@ -69,37 +69,27 @@ def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.S
         # df_partcial.to_csv(f"resistance{row}.csv", index=False)
         plt.close()
 
-def support_resistance_plot_multiple(step=1):
-    ts_code = "000002.SZ"
-    support_resistance_once_plot(ts_code=ts_code, step=1)
-    create_gif(ts_code=ts_code)
+def plot_fft():
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import scipy.fftpack
+    df = DB.get_asset(ts_code="300036.SZ")
 
-    # for step in [10, 20]:  # performance : how many days should I refresh the future rs line. Ultimate step should be 1
-    #     for start_window in [240]:  # how long is the starting window
-    #         for rolling_freq in [1]:  # how many past days should I use to calculate
-    #             for thresh in [[4, 0.2]]:  # how far is the spread from current price to the line. bigger spread better
-    #                 for rs_count in [8, 4]:  # how many lines for abv and und current price. more is better
-    #                     for bins in [8]:  # performance:  how big is the distance between the lines themselves. smaller bin better
-    #                         for delay in [1, 3, 5, 10, 20]:
+    # Number of samplepoints
+    N = 2000
+    # sample spacing
+    T = 1.0 / 800.0
+    x = np.linspace(0.0, N * T, N)
+    y = np.sin(50.0 * 2.0 * np.pi * x) + 0.5 * np.sin(80.0 * 2.0 * np.pi * x)
+    y = df["close"].to_numpy()
+    yf = scipy.fftpack.fft(y)
+    xf = np.linspace(0.0, 1.0 / (2.0 * T), int(N / 2))
 
-
-def plot_distribution(series):
-    plt.hist(series)  # use this to draw histogram of your data
+    fig, ax = plt.subplots()
+    ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
     plt.show()
 
-def plot_autocorrelation(series):
-    autocorrelation_plot(series.dropna())
-    plt.show()
-
-def plot_chart(df, columns):
-    df_copy = df[columns]
-    df_copy.reset_index(inplace=True, drop=True)
-    df_copy.plot(legend=True)
-    plt.show()
-    plt.close()
-
-def plot_polynomials(): # this needs to be generalized
-    import DB
+def plot_polynomials():
     df_asset = DB.get_asset(ts_code="000938.SZ")
     df_asset = df_asset.reset_index()
     window = 265
@@ -121,6 +111,22 @@ def plot_polynomials(): # this needs to be generalized
         plt.savefig(newpath + f"{trade_date}.jpg")
         df.plot(legend=True)
     plt.close()
+
+def plot_distribution(series):
+    plt.hist(series)  # use this to draw histogram of your data
+    plt.show()
+
+def plot_autocorrelation(series):
+    autocorrelation_plot(series.dropna())
+    plt.show()
+
+def plot_chart(df, columns):
+    df_copy = df[columns]
+    df_copy.reset_index(inplace=True, drop=True)
+    df_copy.plot(legend=True)
+    plt.show()
+    plt.close()
+
 
 
 

@@ -618,7 +618,6 @@ def btest_multiple(loop_indicator=1):
 
 if __name__ == '__main__':
     try:
-
         pr = cProfile.Profile()
         pr.enable()
 

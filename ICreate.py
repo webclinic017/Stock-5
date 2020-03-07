@@ -576,6 +576,8 @@ def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreat
     return data
 
 
+
+
 # IMPORTANT NORMALIZE DOES NOT ADD LABEL
 def norm(df: pd.DataFrame, ibase: str, min=0, max=1):
     series_min = df[ibase].min()

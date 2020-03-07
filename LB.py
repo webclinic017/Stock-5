@@ -687,7 +687,32 @@ def timeseries_to_season(df):
     df_result = df_copy.loc[a_index]
     return df_result
 
+def timeseries_to_week(df):
 
+    df_copy=df.copy()
+    df_copy["weekday"] = df_copy.index
+    df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x)) #can be way more efficient
+
+    df_result = df_copy[df_copy["weekday"]=="Friday"]
+    return df_result
+
+def timeseries_to_month(df):
+    df_copy = df.copy()
+    df_copy["year"] = df_copy.index
+    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+    df_copy["month"] = df_copy.index
+    df_copy["month"] = df_copy["month"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+
+    a_index = []
+    for year in df_copy["year"].unique():
+        df_year = df_copy[df_copy["year"] == year]
+        for month in range(1,13):
+            last_season_day = df_year[df_year["month"] == month].last_valid_index()
+            if last_season_day is not None:
+                a_index.append(last_season_day)
+
+    df_result = df_copy.loc[a_index]
+    return df_result
 
 
 if __name__ == '__main__':

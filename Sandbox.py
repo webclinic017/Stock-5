@@ -120,30 +120,23 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     return trend_name
 
 
-def test():
-    df_date_all = DB.preload("asset", step=1)
 
-    df_result = pd.DataFrame()
-    for asset, df in df_date_all.items():
-        print("asset", asset)
-        df["tomorrow_pct_chg"] = df["pct_chg"].shift(-1)
-        df["tomorrow_co_pct_chg"] = df["co_pct_chg"].shift(-1)
-        df_result.at[asset, "tomorrow_pct_chg"] = df.loc[df["pjup"] == 1.0, "tomorrow_pct_chg"].mean()
-        df_result.at[asset, "fgain2"] = df.loc[df["pjup"] == 1.0, "fgain2"].mean()
-        df_result.at[asset, "tomorrow_co_pct_chg"] = df.loc[df["pjup"] == 1.0, "tomorrow_co_pct_chg"].mean()
-
-    df_result.to_csv("asset pjup.csv")
-
-    df_date_all = DB.preload("asset", step=1)
-
-
-# this tells me how difficult my goal is to select the stocks > certain pct_chg every day
 def daily_stocks_abve():
+    """this tells me how difficult my goal is to select the stocks > certain pct_chg every day
+                get 1% everyday, 33% of stocks
+                2% everyday 25% stocks
+                3% everyda 19% stocks
+                4% everyday 12% stocks
+                5% everyday 7% stocks
+                6% everyday 5%stocks
+                7% everyday 3% stocks
+                8% everday  2.5% Stocks
+                9% everday  2% stocks
+                10% everday, 1,5% Stocks  """
+
     df_asset = DB.preload("asset", step=2)
     df_result = pd.DataFrame()
     for ts_code, df in df_asset.items():
-        # or in other words
-
         print("ts_code", ts_code)
         # for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
         #     df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
@@ -157,20 +150,7 @@ def daily_stocks_abve():
         #
         #     df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
         #     df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
-
     df_result.to_csv("test.csv")
-
-
-def rsi_onrsi():
-    df = DB.get_asset(ts_code="000002.SZ")
-    df["rsi240"] = talib.RSI(df["close"], timeperiod=240)
-    df["rsirsi240"] = talib.RSI(df["rsi240"], timeperiod=240)
-    df["rsirsirsi240"] = talib.RSI(df["rsirsi240"], timeperiod=240)
-    df = df[["rsirsirsi240", "rsirsi240", "rsi240", "close"]]
-    df.reset_index(inplace=True, drop=True)
-    df.plot(legend=True)
-    plt.show()
-    plt.close()
 
 
 def polyfit(df, column, degree):
@@ -180,9 +160,7 @@ def polyfit(df, column, degree):
     for i, polynom in enumerate(weights):
         pdegree = degree - i
         data = data + (polynom * (s_index ** pdegree))
-
     df[f"{column}poly{degree}"] = data
-
 
 def func(df, degree=1, column="close"):
     s_index = df[column].index
@@ -194,101 +172,8 @@ def func(df, degree=1, column="close"):
         data = data + (polynom * (s_index ** pdegree))
     return data
 
-
-def plot_polynomials():
-    df_asset = DB.get_asset(ts_code="000938.SZ")
-    df_asset = df_asset.reset_index()
-    window = 265
-    step = 5
-    for i in range(0, 6000, step):
-        df = df_asset[i:i + window]
-        trade_date = df_asset.at[i, "trade_date"]
-
-        df["poly1"] = polynomial_series(df=df, degree=1, column="close")
-        df["poly2"] = polynomial_series(df=df, degree=2, column="close")
-        df["poly3"] = polynomial_series(df=df, degree=3, column="close")
-        df["poly4"] = polynomial_series(df=df, degree=4, column="close")
-        df["poly5"] = polynomial_series(df=df, degree=5, column="close")
-        df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
-        df.reset_index(inplace=True, drop=True)
-        newpath = f"Media/Plot/stock/000938.SZ/"
-        if not os.path.exists(newpath):
-            os.makedirs(newpath)
-        plt.savefig(newpath + f"{trade_date}.jpg")
-        df.plot(legend=True)
-    plt.close()
-
-
-def rsi_abv_under_test():
-    df_ts_codes = DB.get_ts_code()
-    df_result = pd.DataFrame()
-    for index in df_ts_codes.index[::8]:
-        df_asset = DB.get_asset(ts_code=index)
-        df_asset = df_asset[df_asset["period"] > 240]
-        if len(df_asset) < 240:
-            continue
-
-        df_asset["tomorrow"] = df_asset["open"].shift(-2) / df_asset["open"].shift(-1)
-        # df_asset["52_high"]=df_asset["close"].rolling(52).max()
-        # df_asset["52_low"]=df_asset["close"].rolling(52).min()
-
-        print(index)
-
-        all = [3, 5, 10, 20, 40, 60, 130, 260, 520, 770]
-        a_small = [x for x in all][:-1]
-        a_big = [x for x in all][1:]
-
-        # calculate RSI
-        dict_rsi_mean = {}
-        for freq in all:
-            df_asset[f"rsi{freq}"] = talib.RSI(df_asset["close"], timeperiod=freq)
-
-            q1_low, q1_high = list(df_asset[f"rsi{freq}"].quantile([0.0, 0.3]))
-            q2_low, q2_high = list(df_asset[f"rsi{freq}"].quantile([0.3, 0.7]))
-            q3_low, q3_high = list(df_asset[f"rsi{freq}"].quantile([0.7, 1]))
-
-            dict_rsi_mean[f"{freq}.1"] = [q1_low, q1_high]
-            dict_rsi_mean[f"{freq}.2"] = [q2_low, q2_high]
-            dict_rsi_mean[f"{freq}.3"] = [q3_low, q3_high]
-            # top_low, top_high = list(df_asset[f"rsi{freq}"].quantile([0.75, 1]))
-            # bot_low, bot_high = list(df_asset[f"rsi{freq}"].quantile([0, 0.35]))
-            # dict_rsi_mean[f"rsi{freq}.gt"]=top_low
-            # dict_rsi_mean[f"rsi{freq}.lt"]=bot_high
-
-        # score
-        for small in all:
-            for big in all:
-                if small < big:
-
-                    for small_q in [1, 2, 3]:
-                        for big_q in [1, 2, 3]:
-                            small_q_low = dict_rsi_mean[f"{small}.{small_q}"][0]
-                            small_q_high = dict_rsi_mean[f"{small}.{small_q}"][1]
-
-                            high_q_low = dict_rsi_mean[f"{big}.{big_q}"][0]
-                            high_q_high = dict_rsi_mean[f"{big}.{big_q}"][1]
-
-                            df_test = df_asset[df_asset[f"rsi{small}"].between(small_q_low, small_q_high) & df_asset[f"rsi{big}"].between(high_q_low, high_q_high)]
-                            df_result.at[index, f"{small}.{small_q}_{big}.{big_q}"] = df_test["tomorrow"].mean()
-
-        # check if two lower rsi is above
-        # for small in a_small:
-        #     for big in a_big:
-        #         if small >= big:
-        #             continue
-        #         else:
-        #             df_asset[f"rsi{small}abv{big}"]= (df_asset[f"rsi{small}"]>df_asset[f"rsi{big}"]).astype(int)
-        #
-        #             #evaluate result
-        #             for one_zero in [1,0]:
-        #                 df_part=df_asset.loc[df_asset[f"rsi{small}abv{big}"]==one_zero, [f"rsi{small}abv{big}","tomorrow"]]
-        #                 df_result.at[index, f"rsi{small}abv{big}_{one_zero}"]=df_part["tomorrow"].mean()
-        # df_result.at[index, f"rsi{small}abv{big}_{one_zero}_pearson"]=df_part[f"rsi{small}abv{big}"].corr(df_part["tomorrow"])
-
-    df_result.to_csv("price over ma3.csv")
-
-
 def sim_no_bins_multiple():
+    """the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
     def sim_no_bins_once(df_result, ts_code):
         # create target freq and target period
         for target in all_target:
@@ -387,6 +272,7 @@ def sim_no_bins_multiple():
 
 
 def sim_bins():
+    """the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
     df_ts_code = DB.get_ts_code()
     df_result_summary = pd.DataFrame()
 
@@ -480,238 +366,59 @@ def sim_bins():
     LB.to_csv_feather(df_result_summary, LB.a_path(f"trade/summary.{str(all_column)}"))
 
 
-# sim_no_bins_multiple()
-# sim_pairwise()
 
-
-# period=120
-# df["ma10"] = df["close"].rolling(period).mean()
-# df["mama"],df["fama"] = talib.MAMA(df["close"],0.01,0.2)
-#
-# df.to_csv("test_fama_mama.csv")
-# df = df[["close", "mama","fama","ma10"]]
-# df.reset_index(inplace=True, drop=True)
-# df.plot(legend=True)
-# plt.show()
-# plt.close()
-
-def plot_fft():
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import scipy.fftpack
-    df = DB.get_asset(ts_code="300036.SZ")
-
-    # Number of samplepoints
-    N = 2000
-    # sample spacing
-    T = 1.0 / 800.0
-    x = np.linspace(0.0, N * T, N)
-    y = np.sin(50.0 * 2.0 * np.pi * x) + 0.5 * np.sin(80.0 * 2.0 * np.pi * x)
-    y = df["close"].to_numpy()
-    yf = scipy.fftpack.fft(y)
-    xf = np.linspace(0.0, 1.0 / (2.0 * T), int(N / 2))
-
-    fig, ax = plt.subplots()
-    ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
-    plt.show()
-
-
+"""
+useful functions to be transfered to icreate later start from here
+"""
 def normalize_vector(series, min=0, max=1):
+    """Normalize vector"""
     series_min = series.min()
     series_max = series.max()
     new_series = (((max - min) * (series - series_min)) / (series_max - series_min)) + min
     return new_series
 
-
 def normalize_apply(series, min=0, max=1):
+    """Normalize apply"""
     return normalize_vector(series, min, max).iat[-1]
 
 
-# Fisher Transform Apply
-def FT_Apply(s):
-    norm = normalize_vector(s, min=-1, max=1)
-    expression = (1.000001 + norm) / (1.000001 - norm)
-    return 0.5 * np.log(expression)
+def FT(s, min=0, max=1):
+    """Fisher Transform vector
+    Mapps value to -inf to inf.
+    Creates sharp distance between normal value and extrem values
+    """
+    s=normalize_vector(s, min=min, max=max)
+    expression = (1.000001 + s) / (1.000001 - s)
+    result= 0.5 * np.log(expression)
+    return result
 
 
 def FT_APPYL(s):
-    return FT_Apply(s).iat[-1]
+    """Fisher Transform apply"""
+    return FT(s).iat[-1]
 
+def IFT(s, min =0, max=1):
+    """Inverse Fisher Transform vector
+    Mapps value to -1 to 1.
+    Creates smooth distance between normal value and extrem values
+    """
 
-# Inverse Fisher Transform
-def IFT(s):
-    norm = normalize_vector(s, min=-1, max=1)
-    exp = np.exp(norm * 2)
-    return (exp - 1) / (exp + 1)
+    s=normalize_vector(s, min=min, max=max)
+    exp = np.exp(s * 2)
+    result= (exp - 1) / (exp + 1)
+    return result
 
 
 def IFT_Apply(s):
+    """Inverse Fisher Transform Apply"""
     return IFT(s).iat[-1]
 
-
 def trendslope_apply(s):
+    """Trend apply = 1 degree polynomials"""
     return LB.get_linear_regression_slope(s.index, s)
 
-
-def whatever():
-    ts_code = "000002.SZ"
-    df = DB.get_asset(ts_code=ts_code).reset_index()
-    # df=pd.read_csv("fisher.csv")
-    df["dperiod"] = talib.HT_DCPERIOD(df["close"])
-    df["dphase"] = talib.HT_DCPHASE(df["close"])
-    for rsi in [5, 10, 20, 60, 120, 240]:
-        df[f"rsi{rsi}"] = talib.RSI(df["close"], timeperiod=int(rsi))
-
-    for period in [120, 240]:
-        df[f"rsi{period}"] = df[f"rsi{period}"].rolling(period).apply(IFT_Apply, raw=False)
-
-    df["rsi.marker"] = np.nan
-    df["rsi.helper"] = np.nan
-    df["rsi120/rsi240"] = df["rsi120"] / df["rsi240"]
-
-    """this RSI strat seems to work well in trending times and not so well in cyclic time
-        if can not really good differentiate during cyclic times.
-        
-        Trend or cycle can also be measured by the two distance of RSI, if distance is big, then you are in up or downtrend, if distance is small, then you are in cycle
-    
-        In order to differentiate between cycle and trend mode, you need to know the cycle and trendmode itself, which is paradox
-        So you need a lot of different indicators, to indicate if you are trend or cycle mode
-        
-        Buy RSI only tells me over or underbought times, It does not differentiate between modes
-        
-        Measure mode by resistance. IF past n period resistance is till there, then you are in cycle mode
-        #if past n period resistance has been broken, then in trend mode
-        RSI gives a bit of lag in the trend. A bit late entry, and a bit late exit. which is no suprise since all momentum indicator do that.
-        So basically, check if past n period RSI was profitable, if yes, then trend mode, if not then Cycle mode.
-        
-        trend mode detection might also be a bit late. maybe in halfway you start to know you are in cycle mode.
-        Measure distance of past period price, If distance is big, then trend mode, if distance small, then cycle mode
-        The problem is here again. The more confirmed the signal, the smoother it needs to be, the more lag it will have. So to know the big trend, it is already laged very much behind. Is it still useful though
-        Still useful. Because knowing the trend late is better than not knowing the trend. You start to know the trend 
-        
-        The problem is not knowing when trend start and when trend ends. Using RSI to do that is not accurate since RSI itself is only useable in trendmode
-        
-        Maybe fisher and inverse fisher can help RSI detect the signals earlier (but then it probably produces more noise)
-        
-        Since you will always have noise. Maybe the sum of noise is the current strenght of the trend. Instead of getting rid of the noise and whipsaws, live with it.
-        Basically, in order to find such a trend vs cycle indicator, that indicator should not rely on any other indicator, be standalone, be leading and have less noise.
-        This would also make other indicator meaning less and redundant. 
-        
-        Maybe counting the overboguht in all period together could create a better signal
-    """
-
-    df.loc[(df["rsi120/rsi240"] > 0.91) & (df["rsi240"] > df["rsi240"].mean()), ["rsi.marker", "rsi.helper"]] = (-20, 40)  # to be filled inverse
-
-    df.loc[(df["rsi120/rsi240"] < 1.08) & (df["rsi240"] < df["rsi240"].mean()), ["rsi.marker", "rsi.helper"]] = (20, -40)  # to be filled inverse
-
-    df["rsi.marker"] = df["rsi.marker"].fillna(method="ffill")
-    df.loc[df["rsi.helper"] == 40, "rsi.marker"] = 20
-    df.loc[df["rsi.helper"] == -40, "rsi.marker"] = -20
-
-    for period in [5, 10, 20, 60, 120, 240, 500, 1000]:
-        df[f"trendslope{period}"] = df["close"].rolling(period).apply(trendslope_apply, raw=False)
-
-    df["ma60"] = df["close"].rolling(60).apply(normalize_apply, raw=False)
-    df["ma240"] = df["close"].rolling(240).apply(normalize_apply, raw=False)
-    df["test"] = np.nan
-
-    """
-    brute force slope with following parameters
-    long period
-    slow period
-    if any of them should be above or under mean in 
-    if quick/slow >  value or smaller value
-    
-    """
-    df.loc[((df["trendslope60"] > df["trendslope240"]) & (df["trendslope60"] > 0)), "test"] = 10
-    df.loc[((df["trendslope60"] < df["trendslope240"]) & (df["trendslope60"] < 0)), "test"] = -10
-
-    # RSI 240 with 120 seems to be better than with 60
-    # the slope method produces correct signal during trend
-    # and creates useless signals in cycle modes
-    df["test"] = df["test"].fillna(method="ffill")
-
-    """
-    trendslope 1000 and 500 gives the complete overall division between phases which is really useful
-    Since the reversal happens every 3 -4 years , the max day allowed for backlook is limited. In the short run, go with the trend. In the long run, bet against the trend. Because everything is normal distributed in the data is big enough. (=mean reverse)
-    """
-    df[[f"close", "ma60", "ma240", "trendslope60", "trendslope240", "test"]].plot(legend=True)  # rsi.marker
-    plt.show()
-
-    for period in [240]:
-        print("period", period)
-
-        df[f"close{period}"] = df["close"].rolling(period).apply(normalize_apply, raw=False)
-        df[f"close.fisher{period}"] = df["close"].rolling(period).apply(FT_APPYL, raw=False)
-        df[f"close.invfisher{period}"] = df["close"].rolling(period).apply(IFT_Apply, raw=False)
-        df[f"rsi.norm{period}"] = df[f"rsi{period}"].rolling(period).apply(normalize_apply, raw=False)
-        df[f"rsi.fisher{period}"] = df[f"rsi{period}"].rolling(period).apply(FT_APPYL, raw=False)
-        df[f"rsi.invfisher{period}"] = df[f"rsi{period}"].rolling(period).apply(IFT_Apply, raw=False)
-
-    # df.to_csv("fisher_mod.csv")
-    # Plot.plot_distribution(df["fisher240.rolling"])
-    df["rsi.invfisher240.type"] = np.nan
-
-    # 4 crossing types, undercross low, upcross low. undercross high, upcross high
-    # buy:
-    # upcross low: 2,1,2 : -1, 1 : past -1, now 1
-    # upcross high: 3,2,3: -1, 1
-    #
-    # Sell:
-    # undercross low: 1,2,1: 1, -1 : past 1 now -1
-    # undercross high: 2,3,2: 1, -1
-    border = [-0.5, 0.5]
-
-    # create type
-    df.loc[df["rsi.invfisher240"] < border[0], "rsi.invfisher240.type"] = 1  # t
-    df.loc[df["rsi.invfisher240"].between(border[0], border[1]), "rsi.invfisher240.type"] = 2  # t
-    df.loc[df["rsi.invfisher240"] > border[1], "rsi.invfisher240.type"] = 3  # t
-
-    # calculate difference = change of type
-    df["rsi.invfisher240.typechange"] = (df["rsi.invfisher240.type"].diff()).replace(0, np.nan)
-
-    # create a helper df
-    df_helper = df[df["rsi.invfisher240.typechange"].notna()]
-
-    # take past difference
-    df_helper["another_helper"] = df_helper["rsi.invfisher240.typechange"].shift(1)
-
-    df_helper["another_helper"] = df_helper["another_helper"].astype(float)
-    df_helper["rsi.invfisher240.type"] = df_helper["rsi.invfisher240.type"].astype(float)
-
-    df_buy = df_helper[df_helper["another_helper"] < df_helper["rsi.invfisher240.typechange"]]
-    df_sell = df_helper[df_helper["another_helper"] > df_helper["rsi.invfisher240.typechange"]]
-    print("df_buy", df_sell)
-
-    df["marker"] = np.nan
-    df.loc[df_buy.index, "marker"] = 30
-    df.loc[df_sell.index, "marker"] = -30
-    df["marker"] = df["marker"].fillna(method="ffill")
-
-    df[[f"rsi240", f"close", "rsi120", "rsi240", "rsi.fisher240", "rsi.invfisher240", "rsi.marker", "rsi.marker_fill", "rsi.invfisher240.type", "dperiod"]].plot(legend=True)
-    plt.show()
-
-    df.to_csv("sine.csv")
-
-    # df["rsi60"] = talib.RSI(df["close"], timeperiod=60)
-    # df["rsi120"] = talib.RSI(df["close"], timeperiod=120)
-    # df["rsi240"] = talib.RSI(df["close"], timeperiod=240)
-    # df["fisher60"] = df["rsi60"].rolling(60).apply(fisher_transform,raw=False)
-    # df["fisher120"] = df["rsi120"].rolling(120).apply(fisher_transform,raw=False)
-    # df["fisher240"] = df["rsi240"].rolling(240).apply(fisher_transform,raw=False)
-    #
-    # df["marker"]=0.0
-    # df.loc[ (df["fisher120"]/df["fisher240"]>1.1),"marker"]=20
-    # df = df[["close", "fisher120","fisher240","rsi120","rsi240","marker"]]
-    #
-    #
-    # df.reset_index(inplace=True, drop=True)
-    # df.plot(legend=True)
-    # plt.show()
-    # plt.close()
-
-
 def MESA(df):
+    """Using Sine, leadsine to find turning points"""
     ts_code = "000002.SZ"
     df = DB.get_asset(ts_code=ts_code)
     df = df[df.index > 20000101]
@@ -824,137 +531,64 @@ def MESA(df):
     # df=df[["close", "rsi5","rsi10","marker"]]#dphase quadrature   "dperiod", "inphase",
 
     df.reset_index(inplace=True, drop=True)
-
     df.plot(legend=True)
     plt.show()
     plt.close()
 
 
-def movingaverages_test():
-    df_ts_code = DB.get_ts_code()[::1]
-    func = talib.MIDPOINT  # WMA
-    func_name = func.__name__
-    df_result = pd.DataFrame()
-    periods = [3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610]
-    for ts_code in df_ts_code.index:
-        print("ts_code", ts_code)
-        df_asset = DB.get_asset(ts_code=ts_code)
-
-        try:
-            df_asset = df_asset[(df_asset["period"] > 240) & (df_asset.index > 20000101)]
-            if len(df_asset) < 500:
-                continue
-        except:
-            continue
-
-        # calculate stock geomean
-        helper = 1 + (df_asset["pct_chg"] / 100)
-        df_result.at[ts_code, "geomean"] = gmean(helper)
-        df_result.at[ts_code, "period"] = len(df_asset)
-
-        # calculate future gain
-        dict_mean = {}
-        dict_std = {}
-        for target in periods:
-            df_asset[f"tomorrow{target}"] = df_asset["open"].shift(-target) / df_asset["open"].shift(-1)
-            dict_mean[target] = df_asset[f"tomorrow{target}"].mean()
-            dict_std[target] = df_asset[f"tomorrow{target}"].std()
-
-        for period in periods:
-            df_asset[f"{func_name}.{period}"] = func(df_asset["close"], timeperiod=period)
-            # df_asset[f"{func_name}.{period}"]=func(df_asset["high"],df_asset["low"], timeperiod=period)
-
-        # calculate buy over or under 1 ma
-        for period in periods:
-            df_asset[f"{func_name}.{period}.abv"] = df_asset["close"] > df_asset[f"{func_name}.{period}"]
-
-        for period in periods:
-            for one_zero in [1, 0]:
-                df_filtered = df_asset[df_asset[f"{func_name}.{period}.abv"] == one_zero]
-                df_result.at[ts_code, f"{func_name}.{period}.abv{one_zero}_{period}mean"] = df_filtered[f"tomorrow{period}"].mean() / dict_mean[period]
-                df_result.at[ts_code, f"{func_name}.{period}.abv{one_zero}_{period}std"] = df_filtered[f"tomorrow{period}"].std() / dict_std[period]
-
-    label_mean = []
-    label_std = []
-    for period in periods:
-        for one_zero in [1]:
-            label_mean.append(f"{func_name}.{period}.abv{one_zero}_{period}mean")
-            label_std.append(f"{func_name}.{period}.abv{one_zero}_{period}std")
-
-    for period in periods:
-        for one_zero in [0]:
-            label_mean.append(f"{func_name}.{period}.abv{one_zero}_{period}mean")
-            label_std.append(f"{func_name}.{period}.abv{one_zero}_{period}std")
-
-    df_result = df_result[["period", "geomean"] + label_mean + label_std]
-    DB.ts_code_series_to_excel(df_ts_code=df_result, path=f"ma_test/summary.{func_name}.xlsx", sort=[], asset=["E"], group_result=True)
-
-
 def ent(data):
     import scipy.stats
-    """Calculates entropy of the passed `pd.Series`
-    What pandas can not write in multi code wtf
-    """
+    """Calculates entropy of the passed pd.Series"""
     p_data = data.value_counts()  # counts occurrence of each value
-    entropy = scipy.stats.entropy(p_data)  # get entropy from counts
-    return entropy
-
-
-# tradeoffs & proportional & inverse relations
-
-# The smoother your signal, the longer the lag (solveable by insta trendline, kalman filter)
-# the earlier you want to detect the turnpoint, the more sensitive the indicator needs to be, the more whiplas it creates. (Basically, you need to adjust the period based on probability for the next turning point signal)
-# the better the trend the easier to make money.
-# the more normalize, the morr sensitive, the more recent is the data,   《==》  the more whipsaw, the more noise.
-
-# In Up Trend move, buy and hold
-# In cycle mode buy and sell
-# in downtrend mode, Shortsell and hold
-
-
-# hyper overbought= long period + short period overbought
-# hyper udnerbought = long period + short period underbought
-
-
-"""what john ehlers does not incooperate:
-volume, 
-ANN, 
-fundamentals
-comparative best stock using same technique at one day
-industry comparison
-
-
-maxonmax, low onlow (multi period overlay analysis), 
-"""
-
-
-def normalize_std_apply(s):
-    s = normalize_vector(s)
-    return s.std()
-
-
-# highlight: using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
-"""
-on daily chart, useable freqs are 12*60, 24*60 ,5*60
-"""
+    return scipy.stats.entropy(p_data)  # get entropy from counts
 
 
 def zlmacd(df, ibase, sfreq, bfreq, smfreq):
-    name = f"{ibase, sfreq, bfreq, smfreq}"
-    df[f"zlema1_{name}"] = my_ec_it((df[ibase]), sfreq, 1.8)
-    df[f"zlema2_{name}"] = my_ec_it((df[ibase]), bfreq, 1.8)
+    """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
+        on daily chart, useable freqs are 12*60, 24*60 ,5*60
+
+        IMPORTNAT:
+        Use a very responsive indicator for EMA! Currently, ema is the most responsive
+        Use a very smoother indicator for smooth! Currently, Supersmoother 3p is the most smoothest.
+        NOT other way around
+        Laguerre filter is overall very good, but is neither best at any discipline. Hence using EMA+ supersmoother 3p is better.
+        Butterwohle is also very smooth, but it produces 1 more curve at turning point. Hence super smoother is better for this job.
+        """
+    name = f"{ibase}.{sfreq, bfreq, smfreq}"
+
+    TR_helper=talib.NATR(df["high"], df["low"],df["close"], sfreq)
+    df[f"zlema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
+    df[f"zlema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
 
     df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
-    df[f"zldea_{name}"] = df[f"zldif_{name}"] - my_ec_it(df[f"zldif_{name}"], smfreq, 1.8)
+    #df[f"zldea_{name}"] = df[f"zldif_{name}"] - zlema(df[f"zldif_{name}"], smfreq, 1.8)
+    df[f"zldea_{name}"] = df[f"zldif_{name}"] - supersmoother_3p(df[f"zldif_{name}"], smfreq)
+    df[f"zldea_{name}"] =  supersmoother_3p(df[f"zldif_{name}"], int(smfreq))
 
     df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
     df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
-    return name
+    return f"zlmacd_{name}"
 
 
-# highlight: using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
-# not as good as zlmacd
+
+def zlmacd_test(df, ibase, sfreq, bfreq, smfreq):
+    name = f"{ibase}.{sfreq, bfreq, smfreq}_test"
+    df[f"zlema1_{name}"] = supersmoother_3p((df[ibase]), sfreq)
+    df[f"zlema2_{name}"] = supersmoother_3p((df[ibase]), bfreq)
+
+    df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
+    # df[f"zldea_{name}"] = df[f"zldif_{name}"] - zlema(df[f"zldif_{name}"], smfreq, 1.8)
+    df[f"zldea_{name}"] = df[f"zldif_{name}"] - supersmoother_3p(df[f"zldif_{name}"], smfreq)
+
+    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
+    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
+    return f"zlmacd_{name}"
+
+
 def slopecross(df, ibase, sfreq, bfreq, smfreq):
+    """using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
+        slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
+    """
     name = f"{ibase, sfreq, bfreq, smfreq}"
     df[f"slope1_{name}"] = df[ibase].rolling(sfreq).apply(trendslope_apply, raw=False)
     df[f"slope2_{name}"] = df[ibase].rolling(bfreq).apply(trendslope_apply, raw=False)
@@ -967,46 +601,24 @@ def slopecross(df, ibase, sfreq, bfreq, smfreq):
     df.loc[(df[f"slope1_{name}"] <= df[f"slope2_{name}"]) & (df[f"slope1_{name}"] <= 0), f"slope_{name}"] = -10
 
 
-def cycle_mom(df, ibase, freq):
-    name = f"{ibase, freq}"
-    # df[f"mom_{name}"] = talib.MOM(df[ibase], timeperiod=freq)
-    df[f"mom_{name}"] = FT_Apply(df[ibase] / df[ibase].shift(freq))
-    df[f"mom_{name}"] = IFT(talib.RSI(df[ibase], timeperiod=freq))
-    # df[f"cycle_{name}"] = talib.HT_DCPERIOD(df[ibase])
-    df[f"sine_{name}"], leadsine = talib.HT_SINE(df[ibase])
-    df["trend"] = talib.HT_TRENDLINE(df["close"])
-
-    df["zlema"] = my_best_ec(df["close"], freq)
-    df["roofing"] = my_roofingfilter_it(df["close"], freq, freq)
-    df["hp"] = my_highpass_it(df["close"], freq)
-    df["ss"] = my_supersmoother_it(df["close"], freq)
-    df["icc"] = my_cyber_cycle(df["high"], df["low"], 7)
-
-    df[f"trade"] = 0
-    df.loc[(df[f"sine_{name}"] < -0.7) & (df[f"mom_{name}"] < -0.2), "trade"] = -10
-    df.loc[(df[f"sine_{name}"] >= 0.7) & (df[f"mom_{name}"] >= 0.2), "trade"] = 10
-
-    df_copy = df[["close", f"sine_{name}", "trade", f"mom_{name}", "trend", "ss", "zlema", "hp", "roofing", "icc"]]
-
-    df_copy.plot(legend=True)
-    plt.show()
-    plt.close()
 
 
-def bruteforce_slope_adaptive():
+
+def indicator_test():
     a_period = [60, 120][::-1]
     df_ts_code = DB.get_ts_code()
     df_ts_code = df_ts_code[df_ts_code.index == "000002.SZ"]
     for ts_code in df_ts_code.index[::1]:
         print("ts_code", ts_code)
-        df = DB.get_asset(ts_code=ts_code).reset_index()
-        # df = LB.timeseries_to_season(df)
-        df = df[3000:]
+        df = DB.get_asset(ts_code=ts_code)
+        #df = LB.timeseries_to_season(df).reset_index()
+        df = LB.timeseries_to_week(df).reset_index()
+        #df = df[3000:]
 
         for period in [2]:
             df[f"tomorrow{period}"] = df["open"].shift(-period) / df["open"].shift(-1)
 
-        days = 5
+
         # window_min = 200
         # for i in range(0, len(df), 1):
         #     if i < window_min * 2:
@@ -1031,26 +643,158 @@ def bruteforce_slope_adaptive():
         # df["trade"] = 0
         # df.loc[(df[f"zlmacd_{close_name}"] == 10) & (df[f"zlmacd_{ivola_name}"] == 10), "trade"] = 10
 
-        cycle_mom(df, ibase="close", freq=12 * days)
-        # df_copy = df[[f"close"] + [x for x in list(df.columns) if "slope_" in x] + [x for x in list(df.columns) if "zlmacd" in x]]
-        df_copy = df[[f"close", "trade"]]
+
+
+
+        # df[f"mom_{name}"] = FT_Vector(df[ibase] / df[ibase].shift(freq))
+        # df[f"mom_{name}"] = FT_Vector(talib.RSI(df[ibase], timeperiod=freq))
+        # df[f"cycle_{name}"] = talib.HT_DCPERIOD(df[ibase])
+        # df[f"sine_{name}"], leadsine = talib.HT_SINE(df[ibase])
+        # df["trend"] = talib.HT_TRENDLINE(df["close"])
+        #
+        #
+        # df["roofing"] = roofing_filter(df["close"], freq, freq)
+        # df["hp"] = highpass(df["close"], freq)
+        # df["ss"] = supersmoother(df["close"], freq)
+        # df["icc"] = cybercycle(df["high"], df["low"], int(freq), alpha=0.05)
+
+
+
+        ibase = "close"
+        days = 5
+        freq = 2 * days
+
+        df["low.min"]=df["low"].rolling(5).min()
+        df["high.max"]=df["high"].rolling(5).min()
+        a_min_max=[]
+
+        #stable period low pass
+        df["zlema"] = zlema_best_gain(df[ibase], freq)
+        df["ss_2p"] = supersmoother_2p(df[ibase], freq)
+        df["butter_2p"] = butterworth_2p(df[ibase], freq)
+        df["butter_3p"] = butterworth_3p(df[ibase], freq)
+        df["my_inst"] = inst_trend(df[ibase],freq)
+        df["ehlers"] = ehlers_filter_unstable(df[ibase], freq)
+        df["mama"], df["fama"] = talib.MAMA(df[ibase])
+
+        stable_lowpass=["zlema","butter_3p","my_inst","butter_2p","ss_2p"]
+        stable_lowpass=[]
+
+        #stable period high pass
+        df["highpass"] = highpass(df[ibase],freq)
+
+
+        #stable period band pass
+        df["roofing"] = roofing_filter(df[ibase], freq,  int(freq/10))
+        df["bandpass"], df["bandpass_lead"] = bandpass_filter_with_lead(df[ibase], freq)
+        df["bandpass_buy"]=0
+        df.loc[df["bandpass"] > 0, "bandpass_buy"] = 10
+        df.loc[df["bandpass"] < -0, "bandpass_buy"] = -10
+        stable_bandpass = ["roofing","bandpass","bandpass_buy"]
+
+        stable_bandpass = ["bandpass", "bandpass_lead"]
+
+        #this strategy works with high pass as RSI oscilator
+        df["buy"] = 0
+        df["helper"] =df["roofing"]- df["highpass"]
+        df["helper"]=IFT(df["helper"],min=-1, max=1)
+        df.loc[df["helper"]> 0.5, "buy"]=10
+        df.loc[df["helper"]< -0.5, "buy"]=-10
+        stable_highpass = ["highpass", "buy"]
+        stable_highpass = []
+
+        #unstable period low pass
+        df["talib_inst"] = talib.HT_TRENDLINE(df["close"])
+        df["laguerre"] = laguerre_filter_unstable(df[ibase])
+        unstable_lowpass = []
+
+        #unstable period high pass
+        unstable_highpass = []
+
+        #unstable period bandpass pass
+        unstable_bandpass = []
+
+
+        # trend vs cycle
+        df["trend_mode"]=extract_trend(df[ibase],4)
+        macd_trend_mode=zlmacd(df,"trend_mode",freq, freq*2 ,freq)
+        a_trend = ["trend_mode", macd_trend_mode]
+        a_trend = []
+
+        #1. add volatility, 2nd use dominant period, maximum spectral, 3. Pattern recognition
+
+
+        #oscilator
+
+        # df["rvi"], df["rvi_sig"]=RVI(df["open"], df["close"],df["high"], df["low"], int(freq))
+        # df["rvi"]=IFT(df["rvi"], min=-1, max=1)
+        df["cg"]=CG_Oscillator(df[ibase],freq)
+        df["cg"]=FT(df["cg"],min=-1, max=1)
+
+        df["cg_buy"] = 0
+        df.loc[df["cg"] > 0.5, "cg_buy"] = -10
+        df.loc[df["cg"] < -0.5, "cg_buy"] = 10
+
+        df["leading"], df["net_lead"]=leading(df[ibase],freq)
+
+        df["laguerre_rsi"]=laguerre_RSI(df[ibase])
+        df["talib_rsi"]= normalize_vector(talib.RSI(df[ibase], timeperiod=freq))
+
+
+        zlmacd_close_name = zlmacd(df, ibase, freq, freq * 2, int(freq))
+
+
+        oscilator=[zlmacd_close_name, "laguerre_rsi","talib_rsi", "leading", "net_lead"]
+        oscilator=[zlmacd_close_name, "cg"]
+
+
+        #math
+        df["ATR1"]=talib.ATR(df["high"], df["low"], df["close"], timeperiod=freq)
+        df["ATR_pct"]=df["ATR1"]/ df["close"]
+        df["ATR_pct"]=IFT(df["ATR_pct"])*10
+        df["NATR"]=talib.NATR(df["high"], df["low"], df["close"], timeperiod=5)
+        df["TRANGE"]=talib.TRANGE(df["high"], df["low"], df["close"])
+
+        a_vola=["ATR1","NATR","TRANGE", "ATR_pct"]
+        a_vola=[]
+
+
+
+        df["d_period"]=talib.HT_DCPERIOD(df[ibase])
+        df["d_period_ss"]=supersmoother_2p(df["d_period"], freq)
+        #df["d_phase"]=talib.HT_DCPHASE(df[ibase])
+        df["sine"], df["leadsine"]=talib.HT_SINE(df[ibase])
+        #df["mode"]=talib.HT_TRENDMODE(df[ibase]) # mode is ueseless
+        df["sine_buy"]= (df["sine"]> df["leadsine"]).astype(int)
+        df["sine_buy"]=df["sine_buy"].diff()*5
+        a_hilbert=["d_period"]
+
+
+
+
+        # df[f"trade"] = 0
+        # df.loc[(df[f"sine_{name}"] < -0.2) & (df[f"mom_{name}"] < -0.1) & (df[f"icc"] < -0.1), "trade"] = -10
+        # df.loc[(df[f"sine_{name}"] >= 0.2) & (df[f"mom_{name}"] >= 0.1) & (df[f"icc"] >= 0.1), "trade"] = 10
+
+        df_copy = df[["close"]+stable_lowpass+stable_highpass+stable_bandpass+unstable_lowpass+unstable_highpass+unstable_bandpass+oscilator+a_vola+a_hilbert+a_min_max+a_trend]
 
         df_copy.plot(legend=True)
         plt.show()
-        plt.savefig(f"divide/plot/bruteforce_adaptive_period{ts_code}.jpg")
-        df.to_excel(f"divide/xlsx/bruteforce_adaptive_period{ts_code}.xlsx")
         plt.close()
 
 
-# df = DB.get_asset()
-# MESA(df)
-# bruteforce_slope()
+        #save to excel
+        # df_copy = df[[f"close", "trade"]]
+        # df_copy.plot(legend=True)
+        # plt.show()
+        # plt.savefig(f"divide/plot/bruteforce_adaptive_period{ts_code}.jpg")
+        # df.to_excel(f"divide/xlsx/bruteforce_adaptive_period{ts_code}.xlsx")
+        # plt.close()
 
 
-# rekursive EMA
-def my_ema(s, n):
+def ema_re(s, n):
+    """rekursive EMA. Should be same as talib and any other standard EMA"""
     a_result = []
-
     def my_ema_helper(s, n=n):
         if len(s) > n:
             k = 2 / (n + 1)
@@ -1064,16 +808,28 @@ def my_ema(s, n):
             result = s.mean()
             a_result.append(result)
             return result
-
     my_ema_helper(s, n)  # run through and calculate
     final_result = [np.nan] * (n - 1) + a_result  # fill first n values with nan
     return final_result
 
+def ema(s, n):
+    """Iterative EMA. Should be same as talib and any other standard EMA. Equals First order polynomial filter. Might be not as good as higher order polynomial filters
+        1st order ema = alpha * f * z/(z-(1-alpha))
+        2nd order ema = kf /(z**2 + az + b)
+        3rd order ema = kf / (z**3 + az**2 + bz +c)
+        Higher order give better filtering
 
-# iterative EMA
-def my_ema_it(s, n):
+        delay formula = N* p / np.pi**2 (N is order, P is cutoff period)
+        The ema is basically a butterworth filter. It leas low frequencies untouched and filters high frequencies in not sharply, but smoothly
+        The higher the degree in polynom, the more lag. This is the tradeoff
+        Higher order give better filtering for the same amount of lag! basically should not use ema at all !!
+        The higher the alpha, the more weight for recent value
+        https://de.wikipedia.org/wiki/Butterworth-Filter
+        EMA is a low pass filter. It lets low pass frequencies pass and rejects high frequencies
+
+    """
     a_result = []
-    k = 2 / (n + 1)
+    alpha = 2 / (n + 1)
     for i in range(0, len(s)):
         if i < n - 1:
             a_result.append(np.nan)
@@ -1081,17 +837,17 @@ def my_ema_it(s, n):
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         elif i > n - 1:
-            last_day_ema = a_result[-1]
-            result = k * s.iloc[i] + (1 - k) * last_day_ema  # ehlers formula
+            result1 = a_result[-1]
+            result = alpha * s.iloc[i] + (1 - alpha) * result1  # ehlers formula
             a_result.append(result)
-
     return a_result
 
 
-# Rekursive Zerolag EMA
-def my_ec(s, n, gain):
-    a_result = []
 
+#CAT 1 Stable Period Low Pass Filter
+def zlema_re(s, n, gain):
+    """rekursive Zero LAG EMA. from john ehlers"""
+    a_result = []
     def my_ec_helper(s, n, gain):
         if len(s) > n:
             k = 2 / (n + 1)
@@ -1101,42 +857,117 @@ def my_ec(s, n, gain):
             a_result.append(result)
             return result
         else:
-            # first n values is sma
             result = s.mean()
             a_result.append(result)
             return result
-
     my_ec_helper(s, n, gain)  # run through and calculate
     final_result = [np.nan] * (n - 1) + a_result  # fill first n values with nan
     return final_result
 
-
-# Iterative Zero lag ema
-def my_ec_it(s, n, gain):
+def zlema(s, n, gain):
+    """iterative Zero LAG EMA. from john ehlers"""
     a_result = []
     k = 2 / (n + 1)
-    counter = 0
     for i in range(0, len(s)):
         if i < n - 1:
-            counter = counter + 1
             a_result.append(np.nan)
         elif i == n - 1:
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         elif i > n - 1:
-            last_day_ema = a_result[-1]
-            if np.isnan(last_day_ema):  # if the first n days are also nan
+            result1 = a_result[-1]
+            if np.isnan(result1):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_close = s.iloc[i]
-                result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
+                close = s.iloc[i]
+                result = k * (close + gain * (close - result1)) + (1 - k) * result1  # ehlers formula
                 a_result.append(result)
-
     return a_result
 
+def zlema_best_gain(s, n, gain_limit=20):
+    """to try all combinations to find the best gain for zlema"""
+    least_error = 1000000
+    best_gain = 0
+    for value1 in range(-gain_limit, gain_limit, 2):
+        gain = value1 / 10
+        ec = zlema(s, n, gain)
+        error = (s - ec).mean()
+        if abs(error) < least_error:
+            least_error = abs(error)
+            best_gain = gain
+    return zlema(s, n, best_gain)
 
-def my_supersmoother_it(s, n):
+
+def butterworth_2p(s, n):
+    """2 pole iterative butterworth. from john ehlers
+    butterworth and super smoother are very very similar
+    butter_3p >  butter_2p = ss_2p > ss_3p
+    """
+    a_result = []
+    a1 = np.exp(-1.414 * 3.1459 / n)
+    b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / n)  # when using 180 degree, the super smoother becomes a super high pass filter
+
+    coeff2 = b1
+    coeff3 = -a1 * a1
+    coeff1 = (1- b1+a1**2)/4
+
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1 or i == n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = coeff1*(close+2*close1+close2)+ coeff2*result1 + coeff3*result2 # ehlers formula
+                a_result.append(result)
+    return a_result
+
+def butterworth_3p(s, n):
+    """3 pole iterative butterworth. from john ehlers"""
+    a_result = []
+    a1 = np.exp(-3.14159 * 3.1459 / n)
+    b1 = 2 * a1 * math.cos(1.738 * np.radians(180) / n)  # when using 180 degree, the super smoother becomes a super high pass filter
+    c1 = a1**2
+
+    coeff2 = b1 + c1
+    coeff3 = -(c1 + b1 * c1)
+    coeff4 = c1 ** 2
+    coeff1 = (1-b1+c1)* (1-c1) /8
+
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1 or i == n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            result3 = a_result[-3]
+            if np.isnan(result1) or np.isnan(result2) or np.isnan(result3):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                close3 = s.iloc[i - 3]
+                result = coeff1 * (close + 3*close1 + 3* close2 + close3) + coeff2*result1 + coeff3*result2 + coeff4*result3 # ehlers formula
+                a_result.append(result)
+    return a_result
+
+def supersmoother_2p(s, n):
+    """2 pole iterative Super Smoother. from john ehlers"""
     a_result = []
     a1 = np.exp(-1.414 * 3.1459 / n)
     b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / n)  # when using 180 degree, the super smoother becomes a super high pass filter
@@ -1151,22 +982,351 @@ def my_supersmoother_it(s, n):
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         else:
-            yesterday_ss = a_result[-1]
-            byesterday_ss = a_result[-2]
-            if np.isnan(yesterday_ss) or np.isnan(byesterday_ss):  # if the first n days are also nan
+            result1 = a_result[-1]
+            resul2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(resul2):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_close = s.iloc[i]
-                yesterday_close = s.iloc[i - 1]
-                result = c1 * (today_close + yesterday_close) / 2 + c2 * yesterday_ss + c3 * byesterday_ss  # ehlers formula
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                result = c1 * (close + close1) / 2 + c2 * result1 + c3 * resul2  # ehlers formula
                 a_result.append(result)
+    return a_result
 
+def supersmoother_3p(s, n):
+    """3 pole iterative Super Smoother. from john ehlers
+        lags more than 2p , is a little bit smoother. I think 2p is better
+    """
+    a_result = []
+    a1 = np.exp(-3.1459 / n)
+    b1 = 2 * a1 * math.cos(1.738 * np.radians(180) / n)  # when using 180 degree, the super smoother becomes a super high pass filter
+    c1= a1**2
+
+    coeff2 = b1+c1
+    coeff3 = -(c1+b1*c1)
+    coeff4 = c1**2
+    coeff1 = 1-coeff2-coeff3-coeff4
+
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n - 1 or i == n:
+            result = s[0:i].mean()  # mean of an array
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            result3 = a_result[-3]
+            if np.isnan(result1) or np.isnan(result2) or np.isnan(result3):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                result = coeff1* close + coeff2* result1 + coeff3*result2 + coeff4*result3# ehlers formula
+                a_result.append(result)
+    return a_result
+
+def inst_trend(s, n):
+    """http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/iTrend_Ind.html
+    """
+    a_result = []
+    alpha = 2/ (n+1)
+    for i in range(0, len(s)):
+        if i < n - 1:
+            close = s.iloc[i]
+            close1 = s.iloc[i - 1]
+            close2 = s.iloc[i - 2]
+            result= (close + 2*close1 + close2)/4
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = (alpha-(alpha/2)**2)*close+ (0.5* alpha**2)* close1 - (alpha-(3*alpha**2)/4 )* close2 + 2* (1-alpha)* result1 - (1-alpha)**2 * result2
+                a_result.append(result)
     return a_result
 
 
-# if frequency too short like n = 2, then it will produce overflow.
-def my_highpass_it(s, n):
+
+
+
+
+def gaussian_filter():
+    pass
+
+
+
+
+
+
+
+
+
+# CAT 4: UNSTABLE PERIOD FILTER
+def laguerre_filter_unstable(s):
+    """ Non linear laguere is a bit different than standard laguere
+        http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
+
+        REALLY good, better than any other smoother. Is close to real price and very smooth
+        currently best choice
+    """
+    s_price=s
+    gamma=0.8 # daming factor. The higher the more damping. If daming is 0, then it is a FIR
+
+    #calculate L0
+    L0 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i ==0:
+            L0[i]=0
+        else:
+            L0[i]=(1-gamma)* s_price.iloc[i] + gamma*L0[i-1]
+
+    #calcualte L1
+    L1 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L1[i] = 0
+        else:
+            L1[i] = (- gamma) * L0[i] + L0[i-1] + gamma*L1[i-1]
+
+    # calcualte L2
+    L2 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L2[i] = 0
+        else:
+            L2[i] = (- gamma) * L1[i] + L1[i - 1] + gamma * L2[i - 1]
+
+    # calcualte L2
+    L3 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L3[i] = 0
+        else:
+            L3[i] = (- gamma) * L2[i] + L2[i - 1] + gamma * L3[i - 1]
+
+
+    filter= (pd.Series(L0) + 2* pd.Series(L1) + 2* pd.Series(L2) + pd.Series(L3))/6
+
+    return list(filter)
+
+
+def ehlers_filter_unstable(s, n):
+    """
+    version1: http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
+    version2:  http://www.mesasoftware.com/papers/EhlersFilters.pdf
+
+    Although it contains N, it is a non linear Filter
+
+    two different implementation. Version1 is better because it is more general. version two uses 5 day as fixed date
+    has unstable period. FIR filter
+
+    I believe ehlers filter has unstable period because all outcomes for different freqs are the same
+    The ehlers filter is WAAAAY to flexible and smooth, much much more flexile than lagguere or EMA, It almost seems like it is a 5 freq, and other are 60 freq. How come?
+    """
+    s_smooth = (s + 2 * s.shift(1) + 2 * s.shift(2) + s.shift(3)) / 6
+
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n:
+            a_result.append(np.nan)
+        else:
+            smooth = s_smooth.iloc[i]
+            smooth_n = s_smooth.iloc[i - n]
+
+            a_coeff = []
+            for count in range(0, n - 1):
+                a_coeff.append(abs(smooth - smooth_n))
+
+            num = 0
+            sumcoeff = 0
+            for count in range(0, n - 1):
+                if not np.isnan(smooth):
+                    num = num + a_coeff[count] * smooth
+                    sumcoeff = sumcoeff + a_coeff[count]
+            result = num / sumcoeff if sumcoeff != 0 else 0
+            a_result.append(result)
+
+    return a_result
+
+# CAT 5: TREND MODE DECOMPOSITOR
+def cybercycle(s, n, alpha=0.2):
+    """Sometimes also called simple cycle. Is an oscilator. not quite sure what it does. maybe alpha between 0 and 1. the bigger the smoother
+    https://www.mesasoftware.com/papers/TheInverseFisherTransform.pdf
+
+    cybercycle gives very noisy signals compared to other oscilators. maybe I am using it wrong
+    """
+    s_price = s
+    s_smooth = (s_price + 2 * s_price.shift(1) + 2 * s_price.shift(2) + s_price.shift(3)) / 6
+    a_result = []
+
+    for i in range(0, len(s_price)):
+        if i < n + 1:
+            result = (s_price.iloc[i] - 2 * s_price.iloc[i - 1] + s_price.iloc[i - 2]) / 4
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s_smooth[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                smooth = s_smooth.iloc[i]
+                smooth1 = s_smooth.iloc[i - 1]
+                smooth2 = s_smooth.iloc[i - 2]
+                result = (1 - 0.5 * alpha) ** 2 * (smooth - 2 * smooth1 + smooth2) + 2 * (1 - alpha) * result1 - (1 - alpha) ** 2 * result2  # ehlers formula
+                a_result.append(result)
+
+    cycle = pd.Series(data=a_result)
+    icycle = (cycle) #according to formula. IFT should be used here, but then my amplitude is too small, so I left it away
+    return list(icycle)
+
+def extract_trend(s,n):
+    """it is exactly same as bandpass filter except the last two lines """
+    delta = 0.1
+    beta = math.cos(np.radians(360) / n)
+    gamma = 1 / math.cos(np.radians(720) * delta / n)
+    alpha = gamma - np.sqrt(gamma ** 2 - 1)
+
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n or i == n + 1:
+            result = s[0:i].mean()
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
+                a_result.append(result)
+
+    trend=pd.Series(data=a_result)
+    trend=trend.rolling(2*n).mean()
+    return list(trend)
+
+def mode_decomposition(s,s_high,s_low, n):
+    """https://www.mesasoftware.com/papers/EmpiricalModeDecomposition.pdf
+    it is exactly same as bandpass filter except the last 10 lines
+    I dont understand it really. Bandpass fitler is easier, more clear than this. Maybe I am just wrong
+    """
+    delta = 0.1
+    beta = math.cos(np.radians(360) / n)
+    gamma = 1 / math.cos(np.radians(720) * delta / n)
+    alpha = gamma - np.sqrt(gamma ** 2 - 1)
+
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n or i == n + 1:
+            result = s[0:i].mean()
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
+                a_result.append(result)
+
+    trend=pd.Series(data=a_result)
+    trend=trend.rolling(2*n).mean()
+
+    a_peak=list(s_high.shift(1))
+    a_valley=list(s_low.shift(1))
+    for i in range(0, len(s)):
+        if a_result[i]==np.nan:
+            pass
+        else:
+            result = a_result[i]
+            result1=a_result[i-1]
+            result2=a_result[i-2]
+            if result1 > result and result1 > result2:
+                a_peak[i]=result1
+
+            if result1 < result and result1 < result2:
+                a_valley[i]=result1
+
+    avg_peak = pd.Series(a_peak).rolling(n).mean()
+    avg_valley = pd.Series(a_valley).rolling(n).mean()
+
+    return [list(trend), list(avg_peak), list(avg_valley)]
+
+
+def cycle_measure(s,n):
+    """http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/Cycle_Measure.html
+
+    This is just too complicated to calculate, may contain too many errors
+    """
+    Imult=0.365
+    Qmult=0.338
+
+    a_inphase=[]
+    value3= s- s.shift(n)
+
+    #calculate inphase
+    for i in range(0, len(s)):
+        if i< n:
+            a_inphase.append(np.nan)
+        else:
+            inphase3=a_inphase[-3]
+            if np.isnan(inphase3):
+                inphase=s[0:1].mean()
+                a_inphase.append(inphase)
+            else:
+                value3_2=value3.iloc[i-2]
+                value3_4=value3.iloc[i-4]
+                inphase = 1.25 * (value3_4 - Imult * value3_2) + Imult * inphase3
+                a_inphase.append(inphase)
+
+    a_quadrature=[]
+    #calculate quadrature
+    for i in range(0, len(s)):
+        if i< n:
+            a_quadrature.append(np.nan)
+        else:
+            quadrature2=a_quadrature[-2]
+            if np.isnan(quadrature2):
+                quadrature=s[0:1].mean()
+                a_quadrature.append(quadrature)
+            else:
+                value3=value3.iloc[i]
+                value3_2=value3.iloc[i-2]
+                quadrature = value3_2- Qmult*value3 + Qmult*quadrature2
+                a_quadrature.append(quadrature)
+
+
+
+
+
+
+# CAT 6: OSCILATOR
+#CAT 2: STABLE PERIOD HIGH PASS FILTER
+def highpass(s, n):
+    """high pass. from john ehlers. if frequency too short like n = 2, then it will produce overflow.
+    basically you can use high pass filter as an RSI
+    everything detrended is an oscilator
+    """
     a_result = []
     alpha1 = (math.cos(np.radians(360) * 0.707 / n) + math.sin(np.radians(360) * 0.707 / n) - 1) / (math.cos(np.radians(360) * 0.707 / n))
 
@@ -1177,40 +1337,33 @@ def my_highpass_it(s, n):
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         else:
-            yesterday_hp = a_result[-1]
-            byesterday_hp = a_result[-2]
-            if np.isnan(yesterday_hp) or np.isnan(byesterday_hp):  # if the first n days are also nan
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_close = s.iloc[i]
-                yesterday_close = s.iloc[i - 1]
-                byesterday_close = s.iloc[i - 2]
-
-                part1 = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (today_close - 2 * yesterday_close + byesterday_close)
-                print("part1", part1)
-
-                part2 = 2 * (1 - alpha1) * yesterday_hp - (1 - alpha1) * (1 - alpha1) * byesterday_hp
-                print(part2)
-                result = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (today_close - 2 * yesterday_close + byesterday_close) + 2 * (1 - alpha1) * yesterday_hp - (1 - alpha1) * (1 - alpha1) * byesterday_hp  # ehlers formula
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (close - 2 * close1 + close2) + 2 * (1 - alpha1) * result1 - (1 - alpha1) * (1 - alpha1) * result2  # ehlers formula
                 a_result.append(result)
-
     return a_result
 
+def roofing_filter(s, hp_n, ss_n):
+    """  usually hp_n > ss_n. highpass period should be longer than supersmother period.
 
-# usually hp_n > ss_n
-
-# blocks one side hp and one side lp
-def my_roofingfilter_it(s, hp_n, ss_n):
+     1. apply high pass filter
+     2. apply supersmoother (= low pass)
+     """
     a_result = []
+    s_hp = highpass(s, hp_n)
 
-    s_hp = my_highpass_it(s, hp_n)
     a1 = np.exp(-1.414 * 3.1459 / ss_n)
     b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / ss_n)
     c2 = b1
     c3 = -a1 * a1
     c1 = 1 - c2 - c3
-
     for i in range(0, len(s)):
         if i < ss_n - 1:
             a_result.append(np.nan)
@@ -1218,63 +1371,560 @@ def my_roofingfilter_it(s, hp_n, ss_n):
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         else:
-            yesterday_result = a_result[-1]
-            byesterday_result = a_result[-2]
-            if np.isnan(yesterday_result) or np.isnan(byesterday_result):  # if the first n days are also nan
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_hp = s_hp[i]
-                yesterday_hp = s_hp[i - 1]
-                result = c1 * (today_hp + yesterday_hp) / 2 + c2 * yesterday_result + c3 * byesterday_result  # ehlers formula
+                hp = s_hp[i]
+                hp1 = s_hp[i - 1]
+                result = c1 * (hp + hp1) / 2 + c2 * result1 + c3 * result2  # ehlers formula
+                a_result.append(result)
+    return a_result
+
+
+def bandpass_filter(s, n):
+    """ http://www.mesasoftware.com/seminars/ColleaguesInTrading.pdf
+        Can help MACD reduce whipsaw
+        NOTE: ONLY works on sinoid charts like price, and not on RSI or oscillator
+        = Detrended lowpass filter
+        = oscilator
+
+        => identifies cycle mode
+
+        It is basically a detrended oscilator since removing lowpass is detrend
+        or like a low pass but detrended
+
+        standard usage:
+        1. filter the high and low pass and only let middle band pass
+        2. so only care about the midterm trend + midterm noise
+
+        cool idea usage:
+        1. when the current frequency is known (via hilbert or FFT) use bandpass filter to only target the known filter.
+        2. calculate the derivation of the bandpass to see the future
+
+        General note:
+        remove low frequency = remove trend
+        remove high frequency = remove noise
+    """
+
+    """http://www.mesasoftware.com/seminars/TrendModesAndCycleModes.pdf
+
+    NOTE: This function returns 2 variables cycle and amplitude
+    This might only be a cycle indicator on a bandpass filter
+    So. it creates a bandpass filter???
+
+    The higher the delta, the higher the amplitude
+    """
+
+    delta = 0.9
+    beta = math.cos(np.radians(360) / n)
+    gamma = 1 / math.cos(np.radians(720) * delta / n)
+    alpha = gamma - np.sqrt(gamma ** 2 - 1)
+
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n or i == n + 1:
+            result = s[0:i].mean()
+            a_result.append(result)
+        else:
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
+                a_result.append(result)
+            else:
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
 
     return a_result
 
 
-def my_cyber_cycle(s_high, s_low, n):
-    price = (s_high + s_low) / 2
-    alpha = 0.7
-    smooth = (price + 2 * price.shift(1) + 2 * price.shift(2) + price.shift(3)) / 6
-    a_result = []
+def bandpass_filter_with_lead(s, n):
 
-    for i in range(0, len(price)):
-        if i < n + 1:
-            result = (price.iloc[i] - 2 * price.iloc[i - 1] + price.iloc[i - 2]) / 4
+    delta = 0.9
+    beta = math.cos(np.radians(360) / n)
+    gamma = 1 / math.cos(np.radians(720) * delta / n)
+    alpha = gamma - np.sqrt(gamma ** 2 - 1)
+
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n - 1:
+            a_result.append(np.nan)
+        elif i == n or i == n + 1:
+            result = s[0:i].mean()
             a_result.append(result)
         else:
-            yesterday_result = a_result[-1]
-            byesterday_result = a_result[-2]
-            if np.isnan(yesterday_result) or np.isnan(byesterday_result):  # if the first n days are also nan
-                result = smooth[0:i].mean()  # mean of an array
+            result1 = a_result[-1]
+            result2 = a_result[-2]
+            if np.isnan(result1) or np.isnan(result2):  # if the first n days are also nan
+                result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_smooth = smooth.iloc[i]
-                yesterday_smooth = smooth.iloc[i - 1]
-                byesterday_smooth = smooth.iloc[i - 2]
-                result = (1 - 0.5 * alpha) ** 2 * (today_smooth - 2 * yesterday_smooth + byesterday_smooth) + 2 * (1 - alpha) * yesterday_result - (1 - alpha) ** 2 * byesterday_result  # ehlers formula
+                close = s.iloc[i]
+                close1 = s.iloc[i - 1]
+                close2 = s.iloc[i - 2]
+                result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
 
-    cycle = pd.Series(data=a_result)
-    icycle = IFT(cycle)
-    return list(icycle)
+    s_result=pd.Series(a_result)
+    lead=(n/6.28318)*(s_result-s_result.shift(1))
+    return [a_result,lead]
+
+def laguerre_RSI(s):
+    """
+    http://www.mesasoftware.com/papers/TimeWarp.pdf
+    Same as laguerre filter, laguerre RSI has unstable period
+    It is too sensible and is useable for short term but not for longterm
+    swings very sharply to both poles, produces a lot of signals
+    """
+
+    s_price = s
+    gamma = 0.2
+
+    # calculate L0
+    L0 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L0[i] = 0
+        else:
+            L0[i] = (1 - gamma) * s_price.iloc[i] + gamma * L0[i - 1]
+
+    # calcualte L1
+    L1 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L1[i] = 0
+        else:
+            L1[i] = (- gamma) * L0[i] + L0[i - 1] + gamma * L1[i - 1]
+
+    # calcualte L2
+    L2 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L2[i] = 0
+        else:
+            L2[i] = (- gamma) * L1[i] + L1[i - 1] + gamma * L2[i - 1]
+
+    # calcualte L2
+    L3 = [0]*len(s)
+    for i in range(0, len(s_price)):
+        if i == 0:
+            L3[i] = 0
+        else:
+            L3[i] = (- gamma) * L2[i] + L2[i - 1] + gamma * L3[i - 1]
+
+    df_helper=pd.DataFrame()
+    df_helper["L0"]=L0
+    df_helper["L1"]=L1
+    df_helper["L2"]=L2
+    df_helper["L3"]=L3
+
+    df_helper["CU"]=0
+    df_helper["CD"]=0
+
+    df_helper.loc[df_helper["L0"]>= df_helper["L1"], "CU"]=df_helper["L0"]- df_helper["L1"]
+    df_helper.loc[df_helper["L0"]< df_helper["L1"], "CD"]=df_helper["L1"]- df_helper["L0"]
+
+    df_helper.loc[df_helper["L1"] >= df_helper["L2"], "CU"] = df_helper["CU"] + df_helper["L1"] - df_helper["L2"]
+    df_helper.loc[df_helper["L1"] < df_helper["L2"], "CD"] = df_helper["CD"] + df_helper["L2"] - df_helper["L1"]
+
+    df_helper.loc[df_helper["L2"] >= df_helper["L3"], "CU"] = df_helper["CU"] + df_helper["L2"] - df_helper["L3"]
+    df_helper.loc[df_helper["L2"] < df_helper["L3"], "CD"] = df_helper["CD"] + df_helper["L3"] - df_helper["L2"]
+
+    RSI=df_helper["CU"]/ (df_helper["CU"]+ df_helper["CD"])
+
+    return list(RSI)
 
 
-def my_best_ec(s, n, gain_limit=20):
-    least_error = 1000000
-    best_gain = 0
-    for value1 in range(-gain_limit, gain_limit, 2):
-
-        gain = value1 / 10
-        ec = my_ec_it(s, n, gain)
-        error = (s - ec).mean()
-        if abs(error) < least_error:
-            least_error = abs(error)
-            best_gain = gain
-    best_ec = my_ec_it(s, n, best_gain)
-    print("best gain is", best_gain)
-    return best_ec
 
 
-bruteforce_slope_adaptive()
-# the bigger the freq the more predictable, the more useless the data
+def CG_Oscillator(s, n):
+    """http://www.mesasoftware.com/papers/TheCGOscillator.pdf
+    Center of gravity
+
+    The CG oscilator is the only one that is FUCKING RELATIVE to the prise
+    THIS MEANS you can apply FT and IF while others are not suitable for FT and IFT
+
+
+    Similar to ehlers filter
+    Should be better than conventional RSI
+    """
+    a_result = []
+    for i in range(0, len(s)):
+        if i < n:
+            a_result.append(np.nan)
+        else:
+            num = 0
+            denom = 0
+            for count in range(0, n - 1):
+                close =s.iloc[i-count]
+                if not np.isnan(close):
+                    num = num + (1 + count) * close
+                    denom = denom + close
+            result = -num/denom if denom != 0 else 0
+            a_result.append(result)
+    return a_result
+
+
+
+def RVI(s_open, s_close, s_high,s_low, n):
+    """
+        http://www.stockspotter.com/Files/rvi.pdf
+        Relative vigor index
+        Price close higher in upmarket, close lower on down market
+        RVI = (close - open) / (high - low)
+        but basically this should be similar to another kind of indicator
+
+        It is useable, but it is generally much slower than MACD and it can create much more noise than macd.
+        Too many crossings
+        Since MACD is using the convergence of two lines, which basically is a 1st order derivation. RVI is not any derivation at all.
+        Either use a shorter time period e.g. freq/2
+
+
+    """
+
+    value1= (s_close-s_open) + 2* (s_close.shift(1) - s_open.shift(1)) + 2* (s_close.shift(2)-s_open.shift(2)) + (s_close.shift(3) - s_open.shift(3))/6
+    value2= (s_high-s_low) + 2* (s_high.shift(1) - s_low.shift(1)) + 2* (s_high.shift(2)-s_low.shift(2)) + (s_high.shift(3) - s_low.shift(3))/6
+
+    a_result=[]
+    for i in range(0, len(s_open)):
+        if i < n:
+            a_result.append(np.nan)
+        else:
+            num=0
+            denom=0
+            for count in range(0, n-1):
+                value1_helper=value1.iloc[i-count]
+                value2_helper=value2.iloc[i- count]
+
+                if not np.isnan(value1_helper):
+                    num = num + value1_helper
+
+                if not np.isnan(value2_helper):
+                    denom=denom+value2_helper
+
+            if denom !=0:
+                result= num/denom
+            else:
+                result = 0
+            a_result.append(result)
+
+
+    RVI=pd.Series(a_result)
+    RVISig=(RVI + 2* RVI.shift(1) + 2*RVI.shift(2) + RVI.shift(3))/6
+    return [list(RVI),list(RVISig)]
+
+
+
+
+def leading(s,n):
+    """
+        http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/Leading_Ind.html
+
+        could be just a interpolation of the future price
+        Looks just like a high pass of price,
+        Not very useful when in cycle mode.
+
+    """
+    alpha1=0.25
+    alpha2=0.33
+
+    a_result=[]
+    for i in range(0, len(s)):
+        if i < n:
+            a_result.append(np.nan)
+        else:
+            result1=a_result[-1]
+            close=s.iloc[i]
+            close1=s.iloc[i-1]
+            if np.isnan(result1):
+                result=s[0:i].mean()
+                a_result.append(result)
+            else:
+                result=2*close + (alpha1-2) * close1 + (1-alpha1)*result1
+                a_result.append(result)
+
+    a_netlead = []
+    for i in range(0, len(s)):
+        if i < n:
+            a_netlead.append(np.nan)
+        else:
+            result1 = a_netlead[-1]
+            lead=a_result[i-1]
+            if np.isnan(result1):
+                result = s[0:i].mean()
+                a_netlead.append(result)
+            else:
+                result = alpha2*lead+ (1-alpha2) * result1
+                a_netlead.append(result)
+
+    return [a_result, a_netlead]
+
+
+#UNFINISHED WORK
+def linear_kalman_filter():
+    """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
+    Guesses the error caused by phast values = difference of past_close and past kalman
+    something like this
+    kalman = alpha* today_close + (1-alpha)* yesterday_kalman + y* (today_close-yesterday_close)
+       """
+
+def nonlinear_kalman_filter():
+    """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
+    basically = decompose close price using ema and close- ema. Since ema is low pass filter, close-ema is high pass filter.
+    Then smooth the high pass filter(close-ema) and add it back to ema. The result is a price with smoothed high frequency only. Low frequency untouched.
+    This is an interesting way of creating a zero lag filter: namely by smoothing the high frequency only.
+       """
+def pure_predictor():
+    """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
+    1. use a low pass filter (3 degree polynomial)
+    2. find low of that low pass filter
+    3. period1 = 0.707 * dominant cycle
+    4. period2 = 1.414 * dominant cycle ( this has 2x lag as the period1 )
+    5. take difference of period1 and period2 (the result is in phase with cycle component of the price)
+    6. Tjos os cycle component of the price. = Bandpass filter ???
+
+    7. Take the momentum of the bandpass filter ( = diff today - yesterday)
+    8. normalized by multiply momentum with p/(2*np.pi)
+    9. multiply normalized momentum by 0.577 (=tan(30))
+
+    This is basically lead sine
+           """
+
+def FIR_filter():
+    """http://www.mesasoftware.com/seminars/TAOTN2002.pdf
+    http://www.mesasoftware.com/papers/TimeWarp.pdf
+
+    FIr=finite impluse response filter
+    filt=  (price + 2*price1 +2*price2 +price3)/6
+    fir filter is basically a smoother
+    """
+
+def zero_lag_filter():
+    """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
+    calculation using phasor A- phasor B
+    """
+def predictfive_filter():
+    """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
+        calculation using phasor A- phasor B
+        """
+def goertzel_filter():
+    """http://www.mesasoftware.com/seminars/ColleaguesInTrading.pdf
+    a form of fft where one tries each frequency individually
+    """
+
+def DFT_MUSIC():
+    """http://stockspotter.com/Files/fouriertransforms.pdf
+    a DFT with MUSIC algorithm to find the useful and dominant spectrum
+    """
+
+def swissarmy_helper():
+    pass
+
+def swissarmy(type, s_high, s_low, n):
+
+    """http://www.mesasoftware.com/papers/SwissArmyKnifeIndicator.pdf
+        Various indicators together in one place
+    """
+    delta= 0.1
+    N=0
+    s_price=(s_high+s_low)/2
+
+    a_result=[]
+    if type=="EMA":
+
+        for i in range(0, len(s_high)):
+            if i < n:
+                result=s_price.iloc[i]
+                alpha= (math.cos(np.radians(360)/n) + math.sin((np.radians(360)/n)) -1 ) / math.cos(np.radians(360)/n)
+                b0 =alpha
+                a1=1-alpha
+
+
+
+
+
+
+
+
+
+def kalman_filter():
+    """
+
+        From stack overflow, might be just wrong. Kalman filter is generally very noisy. Not smooth at all.
+        Reasons why kalman filter is not the best for measure stock price:
+        1. The assmumes the true value exist, Whereas stock price true value might always have a lot of noise, so no true value
+        2. The kalman filter itself deviates a lot with a lot of error
+
+
+        Parameters:
+        x: initial state 4-tuple of location and velocity: (x0, x1, x0_dot, x1_dot)
+        P: initial uncertainty convariance matrix
+        measurement: observed position
+        R: measurement noise
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        """
+
+    def kalman(x, P, measurement, R, motion, Q, F, H):
+        '''
+
+
+        Parameters:
+        x: initial state
+        P: initial uncertainty convariance matrix
+        measurement: observed position (same shape as H*x)
+        R: measurement noise (same shape as H)
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        F: next state function: x_prime = F*x
+        H: measurement function: position = H*x
+
+        Return: the updated and predicted new values for (x, P)
+
+        See also http://en.wikipedia.org/wiki/Kalman_filter
+
+        This version of kalman can be applied to many different situations by
+        appropriately defining F and H
+        '''
+        # UPDATE x, P based on measurement m
+        # distance between measured and current position-belief
+        y = np.matrix(measurement).T - H * x
+        S = H * P * H.T + R  # residual convariance
+        K = P * H.T * S.I  # Kalman gain
+        x = x + K * y
+        I = np.matrix(np.eye(F.shape[0]))  # identity matrix
+        P = (I - K * H) * P
+
+        # PREDICT x, P based on motion
+        x = F * x + motion
+        P = F * P * F.T + Q
+        return x, P
+
+    def kalman_xy(x, P, measurement, R, motion=np.matrix('0. 0. 0. 0.').T, Q=np.matrix(np.eye(4))):
+        """
+        Parameters:
+        x: initial state 4-tuple of location and velocity: (x0, x1, x0_dot, x1_dot)
+        P: initial uncertainty convariance matrix
+        measurement: observed position
+        R: measurement noise
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        """
+        return kalman(x, P, measurement, R, motion, Q, F=np.matrix('''  1. 0. 1. 0.;
+                                                                          0. 1. 0. 1.;
+                                                                          0. 0. 1. 0.;
+                                                                          0. 0. 0. 1.
+                                                                          '''),
+                      H=np.matrix('''
+                                                                          1. 0. 0. 0.;
+                                                                          0. 1. 0. 0.'''))
+    x = np.matrix('0. 0. 0. 0.').T
+    P = np.matrix(np.eye(4))*1000 # initial uncertainty
+
+    df=DB.get_asset()
+
+    N = len(df["close"])
+    observed_x = range(0,N)
+    observed_y = df["close"]
+    plt.plot(observed_x, observed_y)
+    result = []
+    R = 800**2 #the bigger the noise, the more the lag . Otherwise too close to actual price, no need to filter
+    for meas in zip(observed_x, observed_y):
+        x, P = kalman_xy(x, P, meas, R)
+        result.append((x[:2]).tolist())
+    kalman_x, kalman_y = zip(*result)
+    plt.plot(kalman_x, kalman_y)
+    plt.show()
+
+
+
+indicator_test()
+
+
+"""
+
+useful techniqes
+1. MACD with EMA and SS
+2. Bandpass filter (as oscilator) + macd (bandpass is always later than MACD) 
+3. highpass as RSI 
+4. A trendline on oscilator like bandpass seems to really good to indicate the next low or high. So use momentum to see the indicator if it is already deviating from price
+
+
+
+
+IDEAS
+0. See stock chart as wave
+- Use methods from eletrical engineering
+- use methods from quantum physic: superposition, heisenberg uncertainty. The smaller the days, the more random are the price jumps 
+
+Use super position and heiserbergishe ungleichung on stocks
+
+
+In uptrend: Buy until ATR drops
+In downtrend: wait until ATR goes up and then buy. 
+
+
+1.0 ATR is a pretty good volatility measure. When the price is at bottom. The True range is at highest because buyer and seller are very mixed. In an uptrend, The ATR should decrease
+1.1 Most time dominant period is 15-40 which means this is the best period to do sell or buy. 
+
+1. Average True Range to set threshhold
+calculate average true range over past period
+add a fraction of the average true range to nonlinear/ unstable period filters. 
+by doing this, you allow the price to swing within the past true range. If it exceeds, then it is likely an special case. 
+
+My thought:
+ATR + STD = True Range
+
+2. The general problem of all unstable period indicator is that they are too volatile and need a bigger frequency to compensate
+
+2. Voting system
+Use uncorrelated pairs: 
+momentum: ma, instand_trend
+Cycle:
+oscilator: RSI
+
+5:1 spread of the same indicator in different time can also be used 
+
+3. How to combine two indicators?
+The Fucking answer is Bertrands ballot theorem
+Candicate A gets a votes and candicate B gets b votes. Then the probabily of A ahead of B is:
+(a-b)/(a+b)
+
+4. For example, an RSI theoretically performs best when the computation period is just one half of a cycle period
+
+5. What JOHN Ehler did not incooperate:
+volume, ANN, fundamentals, comparative best stock using same technique at one day, industry comparison
+
+
+6. Against pattern recognition
+1. past price has not influencen on future price
+2. short term price is random
+
+For pattern recognition
+1. magnus carlsen 
+2. Should work on long term
+
+
+
+6. Relationships
+the bigger the freq the more predictable, the more useless the data
+The smoother your signal, the longer the lag (solveable by insta trendline, kalman filter)
+the earlier you want to detect the turnpoint, the more sensitive the indicator needs to be, the more whiplas it creates. (Basically, you need to adjust the period based on probability for the next turning point signal)
+the better the trend the easier to make money.
+the more normalize, the morr sensitive, the more recent is the data,   《==》  the more whipsaw, the more noise.
+In Up Trend move, buy and hold
+In cycle mode buy and sell
+in downtrend mode, Shortsell and hold
+hyper overbought= long period + short period overbought
+hyper udnerbought = long period + short period underbought
+
+"""
+
