@@ -543,6 +543,24 @@ def ent(data):
     return scipy.stats.entropy(p_data)  # get entropy from counts
 
 
+def dh_macd(df, ibase, sfreq, bfreq):
+    """dh means de-highpassed
+    It seems that dehighpassed signal is much better than any other straight forward appraoch of an moving average
+
+    """
+    name = f"{ibase}.{sfreq, bfreq}"
+
+    df[f"dhigh1_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
+    df[f"dhigh2_{name}"] = df[ibase] - highpass(df[ibase], int(bfreq))
+
+
+
+    df.loc[ (df[f"dhigh1_{name}"] > df[f"dhigh2_{name}"]), f"dhmacd_{name}"] = 10
+    df.loc[ (df[f"dhigh1_{name}"] <= df[f"dhigh2_{name}"]), f"dhmacd_{name}"] = - 10
+
+
+    return f"dhmacd_{name}"
+
 def zlmacd(df, ibase, sfreq, bfreq, smfreq):
     """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
         on daily chart, useable freqs are 12*60, 24*60 ,5*60
@@ -553,21 +571,36 @@ def zlmacd(df, ibase, sfreq, bfreq, smfreq):
         NOT other way around
         Laguerre filter is overall very good, but is neither best at any discipline. Hence using EMA+ supersmoother 3p is better.
         Butterwohle is also very smooth, but it produces 1 more curve at turning point. Hence super smoother is better for this job.
+
+
+        Works good on high volatile time, works bad on flat times.
+        TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
         """
     name = f"{ibase}.{sfreq, bfreq, smfreq}"
 
-    TR_helper=talib.NATR(df["high"], df["low"],df["close"], sfreq)
     df[f"zlema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
     df[f"zlema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
 
+    df[f"zlema1_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
+    df[f"zlema2_{name}"] = df[ibase] - highpass(df[ibase], int(bfreq))
+
     df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
     #df[f"zldea_{name}"] = df[f"zldif_{name}"] - zlema(df[f"zldif_{name}"], smfreq, 1.8)
-    df[f"zldea_{name}"] = df[f"zldif_{name}"] - supersmoother_3p(df[f"zldif_{name}"], smfreq)
-    df[f"zldea_{name}"] =  supersmoother_3p(df[f"zldif_{name}"], int(smfreq))
+    df[f"zldea_{name}"] = df[f"zldif_{name}"]-  supersmoother_3p(df[f"zldif_{name}"], int(smfreq))
 
-    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
-    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
-    return f"zlmacd_{name}"
+    df[f"slope_{name}"]= df[f"zldea_{name}"].rolling(int(sfreq/4)).apply(trendslope_apply,raw=False)
+    df[f"slope_{name}"]= df[f"slope_{name}"]*100
+    df[f"slope_abs_{name}"]= df[f"slope_{name}"].abs()
+
+    df[f"zldea_{name}"] = df[f"zldea_{name}"] -df[f"slope_abs_{name}"]*0.0
+    df[f"zldea_{name}"] = df[f"zldea_{name}"] *10
+
+    df.loc[ (df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = 10
+    df.loc[ (df[f"zldea_{name}"] <= 0), f"zlmacd_{name}"] = -10
+
+    df[ f"zlmacd_{name}"]=df[ f"zlmacd_{name}"].fillna(method="ffill")
+    df[f"zldif_{name}"]=df[f"zldif_{name}"]*10
+    return [f"zlmacd_{name}", f"zldea_{name}", f"slope_{name}", f"zlema1_{name}",f"zlema2_{name}", f"zldif_{name}"]
 
 
 
@@ -575,6 +608,8 @@ def zlmacd_test(df, ibase, sfreq, bfreq, smfreq):
     name = f"{ibase}.{sfreq, bfreq, smfreq}_test"
     df[f"zlema1_{name}"] = supersmoother_3p((df[ibase]), sfreq)
     df[f"zlema2_{name}"] = supersmoother_3p((df[ibase]), bfreq)
+
+
 
     df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
     # df[f"zldea_{name}"] = df[f"zldif_{name}"] - zlema(df[f"zldif_{name}"], smfreq, 1.8)
@@ -610,10 +645,10 @@ def indicator_test():
     df_ts_code = df_ts_code[df_ts_code.index == "000002.SZ"]
     for ts_code in df_ts_code.index[::1]:
         print("ts_code", ts_code)
-        df = DB.get_asset(ts_code=ts_code)
+        df = DB.get_asset(ts_code=ts_code).reset_index()
         #df = LB.timeseries_to_season(df).reset_index()
-        df = LB.timeseries_to_week(df).reset_index()
-        #df = df[3000:]
+        #df = LB.timeseries_to_week(df).reset_index()
+        df = df[3000:]
 
         for period in [2]:
             df[f"tomorrow{period}"] = df["open"].shift(-period) / df["open"].shift(-1)
@@ -661,12 +696,23 @@ def indicator_test():
 
 
         ibase = "close"
-        days = 5
-        freq = 2 * days
 
-        df["low.min"]=df["low"].rolling(5).min()
-        df["high.max"]=df["high"].rolling(5).min()
-        a_min_max=[]
+        freq = 120
+
+
+        df["detrend"]= df[ibase] - supersmoother_3p(df[ibase],freq)
+
+        df["de_highpass"]=df[ibase]- highpass(df[ibase], int(freq/1))
+        df["de_highpass"]=supersmoother_3p(df["de_highpass"],int(freq/4))
+
+        df["rel_close240"]=df[ibase].rolling(240).apply(normalize_apply, raw=False)
+        df["rel_close20"]=df[ibase].rolling(20).apply(normalize_apply, raw=False)
+        df["rel_close20"]=FT(df["rel_close20"])
+
+
+        init=["detrend"]
+
+
 
         #stable period low pass
         df["zlema"] = zlema_best_gain(df[ibase], freq)
@@ -685,14 +731,14 @@ def indicator_test():
 
 
         #stable period band pass
-        df["roofing"] = roofing_filter(df[ibase], freq,  int(freq/10))
+        df["roofing"] = roofing_filter(df[ibase], freq,  int(freq/2))
         df["bandpass"], df["bandpass_lead"] = bandpass_filter_with_lead(df[ibase], freq)
         df["bandpass_buy"]=0
         df.loc[df["bandpass"] > 0, "bandpass_buy"] = 10
         df.loc[df["bandpass"] < -0, "bandpass_buy"] = -10
         stable_bandpass = ["roofing","bandpass","bandpass_buy"]
 
-        stable_bandpass = ["bandpass", "bandpass_lead"]
+        stable_bandpass = []
 
         #this strategy works with high pass as RSI oscilator
         df["buy"] = 0
@@ -717,8 +763,8 @@ def indicator_test():
 
         # trend vs cycle
         df["trend_mode"]=extract_trend(df[ibase],4)
-        macd_trend_mode=zlmacd(df,"trend_mode",freq, freq*2 ,freq)
-        a_trend = ["trend_mode", macd_trend_mode]
+        #macd_trend_mode=zlmacd(df,"trend_mode",freq, freq*2 ,freq)
+        a_trend = ["trend_mode"]
         a_trend = []
 
         #1. add volatility, 2nd use dominant period, maximum spectral, 3. Pattern recognition
@@ -728,8 +774,15 @@ def indicator_test():
 
         # df["rvi"], df["rvi_sig"]=RVI(df["open"], df["close"],df["high"], df["low"], int(freq))
         # df["rvi"]=IFT(df["rvi"], min=-1, max=1)
-        df["cg"]=CG_Oscillator(df[ibase],freq)
-        df["cg"]=FT(df["cg"],min=-1, max=1)
+        df["slope"]=df[ibase].rolling(freq).apply(trendslope_apply, raw=False)
+        df["slope2"]=(df[ibase]*100).rolling(freq).apply(trendslope_apply, raw=False)
+        df["slope"]=df["slope"]*10
+        df["slope2"]=df["slope2"]*10
+        df["slope_mean"]=supersmoother_3p(df["slope"],freq)
+        df["slope_mean2"]=supersmoother_3p(df["slope2"],freq)
+
+        df["cg"]=cg_Oscillator(df[ibase], int(freq/4))
+        df["cg"]=IFT(df["cg"],min=-1, max=1)
 
         df["cg_buy"] = 0
         df.loc[df["cg"] > 0.5, "cg_buy"] = -10
@@ -737,15 +790,25 @@ def indicator_test():
 
         df["leading"], df["net_lead"]=leading(df[ibase],freq)
 
-        df["laguerre_rsi"]=laguerre_RSI(df[ibase])
-        df["talib_rsi"]= normalize_vector(talib.RSI(df[ibase], timeperiod=freq))
+        #df["laguerre_rsi"]=laguerre_RSI(df[ibase])
+        df["cc"]=cybercycle(df[ibase], int(freq/4))
+        df["talib_rsi1"]= normalize_vector(talib.RSI(df[ibase], timeperiod=int(freq/4)))
+        df["talib_rsi1"]= FT(df["talib_rsi1"],min=-1, max=1)
 
+        df["talib_rsi2"] = normalize_vector(talib.RSI(df[ibase], timeperiod=int(freq / 2)))
+        df["talib_rsi2"] = FT(df["talib_rsi2"], min=-1, max=1)
 
-        zlmacd_close_name = zlmacd(df, ibase, freq, freq * 2, int(freq))
+        df["rsi_buy"]=0
+        df.loc[(df["talib_rsi1"]> 0.7) & (df["talib_rsi2"]> 0.7), "rsi_buy"]=-10
+        df.loc[(df["talib_rsi1"]< -0.7) & (df["talib_rsi2"]< -0.7), "rsi_buy"]=10
 
+        zlmacd_close_name , zlmacd_function_name, zlmacd_slope, ema1, ema2, diff= zlmacd(df, ibase, freq, freq * 4, int(freq))
+        dh_buy= dh_macd(df, ibase, 120, 240)
 
+        df["zero"]=0
         oscilator=[zlmacd_close_name, "laguerre_rsi","talib_rsi", "leading", "net_lead"]
-        oscilator=[zlmacd_close_name, "cg"]
+        oscilator=[zlmacd_close_name, zlmacd_function_name, zlmacd_slope, ema1, ema2, diff, dh_buy,"zero"]
+        oscilator=[ dh_buy,"zero", "cg", "talib_rsi1", "talib_rsi2", "rsi_buy"]
 
 
         #math
@@ -767,7 +830,7 @@ def indicator_test():
         #df["mode"]=talib.HT_TRENDMODE(df[ibase]) # mode is ueseless
         df["sine_buy"]= (df["sine"]> df["leadsine"]).astype(int)
         df["sine_buy"]=df["sine_buy"].diff()*5
-        a_hilbert=["d_period"]
+        a_hilbert=[]
 
 
 
@@ -776,7 +839,7 @@ def indicator_test():
         # df.loc[(df[f"sine_{name}"] < -0.2) & (df[f"mom_{name}"] < -0.1) & (df[f"icc"] < -0.1), "trade"] = -10
         # df.loc[(df[f"sine_{name}"] >= 0.2) & (df[f"mom_{name}"] >= 0.1) & (df[f"icc"] >= 0.1), "trade"] = 10
 
-        df_copy = df[["close"]+stable_lowpass+stable_highpass+stable_bandpass+unstable_lowpass+unstable_highpass+unstable_bandpass+oscilator+a_vola+a_hilbert+a_min_max+a_trend]
+        df_copy = df[["close"]+stable_lowpass+stable_highpass+stable_bandpass+unstable_lowpass+unstable_highpass+unstable_bandpass+oscilator+a_vola+a_hilbert+init+a_trend]
 
         df_copy.plot(legend=True)
         plt.show()
@@ -1157,13 +1220,14 @@ def ehlers_filter_unstable(s, n):
     return a_result
 
 # CAT 5: TREND MODE DECOMPOSITOR
-def cybercycle(s, n, alpha=0.2):
+def cybercycle(s, n):
     """Sometimes also called simple cycle. Is an oscilator. not quite sure what it does. maybe alpha between 0 and 1. the bigger the smoother
     https://www.mesasoftware.com/papers/TheInverseFisherTransform.pdf
 
     cybercycle gives very noisy signals compared to other oscilators. maybe I am using it wrong
     """
     s_price = s
+    alpha = 0.2
     s_smooth = (s_price + 2 * s_price.shift(1) + 2 * s_price.shift(2) + s_price.shift(3)) / 6
     a_result = []
 
@@ -1545,7 +1609,7 @@ def laguerre_RSI(s):
 
 
 
-def CG_Oscillator(s, n):
+def cg_Oscillator(s, n):
     """http://www.mesasoftware.com/papers/TheCGOscillator.pdf
     Center of gravity
 
@@ -1843,7 +1907,6 @@ def kalman_filter():
     kalman_x, kalman_y = zip(*result)
     plt.plot(kalman_x, kalman_y)
     plt.show()
-
 
 
 indicator_test()
