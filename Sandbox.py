@@ -10,7 +10,7 @@ import builtins as bi
 import Plot
 from scipy.stats import gmean
 from finta import TA
-
+from scipy.stats.mstats import gmean
 import sys
 
 sys.setrecursionlimit(1000000)
@@ -387,7 +387,7 @@ def FT(s, min=0, max=1):
     Mapps value to -inf to inf.
     Creates sharp distance between normal value and extrem values
     """
-    s=normalize_vector(s, min=min, max=max)
+    #s=normalize_vector(s, min=min, max=max)
     expression = (1.000001 + s) / (1.000001 - s)
     result= 0.5 * np.log(expression)
     return result
@@ -403,7 +403,7 @@ def IFT(s, min =0, max=1):
     Creates smooth distance between normal value and extrem values
     """
 
-    s=normalize_vector(s, min=min, max=max)
+    #normalize_vector(result, min=min, max=max)
     exp = np.exp(s * 2)
     result= (exp - 1) / (exp + 1)
     return result
@@ -543,7 +543,7 @@ def ent(data):
     return scipy.stats.entropy(p_data)  # get entropy from counts
 
 
-def dh_macd(df, ibase, sfreq, bfreq):
+def dhp_macd(df, ibase, sfreq, bfreq):
     """dh means de-highpassed
     It seems that dehighpassed signal is much better than any other straight forward appraoch of an moving average
 
@@ -642,7 +642,7 @@ def slopecross(df, ibase, sfreq, bfreq, smfreq):
 def indicator_test():
     a_period = [60, 120][::-1]
     df_ts_code = DB.get_ts_code()
-    df_ts_code = df_ts_code[df_ts_code.index == "000002.SZ"]
+    df_ts_code = df_ts_code[df_ts_code.index == "600519.SH"]
     for ts_code in df_ts_code.index[::1]:
         print("ts_code", ts_code)
         df = DB.get_asset(ts_code=ts_code).reset_index()
@@ -700,7 +700,12 @@ def indicator_test():
         freq = 120
 
 
-        df["detrend"]= df[ibase] - supersmoother_3p(df[ibase],freq)
+        df["detrend"]=  supersmoother_3p(df[ibase], int(freq/4))
+        df["detrend"]=  (df[ibase]- df["detrend"])/ df["detrend"]
+        df["detrend"]=IFT(df["detrend"],min= -1,max=1)
+        df["detrend_buy"]=0
+        df.loc[df["detrend"] > 0.05, "detrend_buy"] = 5
+        df.loc[df["detrend"] < -0.05, "detrend_buy"] = -5
 
         df["de_highpass"]=df[ibase]- highpass(df[ibase], int(freq/1))
         df["de_highpass"]=supersmoother_3p(df["de_highpass"],int(freq/4))
@@ -710,7 +715,7 @@ def indicator_test():
         df["rel_close20"]=FT(df["rel_close20"])
 
 
-        init=["detrend"]
+        init=["detrend", "detrend_buy"]
 
 
 
@@ -803,12 +808,13 @@ def indicator_test():
         df.loc[(df["talib_rsi1"]< -0.7) & (df["talib_rsi2"]< -0.7), "rsi_buy"]=10
 
         zlmacd_close_name , zlmacd_function_name, zlmacd_slope, ema1, ema2, diff= zlmacd(df, ibase, freq, freq * 4, int(freq))
-        dh_buy= dh_macd(df, ibase, 120, 240)
+        dh_buy= dhp_macd(df, ibase, 120, 240)
+        dh_buy2= dhp_macd(df, ibase, 60, 120)
 
         df["zero"]=0
         oscilator=[zlmacd_close_name, "laguerre_rsi","talib_rsi", "leading", "net_lead"]
         oscilator=[zlmacd_close_name, zlmacd_function_name, zlmacd_slope, ema1, ema2, diff, dh_buy,"zero"]
-        oscilator=[ dh_buy,"zero", "cg", "talib_rsi1", "talib_rsi2", "rsi_buy"]
+        oscilator=[ dh_buy,dh_buy2,"zero", "cg", "talib_rsi1", "talib_rsi2", "rsi_buy"]
 
 
         #math
@@ -833,7 +839,17 @@ def indicator_test():
         a_hilbert=[]
 
 
+        tomorrow_general=gmean(df["tomorrow2"])
+        print("tomorrow_general",tomorrow_general)
 
+        tomorrow1= gmean(df.loc[df[dh_buy]==10,f"tomorrow2"])
+        print("tomorrow1",tomorrow1)
+
+        tomorrow2=gmean(df.loc[df[dh_buy2]==10,f"tomorrow2"])
+        print("tomorrow2",tomorrow2)
+
+        tomorrow3 = gmean(df.loc[(df[dh_buy]==10)&(df[dh_buy2]==10), f"tomorrow2"])
+        print("tomorrow1 and 2", tomorrow3)
 
         # df[f"trade"] = 0
         # df.loc[(df[f"sine_{name}"] < -0.2) & (df[f"mom_{name}"] < -0.1) & (df[f"icc"] < -0.1), "trade"] = -10
@@ -844,6 +860,7 @@ def indicator_test():
         df_copy.plot(legend=True)
         plt.show()
         plt.close()
+        #df.to_excel("test.xlsx")
 
 
         #save to excel
@@ -1919,7 +1936,7 @@ useful techniqes
 2. Bandpass filter (as oscilator) + macd (bandpass is always later than MACD) 
 3. highpass as RSI 
 4. A trendline on oscilator like bandpass seems to really good to indicate the next low or high. So use momentum to see the indicator if it is already deviating from price
-
+5. close price to rsi but better: 1. better_rsi= (close - ss)/ss
 
 
 
