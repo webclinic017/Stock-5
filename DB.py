@@ -354,6 +354,16 @@ def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
     # ICreate.trend(df=df, ibase="close")
     # df = support_resistance_horizontal(df_asset=df)
 
+    """
+    EXPANDING
+    1. GMEAN
+    2. BETA
+    3. ENTROPY
+    4. VOLATILITY
+    5. days above ma5
+    """
+
+
 
 # For E,I,FD  D
 def update_assets_EI_D_reindexreverse(ts_code, freq, asset, start_date, end_date, adj="qfq", market="CN"):

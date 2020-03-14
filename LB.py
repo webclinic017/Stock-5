@@ -120,6 +120,16 @@ def fibonacci_weight(n):
     return array
 
 
+def average_cross_over_days(df, column, value):
+    try:
+        df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()
+        df_average_bull = df_average_bull.reset_index(level=0, drop=True)
+        mean_cross_over_days = df_average_bull.loc[value].mean()
+        return mean_cross_over_days
+    except:
+        return np.nan
+
+
 def empty_df(query):
     if query == "pro_bar":
         return pd.DataFrame(columns=["ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol"])
@@ -255,6 +265,9 @@ def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     return pd.Series(index=s_index, data=s_index * z[0] + z[1])
 
+
+def get_linear_regression_variables(s_index, s_data):
+    return np.polyfit(s_index, s_data, 1)
 
 def get_linear_regression_slope(s_index, s_data):
     return np.polyfit(s_index, s_data, 1)[0]  # if degree is 1, then [0] is slope
