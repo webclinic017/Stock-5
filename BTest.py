@@ -88,10 +88,10 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
         df_port_c["comp_chg_" + competitor[1]] = ICreate.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
 
     # df_port_c add trend2,10,20,60,240
-    a_current_trend_label = []
-    for i in current_trend:  # do not add trend1 since it does not exist
-        a_current_trend_label.append(f"close.market.trend{i}")
-    df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
+    # a_current_trend_label = []
+    # for i in current_trend:  # do not add trend1 since it does not exist
+    #     a_current_trend_label.append(f"close.market.trend{i}")
+    # df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
 
     # tab_overview
     df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
@@ -186,13 +186,14 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = [f"close.market.trend{x}" for x in current_trend if x != 1]
+    a_trend_label = []
     df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
     portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
     LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), skip_feather=True)
     LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), skip_feather=True)
-    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=False, skip_feather=True)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=True, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
     LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), index_relevant=False, skip_feather=True)
 
@@ -248,6 +249,7 @@ def btest_once(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
     df_group_instance_all = DB.get_group_instance_all(assets=["E"])
+    print("what", df_stock_market_all.index)
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
 
@@ -539,8 +541,8 @@ def btest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20180201",
-        "end_date": LB.today(),
+        "start_date": "20000101",
+        "end_date": "20180101",
         "freq": "D",
         "market": "CN",
         "assets": ["E"],  # E,I,FD
@@ -584,7 +586,7 @@ def btest_multiple(loop_indicator=1):
         # portfolio
         "p_capital": 10000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 12,  # not too low, otherwise volatility too big
+        "p_maxsize": 20,  # not too low, otherwise volatility too big
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
@@ -604,7 +606,7 @@ def btest_multiple(loop_indicator=1):
     for p_maxsize in [12]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight1 = {  # ascending True= small, False is big
-                "dv_ttm.rsi(timeperiod=240,)": [False, 1, 1],
+                "bull": [False, 1, 1],
             }
             setting_copy["s_weight1"] = s_weight1
             setting_copy["p_maxsize"] = p_maxsize

@@ -11,8 +11,10 @@ import math
 from numba import njit
 import traceback
 import cProfile
+from scipy.stats import gmean
 from tqdm import tqdm
 import ICreate
+import Sandbox
 
 from LB import *
 
@@ -327,6 +329,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
         # 3. add my derivative indices and save it
         if not df.empty:
             update_assets_EIFD_D_technical(df=df, asset=asset)
+            update_assets_EIFD_D_expanding(df=df, ts_code=ts_code)
         LB.to_csv_feather(df=df, a_path=a_path)
         print(asset, ts_code, freq, end_date, "UPDATED!", real_latest_trade_date)
 
@@ -354,14 +357,95 @@ def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
     # ICreate.trend(df=df, ibase="close")
     # df = support_resistance_horizontal(df_asset=df)
 
+
+def update_assets_EIFD_D_expanding(df, ts_code):
     """
-    EXPANDING
-    1. GMEAN
-    2. BETA
-    3. ENTROPY
-    4. VOLATILITY
-    5. days above ma5
-    """
+    for each asset, calculate expanding information. Standalone from actual information to prevent repeated calculation
+        EXPANDING
+        1. GMEAN
+        2. BETA
+        3. ENTROPY
+        4. VOLATILITY
+        5. days above ma5
+        """
+
+    a_freqs = [5, 20, 60, 240]
+
+    # 1. Geomean.
+    # one time calculation
+    df["e_gmean"] = 1 + (df["pct_chg"] / 100)
+    df["e_gmean"] = df["e_gmean"].expanding(240).apply(gmean, raw=False)
+    print(f"{ts_code} gmean finished")
+
+    # 2. times above ma, bigger better
+    for freq in a_freqs:
+        # one time calculation
+        df[f"highpass{freq}"] = Sandbox.highpass(df["close"], freq)
+        # df[f"ma{freq}"] = df["close"] - df[f"highpass{freq}"]
+        df[f"ma{freq}"] = df["close"].rolling(freq).mean()
+        df[f"abv_ma{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
+
+        # expanding
+        df[f"e_abv_ma{freq}"] = df[f"abv_ma{freq}"].expanding(freq).mean()
+    print(f"{ts_code} abv_ma finished")
+
+    # 3. trend swap. how long a trend average lasts too slow
+    # for freq in a_freqs:
+    #     #expanding
+    #     for until_index,df_expand in custom_expand(df,freq).items():
+    #         df.at[until_index,f"e_abv_ma_days{freq}"]=LB.trend_swap(df_expand, f"abv_ma{freq}", 1)
+    # print(f"{ts_code} abv_ma_days finished")
+
+    # 4. volatility of the high pass, the smaller the better
+    for freq in a_freqs:
+        df[f"e_highpass_mean{freq}"] = df[f"highpass{freq}"].expanding(freq).mean()
+        df[f"e_highpass_std{freq}"] = df[f"highpass{freq}"].expanding(freq).std()
+    print(f"{ts_code} highpass_mean finished")
+
+    # volatility pct_ chg, less than better
+    df["rapid_down"] = (df["pct_chg"] < -5).astype(int)
+    df["e_rapid_down"] = df["rapid_down"].expanding(240).mean()
+    print(f"{ts_code} rapid_down finished")
+
+    # beta, lower the better too slow
+    # df_sh_index = get_asset(ts_code="000001.SH", asset="I")
+    # df_sh_index["sh_close"] = df_sh_index["close"]
+    # df_cy_index = get_asset(ts_code="399006.SZ", asset="I")
+    # df_cy_index["cy_close"] = df_cy_index["close"]
+    # for until_index, df_expand in custom_expand(df, 240).items():
+    #     beta_sh=LB.calculate_beta(df_expand["close"], df_sh_index["sh_close"])
+    #     beta_cy=LB.calculate_beta(df_expand["close"], df_cy_index["cy_close"])
+    #     df.at[until_index, "e_beta_sh"] = beta_sh
+    #     df.at[until_index, "e_beta_cy"] = beta_cy
+    #     df.at[until_index, "e_beta"] = abs(beta_sh) * abs(beta_cy)
+    # print(f"{ts_code} beta finished")
+
+    # is_max. How long the current price is around the all time high. higher better
+    df["e_max"] = df["close"].expanding(240).max()
+    df["e_max_pct"] = (df["close"] / df["e_max"]).between(0.9, 1.1).astype(int)
+    df["e_max_pct"] = df["e_max_pct"].expanding(240).mean()
+
+    # is_min
+    df["e_min"] = df["close"].expanding(240).min()
+    df["e_min_pct"] = (df["close"] / df["e_min"]).between(0.9, 1.1).astype(int)
+    df["e_min_pct"] = df["e_min_pct"].expanding(240).mean()
+    print(f"{ts_code} max finished")
+
+
+# def update_ts_code_expanding(step=1):
+#     dict_all_df=preload(load="asset", step=step, query="")
+#     for counter, (ts_code, df) in enumerate(dict_all_df.items()):
+#         a_path = LB.a_path(f"Market\CN\Asset\E\D_Expanding/{ts_code}")
+#
+#         #skip if file exists:
+#         if os.path.isfile(a_path[1]):
+#             print(counter,ts_code, "expanding up-to-date")
+#             continue
+#         else:
+#             df_expanding=update_assets_EIFD_D_expanding(df, ts_code)
+#             LB.to_csv_feather(df_expanding,a_path=a_path)
+#             print(counter, ts_code, "expanding updated")
+
 
 
 
@@ -424,7 +508,8 @@ def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, bi
 
 
 def update_assets_E_top_holder(big_update=True, market="CN", step=1):
-    for counter, ts_code in enumerate(get_ts_code("E").index[::step]):
+    df_ts_codes = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
+    for counter, ts_code in enumerate(df_ts_codes.index[::step]):
         a_path = LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + str(ts_code))
         if os.path.isfile(a_path[1]) and (not big_update):  # skipp if small update or file exist
             print(counter, ts_code, "top_holder Up-to-date")
@@ -517,6 +602,94 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
             LB.to_csv_feather(df_date, a_path)
             print(asset, freq, trade_date, "date updated")
 
+
+def update_date_EIFD_Expanding(asset="E", freq="D", market="CN", big_update=True, step=1):  # STEP only 1 or -1 !!!!
+    df_ts_codes = get_ts_code(asset)
+    df_ts_codes["list_date"] = df_ts_codes["list_date"].astype(int)
+    trade_dates = get_trade_date("00000000", LB.today(), freq)
+
+    # get the latest column of the asset file
+    code = "000001.SZ" if asset == "E" else "000001.SH" if asset == "I" else "150001.SZ"
+    example_column = list(get_asset_expanding(code, asset, freq).columns)
+
+    # makes searching for one day in asset time series faster. BUT can only be used with step=1 and ONLY using ONE THREAD
+    print("Update date preparing for setup. Please wait...")
+    dict_list_date = {ts_code: list_date for ts_code, list_date in zip(df_ts_codes.index, df_ts_codes["list_date"])}
+    dict_df = {ts_code: get_asset_expanding(ts_code=ts_code) for ts_code in df_ts_codes.index}
+
+    if step == 1:
+        dict_lookup_table = {ts_code: 0 for ts_code, df in dict_df.items()}
+    elif step == -1:
+        dict_lookup_table = {ts_code: len(df) - 1 for ts_code, df in dict_df.items()}
+    else:
+        return print("error Step must be 1 or -1")
+
+    for ts_code, length in dict_lookup_table.items():
+        print("len and ts_code", ts_code, length)
+
+    for trade_date in trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
+        a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "_Expanding/" + str(trade_date))
+        a_date = []
+
+        if os.path.isfile(a_path[0]) and (not big_update):  # date file exists AND not big_update. If big_update, then always overwrite
+            # update lookup table before continue. So that skipped days still match
+            for (ts_code, list_date), (ts_code_unused, df_asset) in zip(dict_list_date.items(), dict_df.items()):
+                row_number = dict_lookup_table[ts_code]
+                if (step == -1) and (row_number == -1):
+                    # Case 1: step=-1. row_number=-1. This means the pointer is at row 0. which is max
+                    # Case 2: step=1. row_number=len(df) This happens automatically and does not need to take care
+                    continue
+                try:
+                    if df_asset.index[row_number] == trade_date:
+                        dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
+                except:
+                    pass
+            print(asset, freq, trade_date, "date file Up-to-date")
+            continue
+
+        else:  # date file does not exist or big_update
+            for (ts_code, list_date), (ts_code_unused, df_asset) in zip(dict_list_date.items(), dict_df.items()):
+                if int(list_date) > int(trade_date):
+                    continue
+
+                row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
+                if row_number < 0:
+                    continue
+
+                try:
+                    if int(df_asset.index[row_number]) == int(trade_date):
+                        a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
+                        dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
+                except Exception as e:
+                    print(f"version step {step} exception here: ", e)
+                    continue
+
+            df_date = pd.DataFrame(data=a_date, columns=example_column)
+            df_date.insert(loc=0, column='trade_date', value=int(trade_date))
+
+            df_date = pd.merge(df_date, df_ts_codes, how='left', on=["ts_code"], suffixes=[False, False], sort=False).set_index("ts_code")
+
+            # before save to date, calculate who is ranked 1 of today
+
+            df_date["final_rank"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
+                                    + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
+                                    + df_date["period"].rank(ascending=False) * 0.03 \
+                                    + df_date["e_highpass_mean240"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean60"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean20"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean5"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_std240"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std60"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std20"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std5"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_rapid_down"].rank(ascending=True) * 0.03
+
+            LB.to_csv_feather(df_date, a_path)
+            print(asset, freq, trade_date, "date updated")
 
 def update_date_E_Oth(asset="E", freq="D", market="CN", big_update=True, step=1):
     trade_dates = get_trade_date(start_date="00000000", end_date=today(), freq=freq)
@@ -714,11 +887,15 @@ def ts_code_series_to_excel(df_ts_code, path, sort: list = ["column_name", True]
                 df_groupbyhelper = df_ts_code.groupby(group_column)
                 df_group = df_groupbyhelper.mean()
                 df_group["count"] = df_groupbyhelper.size()
+                print("not bug here")
                 if sort:
                     df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
                 dict_df[group_column] = df_group
             except Exception as e:
                 print("error in group results", e)
+
+
+
     LB.to_excel(path_excel=path, dict_df=dict_df)
 
 
@@ -755,6 +932,12 @@ def get_ts_code(asset="E", market="CN"):
 
 def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
     return get(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code)), set_index="trade_date")
+
+
+def get_asset_expanding(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
+    df = get(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "_Expanding/" + str(ts_code)), set_index="trade_date")
+    df["ts_code"] = ts_code  # TODO FOROGT TO ADD, PLEASE REMOVE IN FUTURE
+    return df
 
 
 @LB.except_empty_df
@@ -845,7 +1028,17 @@ def get_date(trade_date, assets=["E"], freq="D", market="CN"):
     if len(assets) != 1:
         return get_date_all()
     else:
-        return get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)), set_index="ts_code")
+        df_date = get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)), set_index="ts_code")
+        df_date_expanding = get_date_expanding(trade_date, assets=assets, freq=freq, market=market)
+        df_date["bull"] = df_date_expanding["final_rank"]
+        return df_date
+
+
+def get_date_expanding(trade_date, assets=["E"], freq="D", market="CN"):
+    if len(assets) != 1:
+        return get_date_all()
+    else:
+        return get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "_Expanding/" + str(trade_date)), set_index="ts_code")
 
 
 def get_date_all(trade_date, assets=["E", "I", "FD"], freq="D", format=".feather", market="CN"):
@@ -929,23 +1122,23 @@ def update_all_in_one(big_update=False):
     small_steps = [1, 2, -1, -2]
 
     # 1.0. GENERAL - CAL_DATE
-    # update_general_trade_cal()  # always update
+    update_general_trade_cal()  # always update
     #
     # # 1.1. GENERAL - INDUSTRY
-    # for level in c_industry_level():
-    #     update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
+    for level in c_industry_level():
+        update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
-    # multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
+    multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
     #
     # # 1.3. GENERAL - TS_CODE
-    # for asset in c_assets():
-    #     update_general_ts_code(asset)  # ALWAYS UPDATE
+    for asset in c_assets():
+        update_general_ts_code(asset)  # ALWAYS UPDATE
     # update_general_ts_code_all()
     # #
     # # 1.5. GENERAL - TRADE_DATE
-    # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
-    #     update_general_trade_date(freq)  # ALWAYS UPDATE
+    for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
+        update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
     multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
@@ -985,10 +1178,21 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
+        df_asset = get_asset()
         big_update = False
-        update_all_in_one(big_update=big_update)
+        #update_all_in_one(big_update=big_update)
         # TODO add update ts_code back and update it make it fastr
 
+        # date_step = [-1, 1] if big_update else [-1, 1]
+        # multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
+
+        # update_ts_code_expanding(step=2)
+        # 3.3. DATE - BASE
+        update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+
+        #
+        # # date_step = [1] if big_update else [1] #only works forward not backward
+        # # multi_process(func=update_date_EIFD_Expanding, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
 
 
     except Exception as e:
@@ -1006,3 +1210,10 @@ if __name__ == '__main__':
 # a[1::-1]   # the first two items, reversed
 # a[:-3:-1]  # the last two items, reversed
 # a[-3::-1]  # everything except the last two items, reversed
+
+
+"""excel sheets
+
+detect duplicates  =COUNTIF(A:A, A2)>1
+
+"""

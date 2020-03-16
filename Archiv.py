@@ -11,6 +11,7 @@ import math
 import talib
 import LB
 import DB
+import Sandbox
 
 
 # measures which day of week/month performs generally better
@@ -286,9 +287,14 @@ def asset_volatility(start_date, end_date, assets, freq):
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
 def asset_bullishness():
     from scipy.stats import gmean
-    df_ts_code = DB.get_ts_code_all()
+    df_ts_code = DB.get_ts_code()[::1]
     df_result = pd.DataFrame()
+    a_freqs = [10, 20, 60, 120, 240]
 
+    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I")
+    df_sh_index["sh_close"] = df_sh_index["close"]
+    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I")
+    df_cy_index["cy_close"] = df_cy_index["close"]
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
         print("ts_code", ts_code)
         df_asset = DB.get_asset(ts_code=ts_code, asset=asset)
@@ -300,19 +306,58 @@ def asset_bullishness():
             continue
 
         if len(df_asset) > 100:
-            # assed gained from lifetime
+            # assed gained from lifetime. bigger better
             df_result.at[ts_code, "comp_gain"] = df_asset["close"].iat[len(df_asset) - 1] / df_asset["close"].iat[0]
 
-            # transforms geometric mean to 1.01 form without 0.
+            # period. the longer the better
+            df_result.at[ts_code, "period"] = len(df_asset)
+
+            # Geomean.
             helper = 1 + (df_asset["pct_chg"] / 100)
-            gmean_result = gmean(helper)
+            df_result.at[ts_code, "geomean"] = gmean(helper)
 
-            # calculate the average geo mean = the higher the pct_chg geometric mean the better
-            df_result.at[ts_code, "geomean"] = gmean_result
+            # times above ma, bigger better
+            df_asset["abv_ma"] = 0
+            for freq in [240]:
+                df_asset[f"highpass{freq}"] = Sandbox.highpass(df_asset["close"], freq)
+                # df_asset[f"ma{freq}"] = df_asset["close"] - df_asset[f"highpass{freq}"]
+                df_asset[f"ma{freq}"] = df_asset["close"].rolling(freq).mean()
+                df_asset[f"abv_ma{freq}"] = (df_asset["close"] > df_asset[f"ma{freq}"]).astype(int)
+                df_asset["abv_ma"] = df_asset["abv_ma"] + df_asset[f"abv_ma{freq}"]
+            df_result.at[ts_code, "abv_ma"] = df_asset["abv_ma"].mean()
 
-            # calculate the time weight geo mean = former + the longer the a company can do this the better
-            df_result.at[ts_code, "time_geomean"] = gmean_result * len(df_asset)
-    DB.ts_code_series_to_excel(df_ts_code=df_result, sort=["geomean", False], path="bullishness.xlsx", group_result=True)
+            # trend swap. how long a trend average lasts
+            for freq in [240]:
+                df_result.at[ts_code, f"abv_ma_days{freq}"] = LB.trend_swap(df_asset, f"abv_ma{freq}", 1)
+
+            # volatility of the high pass, the smaller the better
+            highpass_mean = 0
+            for freq in [240]:
+                highpass_mean = highpass_mean + df_asset[f"highpass{freq}"].mean()
+            df_result.at[ts_code, "highpass_mean"] = highpass_mean
+
+            # volatility pct_ chg, less than better
+            df_result.at[ts_code, "rapid_down"] = len(df_asset[df_asset["pct_chg"] <= (-5)]) / len(df_asset)
+
+            # beta, lower the better
+            df_result.at[ts_code, "beta_sh"] = LB.calculate_beta(df_asset["close"], df_sh_index["sh_close"])
+            df_result.at[ts_code, "beta_cy"] = LB.calculate_beta(df_asset["close"], df_cy_index["cy_close"])
+            df_result.at[ts_code, "beta"] = abs(df_result.at[ts_code, "beta_sh"]) * abs(df_result.at[ts_code, "beta_cy"])
+
+            # is_max. How long the current price is around the all time high. higher better
+            df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
+            df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
+
+    df_result["final_rank"] = df_result["geomean"].rank(ascending=False) * 0.70 \
+                              + df_result["is_max"].rank(ascending=False) * 0.10 \
+                              + df_result["beta"].rank(ascending=True) * 0.05 \
+                              + df_result["period"].rank(ascending=False) * 0.04 \
+                              + df_result["abv_ma_days240"].rank(ascending=False) * 0.05 \
+                              + df_result["highpass_mean"].rank(ascending=False) * 0.02 \
+                              + df_result["abv_ma"].rank(ascending=False) * 0.02 \
+                              + df_result["rapid_down"].rank(ascending=True) * 0.02 \
+ \
+    DB.ts_code_series_to_excel(df_ts_code=df_result, sort=["final_rank", True], path="bullishness.xlsx", group_result=True)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -379,4 +424,4 @@ def asset_candlestick_analysis_multiple():
 
 
 if __name__ == '__main__':
-    pass
+    asset_bullishness()

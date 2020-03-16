@@ -120,7 +120,8 @@ def fibonacci_weight(n):
     return array
 
 
-def average_cross_over_days(df, column, value):
+# trend exchange. How long a trend lasts in average
+def trend_swap(df, column, value):
     try:
         df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()
         df_average_bull = df_average_bull.reset_index(level=0, drop=True)
@@ -128,6 +129,20 @@ def average_cross_over_days(df, column, value):
         return mean_cross_over_days
     except:
         return np.nan
+
+
+def custom_expand(df, min_freq):
+    dict_result = {}
+
+    for counter, iindex in enumerate(range(0, len(df))):
+        if counter < min_freq:
+            continue
+        df_expand = df.iloc[0:iindex]
+        index = df.index[iindex]
+        dict_result[index] = df_expand
+    return dict_result
+
+
 
 
 def empty_df(query):
@@ -726,6 +741,15 @@ def timeseries_to_month(df):
 
     df_result = df_copy.loc[a_index]
     return df_result
+
+
+def get_quantile(df, column, p_setting=[(0, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 1)]):
+    dict_df = {}
+    for low_quant, high_quant in p_setting:
+        low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
+        df_percentile = df[df[column].between(low_val, high_val)]
+        dict_df[(int(low_quant * 100), int(high_quant * 100))] = df_percentile
+    return dict_df
 
 
 if __name__ == '__main__':

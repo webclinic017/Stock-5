@@ -884,8 +884,8 @@ def indicator_test():
             df["final_score"] = df["final_score"] + df[name]
 
         df["price_abv_ma20"] = (df[macd1_ema1] > df[macd1_ema2]).astype(int)
-        average_crossover_1 = LB.average_cross_over_days(df, "r_gt_e_de_highpass", 30)
-        average_crossover_0 = LB.average_cross_over_days(df, "r_gt_e_de_highpass", -30)
+        average_crossover_1 = LB.trend_swap(df, "r_gt_e_de_highpass", 30)
+        average_crossover_0 = LB.trend_swap(df, "r_gt_e_de_highpass", -30)
         print("aveage", average_crossover_1, average_crossover_0)
 
         oscilator = a_custom_macd_names + ["zero", "ma120", "ma240", macd1_ema1, macd1_ema2]  # ,f"ma_buy{ma}"]
@@ -2041,6 +2041,24 @@ def adjust_ma(df, ibase):
     return a_d_mean
 
 
+def find_peaks_array(s, n=60):
+    from scipy.signal import argrelextrema
+
+    # Generate a noisy AR(1) sample
+    np.random.seed(0)
+    xs = [0]
+    for r in s:
+        xs.append(xs[-1] * 0.9 + r)
+    df = pd.DataFrame(xs, columns=[s.name])
+    # Find local peaks
+    df[f'bot{n}'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
+    df[f'peak{n}'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
+
+    df[f"bot{n}"].update(df[f"peak{n}"].notna())
+
+    return df[f"bot{n}"]
+
+
 def find_peaks(df, ibase, a_n=[60]):
     """
     :param s: pd.series
@@ -2137,11 +2155,12 @@ def find_flat(df, ibase):
     """
     go thorugh ALL possible indicators and COMBINE them together to an index that defines up, down trend or no trend.
 
+    cast all indicator to 3 values: -1, 0, 1 for down trend, no trend, uptrend.
     :param df:
     :param ibase:
     :return:
     """
-    a_freq = [120]
+    a_freq = [240]
     df["ma20"] = df[ibase].rolling(20).mean()
     a_stable = []
 
@@ -2157,27 +2176,47 @@ def find_flat(df, ibase):
     for freq in a_freq:
         df[f"rsi{freq}"] = talib.RSI(df[ibase], timeperiod=freq)
 
+        """ idea: 
+        1.average direction of past freq up must almost be same as average direction of past freq down. AND price should stay somewhat the same.
+        2. count the peak and bot value of an OSCILATOR. IF last peak and bot are very close, then probably flat time
+        """
+
+
         # MOMENTUM INDICATORS
-        """0 to 100 https://www.fmlabs.com/reference/ADX.htm"""
+        """ok 0 to 100, rarely over 60 https://www.fmlabs.com/reference/ADX.htm similar to dx"""
         df[f"adx{freq}"] = talib.ADX(df["high"], df["low"], df["close"], timeperiod=freq)
+        df.loc[df[f"adx{freq}"] < 6, f"adx{freq}_trend"] = 0
+        df.loc[df[f"adx{freq}"] > 6, f"adx{freq}_trend"] = 10
 
-        """0 to 100 https://www.fmlabs.com/reference/ADX.htm"""
+        """osci too hard difference between two ma, not normalized. need to normalize first https://www.fmlabs.com/reference/default.htm?url=PriceOscillator.htm"""
         df[f"apo{freq}"] = talib.APO(df["close"], freq, freq * 2)
+        df[f"apo{freq}_trend"] = 10
+        df.loc[(df[f"apo{freq}"].between(-1, 1)) & (df[f"apo{freq}"].shift(int(freq / 2)).between(-2, 2)), f"apo{freq}_trend"] = 0
 
-        """-100 to 100 https://www.fmlabs.com/reference/default.htm?url=AroonOscillator.htm"""
+        """osci too hard -100 to 100 https://www.fmlabs.com/reference/default.htm?url=AroonOscillator.htm"""
         df[f"aroonosc{freq}"] = talib.AROONOSC(df["high"], df["low"], freq)
+        df[f"aroonosc{freq}_trend"] = 10
+        df.loc[df[f"aroonosc{freq}"].between(-70, 70), f"aroonosc{freq}_trend"] = 0
 
-        """-100 to 100 https://www.fmlabs.com/reference/default.htm?url=CCI.htm"""
+        """osci too hard -100 to 100 https://www.fmlabs.com/reference/default.htm?url=CCI.htm"""
         df[f"cci{freq}"] = talib.CCI(df["high"], df["low"], df["close"], freq)  # basically modified rsi
+        df[f"cci{freq}_trend"] = 10
+        df.loc[df[f"cci{freq}"].between(-70, 70), f"cci{freq}_trend"] = 0
 
-        """0 to 100 https://www.fmlabs.com/reference/default.htm?url=CMO.htm"""
+        """osci too hard 0 to 100 but rarely over 60 https://www.fmlabs.com/reference/default.htm?url=CMO.htm"""
         df[f"cmo{freq}"] = talib.CMO(df["close"], freq)  # -100 to 100
+        df[f"cmo{freq}_trend"] = 10
+        df.loc[df[f"cmo{freq}"].between(-70, 70), f"cmo{freq}_trend"] = 0
 
-        """0 to 100 https://www.fmlabs.com/reference/default.htm?url=DX.htm"""
+        """osci too hard 0 to 100 https://www.fmlabs.com/reference/default.htm?url=DX.htm"""
         df[f"dx{freq}"] = talib.DX(df["high"], df["low"], df["close"], timeperiod=freq)
+        df[f"dx{freq}_trend"] = 10
+        df.loc[df[f"dx{freq}"].between(-70, 70), f"dx{freq}_trend"] = 0
 
         """0 to 100 https://www.fmlabs.com/reference/default.htm?url=MFI.htm"""
         df[f"mfi{freq}"] = talib.MFI(df["high"], df["low"], df["close"], df["vol"], timeperiod=freq)
+        df[f"mfi{freq}_trend"] = 10
+        df.loc[df[f"mfi{freq}"].between(-70, 70), f"mfi{freq}_trend"] = 0
 
         """https://www.fmlabs.com/reference/default.htm?url=DI.htm"""
         df[f"minus_di{freq}"] = talib.MINUS_DI(df["high"], df["low"], df["close"], timeperiod=freq)
@@ -2192,12 +2231,21 @@ def find_flat(df, ibase):
 
         """http://www.fmlabs.com/reference/PriceOscillatorPct.htm"""
         df[f"ppo{freq}"] = talib.PPO(df["close"], freq, freq * 2)
+        df["test"] = find_peaks_array(df[f"ppo{freq}"], freq)
+        df["test"] = df["test"].fillna(method="ffill")
+        print(df["test"].notna())
+
 
         """http://www.fmlabs.com/reference/PriceOscillatorPct.htm"""
         df[f"roc{freq}"] = talib.ROC(df["close"], freq)
 
         """0 to 100 rsi"""
         df[f"rsi{freq}"] = talib.RSI(df["close"], freq)
+        df[f"rsi{freq}"] = supersmoother_3p(df[f"rsi{freq}"], int(freq / 4))
+        df[f"rsi{freq}_diff"] = df[f"rsi{freq}"].diff()
+
+        df[f"rsi{freq}_trend"] = 10
+        df.loc[(df[f"rsi{freq}"].between(-48, 52)) & (df[f"rsi{freq}_diff"].between(-0.3, 0.3)), f"rsi{freq}_trend"] = 0
 
         """ """
         df[f"stochrsi_fastk{freq}"], df[f"stochrsi_fastd{freq}"] = talib.STOCHRSI(df["close"], freq, int(freq / 2), int(freq / 3))
@@ -2221,22 +2269,56 @@ def find_flat(df, ibase):
 
     df[f"flat{freq}"] = (df[f"rsi{freq}_true"] + df[f"adx{freq}_true"] + df[f"atr{freq}_true"]) * 10
 
-    a_stable = a_stable + [f"adx{freq}"]
+    a_stable = a_stable + [f"adx{freq}", f"adx{freq}_trend"]
 
-    df[["close"] + a_unstable + a_stable].plot(legend=True)
+    df[["close"] + a_stable].plot(legend=True)
     plt.show()
 
 
-df = DB.get_asset().reset_index()
-# find_peaks(df=df,ibase="close", a_n=[120])
+# test if stocks that are currently at their best, will last for the next freq.
+def hypothesis_test():
+    """
+    1. go through all date
+    2. find the highest ranking stocks for that date
+    3. check their future gain
+    """
 
-find_flat(df, "close")
+    df_trade_date = DB.get_trade_date()
+    df_result = pd.DataFrame()
+    for trade_date in df_trade_date.index:
+        try:
+            print("trade_date", trade_date)
+            if trade_date < 20000101:
+                continue
 
-# df_result=support_resistance_horizontal_expansive(df_asset=df)
-# df_result.to_csv("support.csv")
+            df_date = DB.get_date(trade_date=trade_date)
+            df_date_expanding = DB.get_date_expanding(trade_date=trade_date)
+            df_date["final_rank"] = df_date_expanding["final_rank"]
+
+            for key, df_quant in get_quantile(df_date, "final_rank", p_setting=[(0, 0.01)]).items():
+                # for key, df_quant in get_quantile(df_date, "final_rank",p_setting=[(0, 0.05),(0.05, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 0.95),(0.95, 1)]).items():
+                for freq in [2]:
+                    df_result.at[trade_date, f"q_{key}.open.fgain{freq}_gmean"] = gmean(df_quant[f"open.fgain{freq}"])
+                    df_result.at[trade_date, f"q_{key}.member"] = ",".join(list(df_quant.index))
+
+        except Exception as e:
+            print("exception lol", e)
+
+    df_result.to_csv("hypo_test.csv")
 
 
-#indicator_test()
+if __name__ == '__main__':
+    hypothesis_test()
+
+    df = DB.get_asset(ts_code="000007.SZ").reset_index()
+    # find_peaks(df=df,ibase="close", a_n=[120])
+
+    # find_flat(df, "close")
+
+    # df_result=support_resistance_horizontal_expansive(df_asset=df)
+    # df_result.to_csv("support.csv")
+
+    # indicator_test()
 
 """
 
