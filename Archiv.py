@@ -355,8 +355,8 @@ def asset_bullishness():
                               + df_result["abv_ma_days240"].rank(ascending=False) * 0.05 \
                               + df_result["highpass_mean"].rank(ascending=False) * 0.02 \
                               + df_result["abv_ma"].rank(ascending=False) * 0.02 \
-                              + df_result["rapid_down"].rank(ascending=True) * 0.02 \
- \
+                              + df_result["rapid_down"].rank(ascending=True) * 0.02
+
     DB.ts_code_series_to_excel(df_ts_code=df_result, sort=["final_rank", True], path="bullishness.xlsx", group_result=True)
 
 
