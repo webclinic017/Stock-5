@@ -599,6 +599,23 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
             df_date = pd.DataFrame(data=a_date, columns=example_column)
             df_date.insert(loc=0, column='trade_date', value=int(trade_date))
             df_date = pd.merge(df_date, df_ts_codes, how='left', on=["ts_code"], suffixes=[False, False], sort=False).set_index("ts_code")
+
+            df_date["bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
+                                    + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
+                                    + df_date["period"].rank(ascending=False) * 0.03 \
+                                    + df_date["e_highpass_mean240"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean60"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean20"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_mean5"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_highpass_std240"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std60"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std20"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_highpass_std5"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_rapid_down"].rank(ascending=True) * 0.03
             LB.to_csv_feather(df_date, a_path)
             print(asset, freq, trade_date, "date updated")
 
@@ -1028,10 +1045,7 @@ def get_date(trade_date, assets=["E"], freq="D", market="CN"):
     if len(assets) != 1:
         return get_date_all()
     else:
-        df_date = get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)), set_index="ts_code")
-        df_date_expanding = get_date_expanding(trade_date, assets=assets, freq=freq, market=market)
-        df_date["bull"] = df_date_expanding["final_rank"]
-        return df_date
+        return  get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)), set_index="ts_code")
 
 
 def get_date_expanding(trade_date, assets=["E"], freq="D", market="CN"):
@@ -1125,8 +1139,8 @@ def update_all_in_one(big_update=False):
     update_general_trade_cal()  # always update
     #
     # # 1.1. GENERAL - INDUSTRY
-    for level in c_industry_level():
-        update_general_industry(level, big_update=big_update)  # ONLY ON BIG UPDATE
+    #for level in c_industry_level():
+    #    update_general_industry(level, big_update=True)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
     multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
@@ -1152,11 +1166,11 @@ def update_all_in_one(big_update=False):
     # multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
     # 3.2. DATE - DF
-    # date_step = [-1, 1] if big_update else [-1, 1]
-    # multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
+    date_step = [-1, 1] if big_update else [-1, 1]
+    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
     #
     # # 3.3. DATE - BASE
-    # update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+    update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
     #
     # # 3.4. DATE - TREND
     # df = get_stock_market_all()  # ALWAS
@@ -1180,19 +1194,8 @@ if __name__ == '__main__':
     try:
         df_asset = get_asset()
         big_update = False
-        #update_all_in_one(big_update=big_update)
+        update_all_in_one(big_update=big_update)
         # TODO add update ts_code back and update it make it fastr
-
-        # date_step = [-1, 1] if big_update else [-1, 1]
-        # multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
-
-        # update_ts_code_expanding(step=2)
-        # 3.3. DATE - BASE
-        update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
-
-        #
-        # # date_step = [1] if big_update else [1] #only works forward not backward
-        # # multi_process(func=update_date_EIFD_Expanding, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
 
 
     except Exception as e:

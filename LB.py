@@ -463,9 +463,9 @@ def c_assets():
 
 
 class Assets(enum.Enum):
-    I = auto()
-    E = auto()
-    FD = auto()
+    I = 'I'
+    E = 'E'
+    FD = 'FD'
 
 
 def c_bfreq():
