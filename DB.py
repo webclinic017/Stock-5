@@ -1212,6 +1212,8 @@ if __name__ == '__main__':
 # a[-3::-1]  # everything except the last two items, reversed
 
 
+# '…'
+
 """excel sheets
 
 detect duplicates  =COUNTIF(A:A, A2)>1

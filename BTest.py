@@ -606,7 +606,7 @@ def btest_multiple(loop_indicator=1):
     for p_maxsize in [12]:
             setting_copy = copy.deepcopy(setting_base)
             s_weight1 = {  # ascending True= small, False is big
-                "bull": [False, 1, 1],
+                "open.pgain240": [False, 1, 1],
             }
             setting_copy["s_weight1"] = s_weight1
             setting_copy["p_maxsize"] = p_maxsize

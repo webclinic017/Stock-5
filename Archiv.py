@@ -11,19 +11,18 @@ import math
 import talib
 import LB
 import DB
+from scipy.stats.mstats import gmean
 import Sandbox
 
 
 # measures which day of week/month performs generally better
 # need only to calculate one time since it is the same for ALL periods
-def date_seasonal_stats(start_date, end_date):
+def date_seasonal_stats():
     path = "Market/CN/Backtest_Single/seasonal/all_date_seasonal.xlsx"
     pdwriter = pd.ExcelWriter(path, engine='xlsxwriter')
 
-    print(start_date, end_date, "start date_period_statistc " + "...")
-    path_all_dates = "Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market.csv"
-    df_all_dates = pd.read_csv(path_all_dates)
-    df_all_dates = df_all_dates[(df_all_dates["trade_date"].between(int(start_date), int(end_date)))]
+    # ONLY FOR STOCK MARKET ALL
+    df_all_dates = DB.get_stock_market_all().reset_index()
 
     # get all different groups
     a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],
@@ -42,10 +41,7 @@ def date_seasonal_stats(start_date, end_date):
 
     # create and sort single groups
     for group in a_groups:
-        print("group", group[1])
-        df_group = df_all_dates[[group[1], "pct_chg"]].groupby(group[1]).mean()
-        df_group.sort_values(by=[group[1]], ascending=True, inplace=True)
-        group.append(df_group)
+        df_group = df_all_dates[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", my_gmean, my_mean, my_std, my_mean_std_diff])
         df_group.to_excel(pdwriter, sheet_name=group[1], index=True, encoding='utf-8_sig')
 
     # create and sort multiple groups
@@ -53,6 +49,43 @@ def date_seasonal_stats(start_date, end_date):
     df_group = df_group["pct_chg"]
     df_group.to_excel(pdwriter, sheet_name="dayofweekandmonth", index=True, encoding='utf-8_sig')
     pdwriter.save()
+
+
+def price_statistic_today(a_freq=[1, 2, 5, 10, 20]):
+    df_stock_market_all = DB.get_stock_market_all()
+
+    df_result = pd.DataFrame()
+    for future in a_freq:
+        df_stock_market_all[f"tomorrow{future}"] = df_stock_market_all["close"].shift(-future) / df_stock_market_all["close"]
+
+    for from_price, to_price in LB.pairwise_overlap([-10, -8, -6, -5, -4, -3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10]):
+        df_filtered = df_stock_market_all[df_stock_market_all["pct_chg"].between(from_price, to_price)]
+        df_result.at[f"{from_price, to_price}", "count"] = len(df_filtered)
+        for future in a_freq:
+            df_result.at[f"{from_price, to_price}", f"tomorrow{future}_mean"] = (df_filtered[f"tomorrow{future}"].mean())
+            df_result.at[f"{from_price, to_price}", f"tomorrow{future}_std"] = (df_filtered[f"tomorrow{future}"].std())
+            df_result.at[f"{from_price, to_price}", f"tomorrow{future}_diff"] = my_mean_std_diff(df_filtered[f"tomorrow{future}"])
+
+    df_result.to_csv("Market/CN/Backtest_Single/seasonal/all_date_price_statistic_today.csv")
+
+
+def price_statistic_past(a_freq=[1, 2, 5, 10, 20, 60, 120, 240], past=10):
+    df_stock_market_all = DB.get_stock_market_all()
+
+    df_result = pd.DataFrame()
+    for future in a_freq:
+        df_stock_market_all[f"tomorrow{future}"] = df_stock_market_all["close"].shift(-future) / df_stock_market_all["close"]
+        df_stock_market_all[f"past{future}"] = df_stock_market_all["close"] / df_stock_market_all["close"].shift(future)
+
+    for from_price, to_price in LB.pairwise_overlap([-30, -20, -15, -10, -8, -6, -5, -4, -3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30]):
+        df_filtered = df_stock_market_all[df_stock_market_all[f"past{past}"].between((from_price / 100) + 1, (to_price / 100) + 1)]
+        df_result.at[f"{from_price, to_price}", "count"] = len(df_filtered)
+        for future in a_freq:
+            # df_result.at[f"{from_price,to_price}", f"tomorrow{future}_mean"] = (df_filtered[f"tomorrow{future}"].mean())
+            # df_result.at[f"{from_price,to_price}", f"tomorrow{future}_std"] = (df_filtered[f"tomorrow{future}"].std())
+            df_result.at[f"{from_price, to_price}", f"tomorrow{future}gmean"] = gmean(df_filtered[f"tomorrow{future}"].dropna())
+
+    df_result.to_csv(f"Market/CN/Backtest_Single/seasonal/all_date_price_statistic_past_{past}.csv")
 
 
 # WHO WAS GOOD DURING THAT TIME PERIOD
@@ -423,5 +456,33 @@ def asset_candlestick_analysis_multiple():
     df_all_result.to_csv(path, index=True)
 
 
+def my_gmean(series):
+    new_series = (series / 100) + 1
+    return gmean(new_series)
+
+
+def my_mean(series):
+    new_series = (series / 100) + 1
+    return new_series.mean()
+
+
+def my_std(series):
+    new_series = (series / 100) + 1
+    return new_series.std()
+
+
+def my_mean_std_diff(series):
+    new_series = (series / 100) + 1
+    series_mean = new_series.mean()
+    series_std = new_series.std()
+    return series_mean - series_std
+
+
 if __name__ == '__main__':
-    asset_bullishness()
+    price_statistic_past(past=1)
+    price_statistic_past(past=5)
+    price_statistic_past(past=10)
+    price_statistic_past(past=20)
+    price_statistic_past(past=60)
+    price_statistic_past(past=120)
+    price_statistic_past(past=240)
