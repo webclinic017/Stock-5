@@ -248,7 +248,7 @@ def btest_once(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates.index.values
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
-    df_group_instance_all = DB.get_group_instance_all(assets=["E"])
+    df_group_instance_all = DB.preload_groups(assets=["E"])
     print("what", df_stock_market_all.index)
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
@@ -305,6 +305,7 @@ def btest_once(settings=[{}]):
                 func = a_op[0]
                 a_filter = a_filter & func(df_today[column], a_op[1])
             df_today_mod = df_today[a_filter]
+            print("today after filter", len(df_today_mod))
             now = print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             # 2 ECONOMY
@@ -542,7 +543,7 @@ def btest_multiple(loop_indicator=1):
     setting_base = {
         # general = Non changeable through one run
         "start_date": "20000101",
-        "end_date": "20180101",
+        "end_date": "20200101",
         "freq": "D",
         "market": "CN",
         "assets": ["E"],  # E,I,FD
@@ -557,7 +558,8 @@ def btest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
+        "f_query_asset": {"period": [operator.ge, 240],
+                          "zlmacd_close.(1, 5, 10)": [operator.eq, 10]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
         "f_query_date": {},  # filter days vs filter assets
 
         "s_weight1": {  # ascending True= small, False is big
@@ -604,14 +606,14 @@ def btest_multiple(loop_indicator=1):
 
     # settings creation
     for p_maxsize in [12]:
-            setting_copy = copy.deepcopy(setting_base)
-            s_weight1 = {  # ascending True= small, False is big
-                "open.pgain240": [False, 1, 1],
-            }
-            setting_copy["s_weight1"] = s_weight1
-            setting_copy["p_maxsize"] = p_maxsize
-            a_settings.append(setting_copy)
-            print(setting_copy["s_weight1"])
+        setting_copy = copy.deepcopy(setting_base)
+        s_weight1 = {  # ascending True= small, False is big
+            "pb": [False, 1, 1],
+        }
+        setting_copy["s_weight1"] = s_weight1
+        setting_copy["p_maxsize"] = p_maxsize
+        a_settings.append(setting_copy)
+        print(setting_copy["s_weight1"])
 
 
     print("Total Settings:", len(a_settings))

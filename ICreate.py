@@ -276,11 +276,11 @@ def ivola(df: pd.DataFrame, ibase: str = "ivola"):
     return add_to
 
 
+#past n days until today
 def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.pgain{freq}"
-    add_column(df, add_to, f"pct_chg_{ibase}", 1)
-    try:  # could just use pd.Series.pct_change with periods here
-        # df[add_to] = quick_rolling_prod((1 + (df["pct_chg"] / 100)).to_numpy(), freq)
+    add_column(df, add_to, f"close", 1)
+    try:
         df[add_to] = df[ibase].pct_change(periods=freq)
     except Exception as e:
         print("error", e)
@@ -288,10 +288,11 @@ def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     return add_to
 
 
+#future n days from today on
 def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.fgain{freq}"
-    add_column(df, add_to, f"pct_chg_{ibase}", 1)
-    df[add_to] = df[f"{ibase}.pgain{freq}"].shift(int(-freq))
+    add_column(df, add_to, f"close", 1)
+    df[add_to] = df[f"{ibase}.pgain{freq}"].shift(-int(freq))
     return add_to
 
 
@@ -300,7 +301,6 @@ def pct_chg_close(df: pd.DataFrame, ibase: str = "pct_chg_close"):
     add_column(df, add_to, "close", 1)
     df[add_to] = (1 + df["close"].pct_change())
     return add_to
-
 
 def pct_chg_open(df: pd.DataFrame, ibase: str = "pct_chg_open"):
     add_to = f"pct_chg_open"

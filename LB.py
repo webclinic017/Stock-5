@@ -9,6 +9,8 @@ import smtplib
 from email.message import EmailMessage
 import os
 import math
+from scipy.stats.mstats import gmean
+import itertools
 from enum import auto
 from win32com.client import Dispatch
 import traceback
@@ -131,16 +133,7 @@ def trend_swap(df, column, value):
         return np.nan
 
 
-def custom_expand(df, min_freq):
-    dict_result = {}
 
-    for counter, iindex in enumerate(range(0, len(df))):
-        if counter < min_freq:
-            continue
-        df_expand = df.iloc[0:iindex]
-        index = df.index[iindex]
-        dict_result[index] = df_expand
-    return dict_result
 
 
 
@@ -356,15 +349,7 @@ def line_print(text, lines=40):
     print("=" * lines)
 
 
-def pairwise_no_overlap(iterables):
-    result = []
-    for i, k in zip(iterables[0::2], iterables[1::2]):
-        result.append((i, k))
-    return result
 
-
-def pairwise_overlap(iterables):
-    return list(zip(iterables, iterables[1:] + iterables[:1]))
 
 
 
@@ -473,13 +458,15 @@ def c_bfreq():
 
 
 class BFreq(enum.Enum):
-    # f1 = 1
+    f1 = 1
     f2 = 2
     f5 = 5
     f10 = 10
     f20 = 20
     f60 = 60
+    f120 = 120
     f240 = 240
+    f500 = 500
 
 
 def c_sfreq():
@@ -743,14 +730,58 @@ def timeseries_to_month(df):
     return df_result
 
 
-def get_quantile(df, column, p_setting=[(0, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 1)]):
+
+
+def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
     dict_df = {}
-    for low_quant, high_quant in p_setting:
+    p_setting=[x/100 for x in p_setting]
+    for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
-        df_percentile = df[df[column].between(low_val, high_val)]
-        dict_df[(int(low_quant * 100), int(high_quant * 100))] = df_percentile
+        dict_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
     return dict_df
 
+def custom_expand(df, min_freq):
+    dict_result = {}
+    first_index=df.index[0]
+    for counter, expanding_index in enumerate(df.index):
+        if counter < min_freq:
+            continue
+        dict_result[expanding_index] = df.loc[first_index:expanding_index]
+    return dict_result
+
+def custom_pairwise_noverlap(iterables):
+    result = []
+    for i, k in zip(iterables[0::2], iterables[1::2]):
+        result.append((i, k))
+    return result
+
+def custom_pairwise_combination(a_array,n):
+    return list(itertools.combinations(a_array, n))
+
+def my_gmean(series):
+    new_series = (series / 100) + 1
+    return gmean(new_series)
+
+
+def my_mean(series):
+    new_series = (series / 100) + 1
+    return new_series.mean()
+
+
+def my_std(series):
+    new_series = (series / 100) + 1
+    return new_series.std()
+
+
+def my_mean_std_diff(series):
+    new_series = (series / 100) + 1
+    series_mean = new_series.mean()
+    series_std = new_series.std()
+    return series_mean - series_std
+
+#for some reason the last one is always false
+def custom_pairwise_overlap(iterables):
+    return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
 
 if __name__ == '__main__':
     pass

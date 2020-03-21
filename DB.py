@@ -336,13 +336,16 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
 # For all Pri indices and derivates. ordered after FILO
 def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
-    ICreate.pct_chg_close(df=df)  # 0.890578031539917 for 300 loop
-    ICreate.pct_chg_open(df=df)  # 0.890578031539917 for 300 loop
+    for rolling_freq in bfreq[::-1]:
+        ICreate.pgain(df=df, ibase="close",freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
+    for rolling_freq in bfreq[::-1]:
+        ICreate.fgain(df=df, ibase="close",freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
-    for rolling_freq in bfreq[::-1]:
-        ICreate.pgain(df=df, freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
-    for rolling_freq in bfreq[::-1]:
-        ICreate.fgain(df=df, freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+    for rolling_freq in [1,2,5][::-1]:
+        ICreate.pgain(df=df, ibase="open",freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
+    for rolling_freq in [1,2,5][::-1]:
+        ICreate.fgain(df=df, ibase="open",freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+
     ICreate.ivola(df=df)  # 0.890578031539917 for 300 loop
     ICreate.period(df=df)  # 0.2 for 300 loop
     ICreate.pjup(df=df)  # 1.0798187255859375 for 300 loop
@@ -350,12 +353,21 @@ def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
     ICreate.co_pct_chg(df=df)
 
     # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
-    if asset == "E":  # else sh_index will try to get corr wit himself during update
-        ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f5, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
-        ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f10, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
+    # if asset == "E":  # else sh_index will try to get corr wit himself during update
+    #     ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f5, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
+    #     ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f10, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
+
+    #trend support and resistance
     # add trend for individual stocks
     # ICreate.trend(df=df, ibase="close")
     # df = support_resistance_horizontal(df_asset=df)
+
+
+    #macd for strategy
+    for sfreq, bfreq in [(5,10),(10,20),(240,300),(300,500)]:
+    #for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 120, 180, 240, 300, 500], 2):
+        if sfreq<bfreq:
+            Sandbox.custommacd(df=df,ibase="close",sfreq=sfreq,bfreq=bfreq,type=1,score=10)
 
 
 def update_assets_EIFD_D_expanding(df, ts_code):
@@ -380,10 +392,11 @@ def update_assets_EIFD_D_expanding(df, ts_code):
     # 2. times above ma, bigger better
     for freq in a_freqs:
         # one time calculation
-        df[f"highpass{freq}"] = Sandbox.highpass(df["close"], freq)
-        # df[f"ma{freq}"] = df["close"] - df[f"highpass{freq}"]
+        df[f"hp{freq}"] = Sandbox.highpass(df["close"], freq)
+        df[f"lp{freq}"] = df["close"] - df[f"hp{freq}"]
         df[f"ma{freq}"] = df["close"].rolling(freq).mean()
         df[f"abv_ma{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
+        df[f"abv_lp{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
 
         # expanding
         df[f"e_abv_ma{freq}"] = df[f"abv_ma{freq}"].expanding(freq).mean()
@@ -398,8 +411,8 @@ def update_assets_EIFD_D_expanding(df, ts_code):
 
     # 4. volatility of the high pass, the smaller the better
     for freq in a_freqs:
-        df[f"e_highpass_mean{freq}"] = df[f"highpass{freq}"].expanding(freq).mean()
-        df[f"e_highpass_std{freq}"] = df[f"highpass{freq}"].expanding(freq).std()
+        df[f"e_hp_mean{freq}"] = df[f"hp{freq}"].expanding(freq).mean()
+        df[f"e_hp_std{freq}"] = df[f"hp{freq}"].expanding(freq).std()
     print(f"{ts_code} highpass_mean finished")
 
     # volatility pct_ chg, less than better
@@ -603,14 +616,14 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
             df_date["bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
                                     + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
                                     + df_date["period"].rank(ascending=False) * 0.03 \
-                                    + df_date["e_highpass_mean240"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean60"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean20"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean5"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_std240"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std60"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std20"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std5"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_hp_mean240"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_hp_mean60"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_hp_mean20"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_hp_mean5"].rank(ascending=False) * 0.01 \
+                                    + df_date["e_hp_std240"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_hp_std60"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_hp_std20"].rank(ascending=True) * 0.01 \
+                                    + df_date["e_hp_std5"].rank(ascending=True) * 0.01 \
                                     + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
                                     + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
                                     + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
@@ -846,7 +859,7 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     print("Date_Base UPDATED")
 
 
-def update_custom_index(assets=["E"], big_update=True):
+def update_groups(assets=["E"], big_update=True):
     # all stock market pct_chg
     update_cj_index_000001_SH()
 
@@ -881,7 +894,7 @@ def update_custom_index(assets=["E"], big_update=True):
         df_date = get_date(trade_date=trade_date, assets=assets, freq="D")
         for group, a_instance in c_groups_dict(assets=assets).items():  # for each group
             df_date_grouped = df_date.groupby(by=group, ).mean()  # calculate mean
-            for instance, row in df_date_grouped.iterrows():  # append to previous group
+            for instance, row in df_date_grouped.iterrows():  # append to dict
                 dict_group_instance_update[group + "_" + str(instance)].append(row)
 
     # save all to df
@@ -889,7 +902,10 @@ def update_custom_index(assets=["E"], big_update=True):
         df_update = pd.DataFrame(a_update_instance)
         if not df_saved.empty:
             df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
-        LB.to_csv_feather(df_update, LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/" + key))
+
+        if not df_update.empty:
+            df_update.set_index(keys="trade_date",drop=True,inplace=True)#reset index after group
+        LB.to_csv_feather(df_update, LB.a_path(f"Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/{key}"))
         print(key, "UPDATED")
 
 
@@ -970,13 +986,7 @@ def get_group_instance(group_instance="asset_E", market="CN"):
     return get(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance), set_index="trade_date")
 
 
-def get_group_instance_all(assets=["E"]):
-    dict_result = {}
-    dict_group_label_pair = c_groups_dict(assets=assets, a_ignore=["asset", "industry3"])
-    for group, instance_array in dict_group_label_pair.items():
-        for instance in instance_array:
-            dict_result[group + "_" + str(instance)] = get_group_instance(group_instance=group + "_" + str(instance))
-    return dict_result
+
 
 
 def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
@@ -1121,6 +1131,18 @@ def preload(load="asset", step=1, query=""):
     bar.close()
     return dict_result
 
+def preload_groups(assets=["E"]):
+    dict_result = {}
+    dict_group_label_pair = c_groups_dict(assets=assets, a_ignore=["asset", "industry3"])
+
+    bar = tqdm(range(len(dict_group_label_pair)))
+    bar.set_description(f"loading groups...")
+    for (group, instance_array),i in zip(dict_group_label_pair.items(), bar):
+        for instance in instance_array:
+            dict_result[group + "_" + str(instance)] = get_group_instance(group_instance=group + "_" + str(instance))
+    bar.close()
+    return dict_result
+
 
 def update_all_in_one(big_update=False):
     # there are 3 types of update
@@ -1143,7 +1165,7 @@ def update_all_in_one(big_update=False):
     #    update_general_industry(level, big_update=True)  # ONLY ON BIG UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
-    multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
+    #multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
     #
     # # 1.3. GENERAL - TS_CODE
     for asset in c_assets():
@@ -1155,12 +1177,13 @@ def update_all_in_one(big_update=False):
         update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
-    multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
-    multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
+    #multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
+    #multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
+    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
+
 
     # 3.1. DATE - OTH
     # multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
@@ -1178,7 +1201,7 @@ def update_all_in_one(big_update=False):
     # LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
     #
     # # 4.1. CUSTOM - INDEX
-    # update_custom_index(big_update=big_update)
+    update_groups(big_update=big_update)
 
 
 # speed order=remove apply and loc, use vectorize where possible

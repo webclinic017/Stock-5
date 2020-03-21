@@ -593,11 +593,18 @@ def custommacd(df, ibase, sfreq, bfreq, type=1, score=10):
     name = f"{ibase}.{type, sfreq, bfreq}"
     df[f"zldif_{name}"] = 0
     df[f"zldea_{name}"] = 0
-    if type == 1:  # standard macd
+    if type == 0:  # standard macd with ma. conventional ma is very slow
+        df[f"ema1_{name}"] = df[ibase].rolling(sfreq).mean()
+        df[f"ema2_{name}"] = df[ibase].rolling(bfreq).mean()
+        df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
+        df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq/2))
+        df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
+        df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
+        df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
+    if type == 1:  # standard macd but with zlema
         df[f"ema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
         df[f"ema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
         df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
-        df[f"zldiff_ss_small_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq / 2))
         df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq))
         df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
         df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
@@ -1527,6 +1534,9 @@ def highpass(s, n):
                 close2 = s.iloc[i - 2]
                 result = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (close - 2 * close1 + close2) + 2 * (1 - alpha1) * result1 - (1 - alpha1) * (1 - alpha1) * result2  # ehlers formula
                 a_result.append(result)
+
+    #first n highpass are always too high. make them none in order not to disturb corret values
+    #a_result[:n*2] = [np.nan] * n*2
     return a_result
 
 
@@ -2131,7 +2141,7 @@ def find_peaks(df, ibase, a_n=[60]):
         df["und_resistance"] = df["und_resistance"] + (df["close"] < df[f"rs{counter}"]).astype(int)
 
     a_trend_name = []
-    for index1, index2 in LB.pairwise_overlap([*dict_final_rs]):
+    for index1, index2 in LB.custom_pairwise_overlap([*dict_final_rs]):
         print(f"pair {index1, index2}")
         value1 = dict_final_rs[index1]
         value2 = dict_final_rs[index2]
@@ -2295,7 +2305,7 @@ def hypothesis_test():
             df_date_expanding = DB.get_date_expanding(trade_date=trade_date)
             df_date["final_rank"] = df_date_expanding["final_rank"]
 
-            for key, df_quant in get_quantile(df_date, "final_rank", p_setting=[(0, 0.01)]).items():
+            for key, df_quant in custom_quantile(df_date, "final_rank", p_setting=[0, 1]).items():
                 # for key, df_quant in get_quantile(df_date, "final_rank",p_setting=[(0, 0.05),(0.05, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 0.95),(0.95, 1)]).items():
                 for freq in [2]:
                     df_result.at[trade_date, f"q_{key}.open.fgain{freq}_gmean"] = gmean(df_quant[f"open.fgain{freq}"])
@@ -2307,10 +2317,72 @@ def hypothesis_test():
     df_result.to_csv("hypo_test.csv")
 
 
-if __name__ == '__main__':
-    hypothesis_test()
+def macd_for_all(a_freqs=[5, 10, 20, 40, 60, 120, 180, 240, 300, 500], type=4, preload="stocks"):
 
-    df = DB.get_asset(ts_code="000007.SZ").reset_index()
+    if preload=="stocks":
+        dict_preload=DB.preload(load="asset",step=1)
+    elif preload=="groups":
+        dict_preload=DB.preload_groups()
+
+    for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
+        if sfreq<bfreq:
+            path=f"Market/CN/Backtest_Single/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
+            if os.path.exists(path):
+                continue
+
+            df_result = pd.DataFrame()
+            for ts_code, df_asset in dict_preload.items():
+                print(f"{ts_code}, sfreq {sfreq}, bfreq {bfreq}")
+                if len(df_asset)<2000:
+                    continue
+
+                macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
+
+                df_asset["tomorrow1"]=df_asset["close"].shift(-1)/df_asset["close"]
+                df_result.at[ts_code,"period"]=len(df_asset)
+                df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
+
+                df_macd_buy=df_asset[df_asset[macd_name]==20]
+                df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
+
+                df_macd_sell = df_asset[df_asset[macd_name] == -20]
+                df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
+
+            df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
+            df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
+            df_result.to_csv(path,encoding='utf-8_sig')
+
+    #create summary for all
+    df_summary=pd.DataFrame()
+    for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
+        if sfreq < bfreq:
+            path=f"macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
+            df_macd=pd.read_csv(path)
+            df_summary.at[path,"gmean"]=df_macd["gmean"].mean()
+            df_summary.at[path,"uptrend_gmean"]=df_macd["uptrend_gmean"].mean()
+            df_summary.at[path,"downtrend_gmean"]=df_macd["downtrend_gmean"].mean()
+            df_summary.at[path,"up_better_mean"]=df_macd["up_better_mean"].mean()
+            df_summary.at[path,"up_better_sell"]=df_macd["up_better_sell"].mean()
+    df_summary.to_excel(f"Market/CN/Backtest_Single/macd_for_all_summary_type{type}_{preload}.xlsx")
+
+
+
+def macd_for_one(sfreq=240,bfreq=750,ts_code="000002.SZ",type=1,score=20):
+    df_asset=DB.get_asset(ts_code=ts_code)
+    print("ts_code",ts_code)
+    macd_labels=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=score)
+    df_asset=df_asset[macd_labels+["close"]]
+    Plot.plot_chart(df_asset,df_asset.columns)
+    #df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
+
+if __name__ == '__main__':
+
+
+    macd_for_all(type=1, preload="stocks")
+    macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
+    #hypothesis_test()
+
+
     # find_peaks(df=df,ibase="close", a_n=[120])
 
     # find_flat(df, "close")
