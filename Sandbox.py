@@ -2317,53 +2317,53 @@ def hypothesis_test():
     df_result.to_csv("hypo_test.csv")
 
 
-def macd_for_all(a_freqs=[5, 10, 20, 40, 60, 120, 180, 240, 300, 500], type=4, preload="stocks"):
+def macd_for_all(a_freqs=[5, 10, 20, 40, 60, 120, 180, 240, 300, 500, 620, 750], type=4, preload="stocks"):
 
     if preload=="stocks":
         dict_preload=DB.preload(load="asset",step=1)
     elif preload=="groups":
         dict_preload=DB.preload_groups()
 
-    for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
-        if sfreq<bfreq:
-            path=f"Market/CN/Backtest_Single/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
-            if os.path.exists(path):
-                continue
-
-            df_result = pd.DataFrame()
-            for ts_code, df_asset in dict_preload.items():
-                print(f"{ts_code}, sfreq {sfreq}, bfreq {bfreq}")
-                if len(df_asset)<2000:
-                    continue
-
-                macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
-
-                df_asset["tomorrow1"]=df_asset["close"].shift(-1)/df_asset["close"]
-                df_result.at[ts_code,"period"]=len(df_asset)
-                df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
-
-                df_macd_buy=df_asset[df_asset[macd_name]==20]
-                df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
-
-                df_macd_sell = df_asset[df_asset[macd_name] == -20]
-                df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
-
-            df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
-            df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
-            df_result.to_csv(path,encoding='utf-8_sig')
+    # for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
+    #     if sfreq<bfreq:
+    #         path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
+    #         if os.path.exists(path):
+    #             continue
+    #
+    #         df_result = pd.DataFrame()
+    #         for ts_code, df_asset in dict_preload.items():
+    #             print(f"{ts_code}, sfreq {sfreq}, bfreq {bfreq}")
+    #             if len(df_asset)<2000:
+    #                 continue
+    #
+    #             macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
+    #
+    #             df_asset["tomorrow1"]=df_asset["close"].shift(-1)/df_asset["close"]
+    #             df_result.at[ts_code,"period"]=len(df_asset)
+    #             df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
+    #
+    #             df_macd_buy=df_asset[df_asset[macd_name]==20]
+    #             df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
+    #
+    #             df_macd_sell = df_asset[df_asset[macd_name] == -20]
+    #             df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
+    #
+    #         df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
+    #         df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
+    #         df_result.to_csv(path,encoding='utf-8_sig')
 
     #create summary for all
     df_summary=pd.DataFrame()
     for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
         if sfreq < bfreq:
-            path=f"macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
+            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
             df_macd=pd.read_csv(path)
             df_summary.at[path,"gmean"]=df_macd["gmean"].mean()
             df_summary.at[path,"uptrend_gmean"]=df_macd["uptrend_gmean"].mean()
             df_summary.at[path,"downtrend_gmean"]=df_macd["downtrend_gmean"].mean()
             df_summary.at[path,"up_better_mean"]=df_macd["up_better_mean"].mean()
             df_summary.at[path,"up_better_sell"]=df_macd["up_better_sell"].mean()
-    df_summary.to_excel(f"Market/CN/Backtest_Single/macd_for_all_summary_type{type}_{preload}.xlsx")
+    df_summary.to_excel(f"Market/CN/Backtest_Single/macd/macd_for_all_summary_type{type}_{preload}.xlsx")
 
 
 
@@ -2379,7 +2379,7 @@ if __name__ == '__main__':
 
 
     macd_for_all(type=1, preload="stocks")
-    macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
+    #macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
     #hypothesis_test()
 
 

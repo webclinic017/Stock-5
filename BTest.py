@@ -9,6 +9,7 @@ from itertools import permutations
 import LB
 from datetime import datetime
 import traceback
+from scipy.stats import gmean
 import copy
 import cProfile
 import operator
@@ -24,9 +25,9 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtest_start_time, setting_count):
+    #init
     current_trend = LB.c_bfreq()
     beta_against = "_000001.SH"
-
     a_time = []
     now = mytime.time()
 
@@ -63,14 +64,17 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     df_merge_helper = df_merge_helper.append(pd.Series(data=int(next_trade_date), index=[0]), ignore_index=False)  # before merge_ add future trade date as proxy
     df_merge_helper = df_merge_helper.rename("trade_date")
 
-    # merge
+    # merge with all dates (in case some days did not trade)
     df_trade_h = pd.merge(df_merge_helper, df_trade_h, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
 
+    #check if all index are valid
     if np.nan in df_trade_h["ts_code"] or float("nan") in df_trade_h:
         print("file has nan ts_codes")
         raise ValueError
 
+    #create chart
     df_port_c = df_trade_h.groupby("trade_date").agg("mean")  # TODO remove inefficient apply and groupby and loc
+    df_port_c=df_port_c.iloc[:-1]#exclude last row because last row predicts future
     df_port_c["port_pearson"] = df_trade_h.groupby("trade_date").apply(lambda x: x["rank_final"].corr(x["pct_chg"]))
     df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
     df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: x.at[x.last_valid_index(), "port_cash"])
@@ -82,16 +86,10 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     df_port_c["all_pct_chg"] = df_port_c["all_close"].pct_change().fillna(0) + 1
     df_port_c["all_comp_chg"] = df_port_c["all_pct_chg"].cumprod()
 
-    # add competitor
+    # chart add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
         df_port_c["comp_chg_" + competitor[1]] = ICreate.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
-
-    # df_port_c add trend2,10,20,60,240
-    # a_current_trend_label = []
-    # for i in current_trend:  # do not add trend1 since it does not exist
-    #     a_current_trend_label.append(f"close.market.trend{i}")
-    # df_port_c = pd.merge(left=df_stock_market_all.loc[int(setting["start_date"]):int(setting["end_date"]), a_current_trend_label], right=df_port_c, on="trade_date", how="left", sort=False)
 
     # tab_overview
     df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
@@ -117,8 +115,11 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     df_port_overview.at[0, "asset_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
     df_port_overview.at[0, "all_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
 
-    df_port_overview.at[0, "asset_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()
-    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()
+    df_port_overview.at[0, "asset_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()) #everytime you sell a stock
+    df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna()) #everyday
+
+    df_port_overview.at[0, "asset_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean() #everytime you sell a stock
+    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean() #everyday
 
     df_port_overview.at[0, "asset_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
     df_port_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
@@ -388,61 +389,72 @@ def btest_once(settings=[{}]):
 
             now = print_and_time(setting_count=setting_count, phase=f"SELL AND HOLD", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
-            # PORTFOLIO BUY BEGIN
+            # PORTFOLIO BUY SELECT BEGIN
             buyable_size = p_maxsize - len(dict_trade_h[tomorrow]["hold"])
-            if buyable_size > 0 and int(market_trend) >= 0.7:
+            if buyable_size > 0 and int(market_trend) >= 0.7 and len(df_today_mod)>0:
 
                 # 6.4 PORTFOLIO BUY SCORE/RANK
-                dict_group_instance_weight = LB.c_group_score_weight()
-                for column, a_weight in setting["s_weight1"].items():
-                    print("select column", column)
-                    # column use group rank
-                    if a_weight[2] != 1:
+                #if selet final rank by a defined criteria
+                if setting["s_weight1"]:
+                    dict_group_instance_weight = LB.c_group_score_weight()
+                    for column, a_weight in setting["s_weight1"].items():
+                        print("select column", column)
+                        # column use group rank
+                        if a_weight[2] != 1:
 
-                        # trick to store and be used for next couple settings running on the same day
-                        if column in dict_weight_accelerator:  # TODO maybe add this to dt_date in general once all important indicators are found
-                            print("accelerated")
-                            df_today_mod = dict_weight_accelerator[column]
-                        else:
-                            # 1. iterate to see replace value
-                            print("NOT accelerated")
-                            for group, instance_array in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]).items():
-                                dict_replace = {}
-                                df_today_mod["rank_" + column + "_" + group] = df_today_mod[group]  # to be replaced later by int value
-                                for instance in instance_array:
-                                    try:
-                                        dict_replace[instance] = df_group_instance_all[group + "_" + str(instance)].at[int(today), column]
-                                    except Exception as e:
-                                        print("(Could be normal if none of these group are trading on that day) ERROR on", today, group, instance)
-                                        print(e)
-                                        traceback.print_exc()
-                                        dict_replace[instance] = 0
-                                df_today_mod["rank_" + column + "_" + group].replace(to_replace=dict_replace, inplace=True)
-                            dict_weight_accelerator[column] = df_today_mod.copy()
+                            # trick to store and be used for next couple settings running on the same day
+                            if column in dict_weight_accelerator:  # TODO maybe add this to dt_date in general once all important indicators are found
+                                print("accelerated")
+                                df_today_mod = dict_weight_accelerator[column]
+                            else:
+                                # 1. iterate to see replace value
+                                print("NOT accelerated")
+                                for group, instance_array in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]).items():
+                                    dict_replace = {}
+                                    df_today_mod["rank_" + column + "_" + group] = df_today_mod[group]  # to be replaced later by int value
+                                    for instance in instance_array:
+                                        try:
+                                            dict_replace[instance] = df_group_instance_all[group + "_" + str(instance)].at[int(today), column]
+                                        except Exception as e:
+                                            print("(Could be normal if none of these group are trading on that day) ERROR on", today, group, instance)
+                                            print(e)
+                                            traceback.print_exc()
+                                            dict_replace[instance] = 0
+                                    df_today_mod["rank_" + column + "_" + group].replace(to_replace=dict_replace, inplace=True)
+                                dict_weight_accelerator[column] = df_today_mod.copy()
 
-                        # 2. calculate group score
-                        df_today_mod["rank_" + column + "_group"] = 0.0
-                        for group in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]):
-                            try:
-                                df_today_mod["rank_" + column + "_group"] = df_today_mod["rank_" + column + "_group"] + df_today_mod["rank_" + column + "_" + group] * dict_group_instance_weight[group]
-                            except Exception as e:
-                                print(e)
+                            # 2. calculate group score
+                            df_today_mod["rank_" + column + "_group"] = 0.0
+                            for group in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]):
+                                try:
+                                    df_today_mod["rank_" + column + "_group"] = df_today_mod["rank_" + column + "_group"] + df_today_mod["rank_" + column + "_" + group] * dict_group_instance_weight[group]
+                                except Exception as e:
+                                    print(e)
 
-                    else:  # column does not use group rank
-                        df_today_mod["rank_" + column + "_group"] = 0.0
+                        else:  # column does not use group rank
+                            df_today_mod["rank_" + column + "_group"] = 0.0
 
-                    # 3. Create Indicator Rank= indicator_asset+indicator_group
-                    df_today_mod[column + "_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod["rank_" + column + "_group"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
+                        # 3. Create Indicator Rank= indicator_asset+indicator_group
+                        df_today_mod[column + "_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod["rank_" + column + "_group"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
 
-                # 4. Create Rank Final = indicator1+indicator2+indicator3
-                df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
-                                                  for column, a_weight in setting["s_weight1"].items()])  # if final rank is na, nsmallest will not select anyway
+                    # 4. Create Rank Final = indicator1+indicator2+indicator3
+                    df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
+                                                      for column, a_weight in setting["s_weight1"].items()])  # if final rank is na, nsmallest will not select anyway
+
+                # sweight does not exist. using random values
+                else:
+                    print("select using random criteria")
+                    df_today_mod["rank_final"] = np.random.randint(low=1,high=len(df_today_mod)+1)
+
                 now = print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
                                      prev_time=now)
 
+
+
+
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 1
                 for i in range(1, len(df_today_mod) + 1):
-                    df_select = try_select(select_from_df=df_today_mod, select_size=buyable_size * 3 * i, select_by=setting["f_percentile_column"])
+                    df_select = try_select(select_from_df=df_today_mod, select_size=buyable_size * 10 * i, select_by=setting["f_percentile_column"])
 
                     # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
                     df_select = df_select[~df_select.index.isin([trade_info["ts_code"] for trade_info in dict_trade_h[tomorrow]["hold"]])]
@@ -455,8 +467,12 @@ def btest_once(settings=[{}]):
                     else:
                         print(f"selection failed, reselect {i}")
                 else:
-                    LB.sound("error.mp3")
-                    print("Error, should not happend")
+                    #this probably means none of the stocks meats the criteria due to filter and rank.
+                    #for none of the selected stocks trade tomorrow
+                    #or something wrong with the ranking
+                    #or you buy less than the size you want to buy
+                    #LB.sound("error.mp3")
+                    pass
 
                 # carry final rank, otherwise the second select will not be able to select
                 df_select_tomorrow["rank_final"] = df_today_mod["rank_final"]
@@ -497,6 +513,9 @@ def btest_once(settings=[{}]):
                 now = print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             else:  # to not buy today
+                if len(df_today_mod)==0:
+                    print("no stock meets criteria after basic filtering (like IPO)")
+
                 if market_trend <= 0.7:
                     print("not buying today because no trend")
                 else:
@@ -557,9 +576,8 @@ def btest_multiple(loop_indicator=1):
 
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
-        "f_percentile_column": "rank_final",  # {} empty means focus on all percentile. always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query_asset": {"period": [operator.ge, 240],
-                          "zlmacd_close.(1, 5, 10)": [operator.eq, 10]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
+        "f_percentile_column": "rank_final",  # always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
+        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
         "f_query_date": {},  # filter days vs filter assets
 
         "s_weight1": {  # ascending True= small, False is big
@@ -588,7 +606,7 @@ def btest_multiple(loop_indicator=1):
         # portfolio
         "p_capital": 10000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 20,  # not too low, otherwise volatility too big
+        "p_maxsize": 1,  # not too low, otherwise volatility too big
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_feedbackday": 60,
@@ -605,15 +623,20 @@ def btest_multiple(loop_indicator=1):
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
     # settings creation
-    for p_maxsize in [12]:
-        setting_copy = copy.deepcopy(setting_base)
-        s_weight1 = {  # ascending True= small, False is big
-            "pb": [False, 1, 1],
-        }
-        setting_copy["s_weight1"] = s_weight1
-        setting_copy["p_maxsize"] = p_maxsize
-        a_settings.append(setting_copy)
-        print(setting_copy["s_weight1"])
+    for zlmacd in ["zlmacd_close.(1, 300, 500)"]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
+        for signal in [10,-10]:
+            setting_copy = copy.deepcopy(setting_base)
+
+            #filter
+            setting_copy["f_query_asset"] ={"period": [operator.ge, 240],
+                                            zlmacd : [operator.eq, signal],
+                                            "name": [operator.eq, "平安银行"],}
+                                            #"name": [operator.eq, "平安银行"],}
+
+            #s weight
+            setting_copy["s_weight1"] ={}
+            a_settings.append(setting_copy)
+            print(setting_copy["s_weight1"])
 
 
     print("Total Settings:", len(a_settings))
@@ -624,6 +647,7 @@ if __name__ == '__main__':
     try:
         pr = cProfile.Profile()
         pr.enable()
+
 
         btest_multiple(5)
 

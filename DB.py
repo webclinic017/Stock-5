@@ -204,7 +204,8 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
     print("Index not to consider:", df_ignore_EI[df_ignore_EI["ignore"] == True].index.tolist())
     df_ts_codes = get_ts_code(asset)
     if asset == "I":  # acceleration process to skip I TODO remove when I is fully used
-        df_ts_codes = df_ts_codes[df_ts_codes.index.isin(["000001.SH", "399006.SZ", "399001.SZ"])]
+        pass
+        #df_ts_codes = df_ts_codes[df_ts_codes.index.isin(["000001.SH", "399006.SZ", "399001.SZ"])]
     df_ts_codes = df_ts_codes[~df_ts_codes.index.isin(df_ignore_EI[df_ignore_EI["ignore"] == True].index.tolist())]
     real_latest_trade_date = get_last_trade_date(freq)
 
@@ -549,12 +550,7 @@ def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN"
 
 
 
-def update_date(asset="E", freq="D", market="CN", step=1, big_update=True):
-    for asset in ["E"]:
-        update_date_EIFD_DWMYS(asset, freq, big_update=big_update, step=step)
-
-
-def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, step=1):  # STEP only 1 or -1 !!!!
+def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):  # STEP only 1 or -1 !!!!
     df_ts_codes = get_ts_code(asset)
     df_ts_codes["list_date"] = df_ts_codes["list_date"].astype(int)
     trade_dates = get_trade_date("00000000", LB.today(), freq)
@@ -566,14 +562,14 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
     # makes searching for one day in asset time series faster. BUT can only be used with step=1 and ONLY using ONE THREAD
     print("Update date preparing for setup. Please wait...")
     dict_list_date = {ts_code: list_date for ts_code, list_date in zip(df_ts_codes.index, df_ts_codes["list_date"])}
-    dict_df = {ts_code: get_asset(ts_code=ts_code) for ts_code in df_ts_codes.index}
+    dict_df = {ts_code: get_asset(ts_code=ts_code,asset=asset) for ts_code in df_ts_codes.index}
 
     if step == 1:
         dict_lookup_table = {ts_code: 0 for ts_code, df in dict_df.items()}
     elif step == -1:
         dict_lookup_table = {ts_code: len(df) - 1 for ts_code, df in dict_df.items()}
     else:
-        return print("error Step msut be 1 or -1")
+        return print("error Step must be 1 or -1")
 
     for trade_date in trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
         a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "/" + str(trade_date))
@@ -600,14 +596,24 @@ def update_date_EIFD_DWMYS(asset="E", freq="D", market="CN", big_update=True, st
                 if int(list_date) > int(trade_date):
                     continue
 
-                row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
-                try:
-                    if int(df_asset.index[row_number]) == int(trade_date):
-                        a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
-                        dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
-                except Exception as e:
-                    print("except", e)
+                if len(df_asset)==0:
                     continue
+
+                row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
+
+                print(f"step {step}, ts_code {ts_code}, len {len(df_asset)}  row number {row_number}")
+                if int(df_asset.index[row_number]) == int(trade_date):
+                    a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
+                    dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
+
+                # try:
+                #     if int(df_asset.index[row_number]) == int(trade_date):
+                #         a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
+                #         dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
+                # except Exception as e:
+                #     #What is the reason for this exception
+                #     print("except why man", e)
+                #     continue
 
             df_date = pd.DataFrame(data=a_date, columns=example_column)
             df_date.insert(loc=0, column='trade_date', value=int(trade_date))
@@ -1158,7 +1164,7 @@ def update_all_in_one(big_update=False):
     small_steps = [1, 2, -1, -2]
 
     # 1.0. GENERAL - CAL_DATE
-    update_general_trade_cal()  # always update
+    #update_general_trade_cal()  # always update
     #
     # # 1.1. GENERAL - INDUSTRY
     #for level in c_industry_level():
@@ -1168,20 +1174,21 @@ def update_all_in_one(big_update=False):
     #multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
     #
     # # 1.3. GENERAL - TS_CODE
-    for asset in c_assets():
-        update_general_ts_code(asset)  # ALWAYS UPDATE
+    # for asset in c_assets():
+    #     update_general_ts_code(asset)  # ALWAYS UPDATE
     # update_general_ts_code_all()
     # #
     # # 1.5. GENERAL - TRADE_DATE
-    for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
-        update_general_trade_date(freq)  # ALWAYS UPDATE
+    # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
+    #     update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
     #multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
     #multi_process(func=update_assets_E_W_pledge_stat, a_kwargs={"start_date": "00000000", "big_update": False}, a_steps=small_steps)  # SMART
 
     # 2.2. ASSET - DF
-    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
     # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
 
 
@@ -1190,10 +1197,11 @@ def update_all_in_one(big_update=False):
 
     # 3.2. DATE - DF
     date_step = [-1, 1] if big_update else [-1, 1]
-    multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
+    multi_process(func=update_date, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
+    #multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
     #
     # # 3.3. DATE - BASE
-    update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+    #update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
     #
     # # 3.4. DATE - TREND
     # df = get_stock_market_all()  # ALWAS
@@ -1201,7 +1209,7 @@ def update_all_in_one(big_update=False):
     # LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
     #
     # # 4.1. CUSTOM - INDEX
-    update_groups(big_update=big_update)
+    #update_groups(big_update=big_update)
 
 
 # speed order=remove apply and loc, use vectorize where possible
