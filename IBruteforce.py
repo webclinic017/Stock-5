@@ -104,7 +104,7 @@ def bruteforce_summary(folderPath, summarypath):
                 fgain = rest.split(".")[0]
 
             if fgain != "sample":
-                df = pd.read_csv(subFolderRoot + "/" + fileName)
+                df = pd.read_csv(f"{subFolderRoot}/{fileName}")
                 # mean
                 df_mean = df.mean()
                 df_mean["ibase"] = ibase
@@ -113,13 +113,13 @@ def bruteforce_summary(folderPath, summarypath):
                 dict_fgain[fgain] = dict_fgain[fgain].append(df_mean, sort=False, ignore_index=True)
 
     for key, df in dict_fgain.items():
-        a_path = LB.a_path(summarypath + f"{key}")
+        a_path = LB.a_path(f"{summarypath}{key}")
         LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True, index_relevant=False)
 
 
 # Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
 def bruteforce_iterate():
-    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query_on_df="trade_date > 20050101")
+    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query_df="trade_date > 20050101")
 
     e_ibase = ICreate.IBase
     e_ideri = ICreate.IDeri
@@ -150,7 +150,7 @@ def bruteforce_iterate():
                 # CHECK IF OVERRIDE OR NOT if small update, then continue if file exists
                 if not setting["big_update"]:
                     for key in LB.c_bfreq():
-                        path = setting["path_general"] + f"{ibase_name}/{ideri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_fgain{key}.csv"
+                        path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_fgain{key}.csv"
                         if not os.path.exists(path):
                             LB.line_print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
                             break  # go into the ibase
@@ -161,7 +161,7 @@ def bruteforce_iterate():
                     LB.line_print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
 
                 # create sample
-                path = setting["path_general"] + f"{ibase_name}/{ideri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_sample"
+                path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_sample"
                 df_sample = dict_df_asset["000001.SZ"].copy()
                 print("one setting is", {**one_setting})
                 deri_function(df=df_sample, ibase=ibase.value, **one_setting)
@@ -183,7 +183,7 @@ def bruteforce_iterate():
                 # save evaluated results
                 for key, df in dict_fgain_mean_detail.items():
                     df.index.name = "ts_code"
-                    path = setting["path_general"] + f"{ibase_name}/{ideri_name}/" + LB.standard_indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_{key}"
+                    path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, dict_variables=one_setting) + f"_{key}"
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
                     LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=True, skip_feather=True)
 

@@ -33,65 +33,55 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 # decorator functions must be at top
-def only_big_update(func):
+def deco_only_big_update(func):
     def this_invisible_func(*args, **kwargs):
         if "big_update" in [*kwargs]:
             if kwargs["big_update"]:
                 return func(*args, **kwargs)  # only return original function if kwargs has keyword "big_update" and big_update is true
         return
-
     return this_invisible_func
 
-
 # TODO very dangerous function, check it often
-def try_ignore(func):
+def deco_try_ignore(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
             return
-
     return this_function_will_never_be_seen
 
-
-def except_empty_df(func):
+def deco_except_empty_df(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except:
             return pd.DataFrame()
-
     return this_function_will_never_be_seen
 
 
 def wrap_line(func):
-    def line(lines=50):
-        print("=" * lines)
-
     def this_function_will_never_be_seen(*args, **kwargs):
-        line()
+        print("=" * 50)
         result = func(*args, **kwargs)
-        line()
+        print("=" * 50)
         return result
-
     return this_function_will_never_be_seen
 
 
 def today():
     return str(datetime.now().date()).replace("-", "")
 
-
-def standard_indi_name(ibase, deri, dict_variables={}):
+def indi_name(ibase, deri, dict_variables={}):
     variables = ""
     for key, enum_val in dict_variables.items():
         if key not in ["df", "ibase"]:
             # if issubclass(enum_val, enum.Enum):
             try:
-                variables = variables + f"{key}={enum_val.value},"
+                variables = f"{variables}{key}={enum_val.value},"
             except:
-                variables = variables + f"{key}={enum_val},"
+                variables = f"{variables}{key}={enum_val},"
     if variables:
-        return f"{ibase}.{deri}" + f"({variables})"
+        return f"{ibase}.{deri}({variables})"
     else:
         return f"{ibase}.{deri}"
 
@@ -131,11 +121,6 @@ def trend_swap(df, column, value):
         return mean_cross_over_days
     except:
         return np.nan
-
-
-
-
-
 
 
 def empty_df(query):
@@ -192,11 +177,8 @@ def empty_df(query):
 def get_trade_date_datetime(trade_date):
     return datetime.strptime(str(trade_date), '%Y%m%d')
 
-
 def get_trade_date_datetime_y(trade_date):
-    date = get_trade_date_datetime(trade_date)
-    return date.year
-
+    return get_trade_date_datetime(trade_date).year
 
 def get_trade_date_datetime_s(trade_date):
     date = get_trade_date_datetime_m(trade_date)
@@ -213,41 +195,29 @@ def get_trade_date_datetime_s(trade_date):
 
 
 def get_trade_date_datetime_m(trade_date):
-    date = get_trade_date_datetime(trade_date)
-    return date.month
-
+    return get_trade_date_datetime(trade_date).month
 
 def get_trade_date_datetime_d(trade_date):
-    date = get_trade_date_datetime(trade_date)
-    return date.day
-
+    return get_trade_date_datetime(trade_date).day
 
 # D-W 1-7 in words
 def get_trade_date_datetime_dayofweek(trade_date):
-    date = get_trade_date_datetime(trade_date).strftime("%A")
-    return date
-
+    return get_trade_date_datetime(trade_date).strftime("%A")
 
 # D-Y 1-365
 def get_trade_date_datetime_dayofyear(trade_date):
-    date = get_trade_date_datetime(trade_date).strftime("%j")
-    return date
-
+    return get_trade_date_datetime(trade_date).strftime("%j")
 
 # W-Y 1-52
 def get_trade_date_datetime_weekofyear(trade_date):
-    date = get_trade_date_datetime(trade_date).strftime("%W")
-    return date
-
+    return get_trade_date_datetime(trade_date).strftime("%W")
 
 def df_reverse_reindex(df):
     df = df.reindex(index=df.index[::-1]).set_index(pd.Series(range(0, len(df.index))))
     return df
 
-
 def df_reindex(df):
     return df.reset_index(drop=True, inplace=False)
-
 
 def df_drop_duplicated_reindex(df, column_name):
     df[column_name] = df[column_name].astype(int)
@@ -255,11 +225,9 @@ def df_drop_duplicated_reindex(df, column_name):
     df = df_reindex(df)
     return df
 
-
-@try_ignore
+@deco_try_ignore
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
     df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
-
 
 def columns_remove(df, columns_array):
     for column in columns_array:
@@ -268,11 +236,9 @@ def columns_remove(df, columns_array):
         except Exception as e:
             pass
 
-
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     return pd.Series(index=s_index, data=s_index * z[0] + z[1])
-
 
 def get_linear_regression_variables(s_index, s_data):
     return np.polyfit(s_index, s_data, 1)
@@ -291,9 +257,8 @@ def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan becau
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
     return asset_all[s1_name].corr(asset_all[s2_name], method="pearson")
 
-
 def open_file(filepath):
-    filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
+    filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', filepath))
     elif platform.system() == 'Windows':  # Windows
@@ -301,52 +266,33 @@ def open_file(filepath):
     else:  # linux variants
         subprocess.call(('xdg-open', filepath))
 
-
-@try_ignore
+@deco_try_ignore
 def close_file(filepath):
-    filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
+    filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
     xl = Dispatch('Excel.Application')
     wb = xl.Workbooks.Open(filepath)
     xl.Quit()
     wb.Close(True)
-
     #new
     xl.DisplayAlerts=False
 
-
-
+#maybe create a rekursive version
 def groups_dict_to_string_iterable(dict_groups: dict):
     result = ""
     for key, dict_value in dict_groups.items():
-
-        if type(dict_value) == list or type(dict_value) == dict:
-            a_string_helper = []
-            for x in dict_value:
-                if callable(x):
-                    a_string_helper.append(str(x.__name__))
-                else:
-                    a_string_helper.append(str(x))
-            # a_string_helper = groups_dict_to_string_iterable  # Prevents error if bool is in dict_value array
-            result = result + str(key) + ": [" + ', '.join(a_string_helper) + "], "
-        elif type(dict_value) == str:
-            result = result + str(key) + ": " + str(dict_value) + ", "
-        elif type(dict_value) == int:
-            result = result + str(key) + ": " + str(dict_value) + ", "
-        elif type(dict_value) == float:
-            result = result + str(key) + ": " + str(dict_value) + ", "
-        elif type(dict_value) == bool:
-            result = result + str(key) + ": " + str(dict_value) + ", "
+        if type(dict_value) in [list,dict]:
+            a_string_helper = [str(x.__name__) if callable(x) else str(x) for x in dict_value]
+            result = f"{result}{key}: [{', '.join(a_string_helper)}], "
         elif callable(dict_value):
-            result = result + str(dict_value.__name__) + ": " + str(dict_value) + ", "
-        else:
-            result = result + str(key) + ": " + str(dict_value) + ", "
+            result = f"{result}{dict_value.__name__}: {dict_value}, "
+        else: # bool, string, scalar, int
+            result = f"{result}{key}: {dict_value}, "
     return result
 
 
 # returns only numeric volumns in a df
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
-
 
 def line_print(text, lines=40):
     print("=" * lines)
@@ -359,11 +305,11 @@ def shutdown_windows():
 
 
 def sound(file="error.mp3"):
-    playsound("Media/Sound/" + file)
+    playsound(f"Media/Sound/{file}")
 
 
 def a_path(path: str = ""):
-    return [x for x in [path + ".csv", path + ".feather"]]
+    return [x for x in [f"{path}.csv", f"{path}.feather"]]
 
 
 def handle_save_exception(e, path):
@@ -418,7 +364,7 @@ def send_mail(trade_string="what to buy and sell"):
     msg = EmailMessage()
     msg.set_content(trade_string)
     today = pd.datetime.now().date()
-    msg['Subject'] = "Stock " + str(today.day) + "." + str(today.month) + "." + str(today.year)
+    msg['Subject'] = f"Stock {today.day}.{today.month}.{today.year}"
     msg['From'] = "cj@python.org"
     msg['To'] = "sizhe.huang@guanyueinternational.com"
     msg['CC'] = "yang.qiong@guanyueinternational.com"
@@ -454,7 +400,6 @@ class Assets(enum.Enum):
     I = 'I'
     E = 'E'
     FD = 'FD'
-
 
 def c_bfreq():
     return [e.value for e in BFreq]
@@ -497,7 +442,6 @@ def c_date_oth():
             "holdertrade": API_Tushare.my_holdertrade,
             "repurchase": API_Tushare.my_repurchase,
             "share_float": API_Tushare.my_share_float}
-
 
 def c_assets_fina_function_dict():
     return {"fina_indicator": API_Tushare.my_fina_indicator,
@@ -633,29 +577,24 @@ def c_groups_dict(assets=c_assets(), a_ignore=[]):
     asset = {key: value for key, value in asset.items() if key not in a_ignore}
     return asset
 
-
-
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
-
 
 @wrap_line
 def log(message, elapsed=None):
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
-
 
 def endlog():
     sound("finished_all.mp3")
     log("END", secondsToStr(time.time() - start))
     time.sleep(2)
 
-
 # skip rolling values that are already calculated and only treat nan values
-def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.mean):
-    nan_series = df.loc[df[add_to].isna(), add_to]  # check out all nan values
-    for index, value in nan_series.iteritems():  # iterarte over all nan value
-        get_rolling_frame = df[add_from][index - rolling_freq + 1:index + 1]  # get the custom made rolling object
-        df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
+# def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.mean):
+#     nan_series = df.loc[df[add_to].isna(), add_to]  # check out all nan values
+#     for index, value in nan_series.iteritems():  # iterarte over all nan value
+#         get_rolling_frame = df[add_from][index - rolling_freq + 1:index + 1]  # get the custom made rolling object
+#         df.at[index, add_to] = func(get_rolling_frame)  # calculate mean/std
 
 
 @jit
@@ -686,13 +625,11 @@ def std(xs):
 
 
 def timeseries_to_season(df):
-
-
+    """converts a df time series to another df containing only the last day of season"""
     df_copy=df.copy()
-    df_copy["year"] = df_copy.index
-    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x)) #can be way more efficient
-    df_copy["month"] = df_copy.index
-    df_copy["month"] = df_copy["month"].apply(lambda x: get_trade_date_datetime_m(x)) #can be way more efficient
+    df_copy["trade_date_copy"] = df_copy.index
+    df_copy["year"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_y(x)) #can be way more efficient
+    df_copy["month"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_m(x)) #can be way more efficient
 
     a_index=[]
     for year in df_copy["year"].unique():
@@ -702,19 +639,17 @@ def timeseries_to_season(df):
             if last_season_day is not None:
                 a_index.append(last_season_day)
 
-    df_result = df_copy.loc[a_index]
-    return df_result
+    return df_copy.loc[a_index]
 
 def timeseries_to_week(df):
-
+    """converts a df time series to another df containing only fridays"""
     df_copy=df.copy()
     df_copy["weekday"] = df_copy.index
     df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x)) #can be way more efficient
-
-    df_result = df_copy[df_copy["weekday"]=="Friday"]
-    return df_result
+    return df_copy[df_copy["weekday"]=="Friday"]
 
 def timeseries_to_month(df):
+    """converts a df time series to another df containing only the last day of month"""
     df_copy = df.copy()
     df_copy["year"] = df_copy.index
     df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
@@ -729,11 +664,7 @@ def timeseries_to_month(df):
             if last_season_day is not None:
                 a_index.append(last_season_day)
 
-    df_result = df_copy.loc[a_index]
-    return df_result
-
-
-
+    return df_copy.loc[a_index]
 
 def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
     dict_df = {}
@@ -745,11 +676,9 @@ def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
 
 def custom_expand(df, min_freq):
     dict_result = {}
-    first_index=df.index[0]
     for counter, expanding_index in enumerate(df.index):
-        if counter < min_freq:
-            continue
-        dict_result[expanding_index] = df.loc[first_index:expanding_index]
+        if counter >= min_freq:
+            dict_result[expanding_index] = df.loc[df.index[0]:expanding_index]
     return dict_result
 
 def custom_pairwise_noverlap(iterables):
@@ -762,19 +691,13 @@ def custom_pairwise_combination(a_array,n):
     return list(itertools.combinations(a_array, n))
 
 def my_gmean(series):
-    new_series = (series / 100) + 1
-    return gmean(new_series)
-
+    return gmean((series / 100) + 1)
 
 def my_mean(series):
-    new_series = (series / 100) + 1
-    return new_series.mean()
-
+    return ((series / 100) + 1).mean()
 
 def my_std(series):
-    new_series = (series / 100) + 1
-    return new_series.std()
-
+    return ((series / 100) + 1).std()
 
 def my_mean_std_diff(series):
     new_series = (series / 100) + 1
@@ -782,14 +705,12 @@ def my_mean_std_diff(series):
     series_std = new_series.std()
     return series_mean - series_std
 
-#for some reason the last one is always false
+#for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
 
 if __name__ == '__main__':
     pass
-
-
 
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     start = time.time()

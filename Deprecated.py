@@ -22,8 +22,10 @@ import cProfile
 from tqdm import tqdm
 import operator
 
+"""This .py contains deprecated or wrong or old functions that are no longer in use"""
 
 def increaselimit(increase=1):
+    """test 涨停，跌停"""
     df_result_asset = pd.DataFrame()
     df_summary_asset = pd.DataFrame()
     df_ts_code = DB.get_ts_code()
@@ -64,8 +66,11 @@ def increaselimit(increase=1):
 
 
 
-# auto correlation = relation between past price and future price
+
 def auto_corr_multiple():
+    """ auto correlation = relation between past price and future price
+    TODO this should be replaced by a better quantile bin version
+    """
     # check if saved tab exists
 
     rolling_freqs_big = [2, 5, 10, 20, 60, 240]
@@ -178,6 +183,8 @@ def auto_corr_multiple():
 
 
 def cross_corr_multiple():
+    """TODO this should also be obsolte right now
+    """
     dict_indicators = {
         "pct_chg": {
             "a0_10": pd.DataFrame(),

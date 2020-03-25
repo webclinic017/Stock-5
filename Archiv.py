@@ -15,40 +15,10 @@ from scipy.stats.mstats import gmean
 import Sandbox
 
 
-# measures which day of week/month performs generally better
-def date_seasonal_stats(group_instance="asset_E"):
-    path = f"Market/CN/Backtest_Single/seasonal/all_date_seasonal_{group_instance}.xlsx"
-    pdwriter = pd.ExcelWriter(path, engine='xlsxwriter')
-
-    # perform seasonal stats for all stock market or for some groups only
-    df_group = DB.get_stock_market_all().reset_index() if group_instance=="" else  DB.get_asset(ts_code=group_instance,asset="G").reset_index()
-
-    # get all different groups
-    a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],
-                [LB.get_trade_date_datetime_d, "dayofmonth"],
-                [LB.get_trade_date_datetime_weekofyear, "weekofyear"],
-                [LB.get_trade_date_datetime_dayofyear, "dayofyear"],
-                [LB.get_trade_date_datetime_m, "monthofyear"]]
-
-    # transform all trade_date into different date format
-    for group in a_groups:
-        df_group[group[1]] = df_group["trade_date"].apply(lambda x: group[0](x))
-
-
-    # OPTIONAL filter all ipo stocks and pct_chg greater than 10
-    df_group = df_group[(df_group["pct_chg"] < 11) & (df_group["pct_chg"] > -11)]
-
-    # create and sort single groups
-    for group in a_groups:
-        df_result = df_group[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", my_gmean, my_mean, my_std, my_mean_std_diff])
-        df_result.to_excel(pdwriter, sheet_name=group[1], index=True, encoding='utf-8_sig')
-
-    pdwriter.save()
-
-
 def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past=10, q_step=5, df=DB.get_stock_market_all()):
-    """use quantile to count insted of fixed price gaps"""
-
+    """use quantile to count insted of fixed price gaps
+    This method does not work because past can not predict future due to unstable period. This means that at the same stage of two past days with the exact same situation. One can go up and one can go down due to unstable period of the next happening thing
+    """
     df_result = pd.DataFrame()
     # for future in a_freq:
     #     df[f"tomorrow{future}"] = df["close"].shift(-future) / df["close"]
@@ -69,6 +39,7 @@ def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past
 """does not work here. Past can not predict future here"""
 def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]):
     """performs a strategy based on past experience of price structure
+    This method does not work because past can not predict future due to unstable period. This means that at the same stage of two past days with the exact same situation. One can go up and one can go down due to unstable period of the next happening thing
 
     Test 1: single past
     1. train expanding window data set on past gain future gain
@@ -433,7 +404,7 @@ def asset_bullishness():
                               + df_result["abv_ma"].rank(ascending=False) * 0.02 \
                               + df_result["rapid_down"].rank(ascending=True) * 0.02
 
-    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Backtest_single/bullishness.xlsx", group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Backtest_single/bullishness/bullishness.xlsx", group_result=True)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -500,18 +471,36 @@ def asset_candlestick_analysis_multiple():
 
 
 
+def daily_stocks_abve():
+    """this tells me how difficult my goal is to select the stocks > certain pct_chg every day
+                get 1% everyday, 33% of stocks
+                2% everyday 25% stocks
+                3% everyda 19% stocks
+                4% everyday 12% stocks
+                5% everyday 7% stocks
+                6% everyday 5%stocks
+                7% everyday 3% stocks
+                8% everday  2.5% Stocks
+                9% everday  2% stocks
+                10% everday, 1,5% Stocks  """
 
+    df_asset = DB.preload("E", step=2)
+    df_result = pd.DataFrame()
+    for ts_code, df in df_asset.items():
+        print("ts_code", ts_code)
+        for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
+            df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
+            df_result.at[ts_code,f"pct_chg_open > {pct} pct"]=len(df_copy)/len(df)
 
+            df_copy = df[(100 * (df["pct_chg_close"] - 1) > pct)]
+            df_result.at[ts_code, f"pct_chg_close > {pct} pct"] = len(df_copy) / len(df)
+
+            df_copy = df[(((df["close"]/df["open"]) - 1)*100 > pct)] #trade
+            df_result.at[ts_code, f"trade > {pct} pct"] = len(df_copy) / len(df)
+
+            df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
+            df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
+    df_result.to_csv("test.csv")
 
 if __name__ == '__main__':
-    # for freq in [1,2,5,10,20,60,120,240,500,750]:
-    #     price_statistic_train(past=freq, q_step=10)
-    # df_asset=DB.get_asset()
-    # df_asset["pcut"]=pd.qcut(df_asset["pct_chg"],10,labels=False)
-    # df_asset[["pct_chg","pcut"]].to_csv("qcut.csv")
     asset_bullishness()
-    # date_seasonal_stats(group_instance="")
-    # date_seasonal_stats(group_instance="Exchange_主板")
-    # date_seasonal_stats(group_instance="Exchange_中小板")
-    # date_seasonal_stats(group_instance="Exchange_创业板")
-    #price_statistic_predict()

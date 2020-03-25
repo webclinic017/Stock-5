@@ -338,7 +338,7 @@ def cdl(df: pd.DataFrame, ibase: str):
 
 
 def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.standard_indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_to = LB.indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     df[add_to] = (df[add_to].diff()).fillna(0)
@@ -346,7 +346,7 @@ def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
 
 
 def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.standard_indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_to = LB.indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
@@ -369,7 +369,7 @@ def my_ec_it(s,n,gain):
     counter=0
     for i in range(0, len(s)):
         if i < n - 1:
-            counter=counter+1
+            counter+=1
             a_result.append(np.nan)
         elif i == n - 1:
             result = s[0:i].mean()  # mean of an array
@@ -414,9 +414,9 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     a_low = [str(x) for x in a_all][:-1]
     a_high = [str(x) for x in a_all][1:]
 
-    rsi_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
-    phase_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}phase")
-    trend_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
+    rsi_name = indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
+    phase_name = indi_name(ibase=ibase, deri=f"{market_suffix}phase")
+    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
 
     func = talib.RSI
     # RSI and CMO are the best. CMO is a modified RSI
@@ -559,7 +559,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
         for abv_und, max_rs in dict_rs.items():
             for i in range(0, max_rs):
                 try:
-                    df_asset[f"rs_{abv_und}"] = df_asset[f"rs_{abv_und}"] + df_asset[f"rs{abv_und}{i}_cross"].abs()
+                    df_asset[f"rs_{abv_und}"] += df_asset[f"rs{abv_und}{i}_cross"].abs()
                 except Exception as e:
                     print("error resistance 2", e)
 
@@ -707,7 +707,7 @@ def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreat
     data = pd.Series(index=s_index, data=0)
     for i, polynom in enumerate(weights):
         pdegree = degree - i
-        data = data + (polynom * (s_index ** pdegree))
+        data += (polynom * (s_index ** pdegree))
     return data
 
 
@@ -746,9 +746,9 @@ def rsi(df: pd.DataFrame, ibase: str, freq: BFreq):
     return deri_tec(df=df, ibase=ibase, ideri=IDeri.rsi, func=talib.RSI, timeperiod=freq.value)
 
 
-@try_ignore  # try ignore because all talib function can not handle nan input values. so this wrapper ignores all nan input values and creates add_to_column at one point
+@deco_try_ignore  # try ignore because all talib function can not handle nan input values. so this wrapper ignores all nan input values and creates add_to_column at one point
 def deri_tec(df: pd.DataFrame, ibase: str, ideri: IDeri, func, **kwargs):
-    add_to = LB.standard_indi_name(ibase=ibase, deri=ideri.value, dict_variables=kwargs)
+    add_to = LB.indi_name(ibase=ibase, deri=ideri.value, dict_variables=kwargs)
     add_column(df, add_to, ibase, 1)
     df[add_to] = func(df[ibase], **kwargs)
     return add_to
@@ -756,7 +756,7 @@ def deri_tec(df: pd.DataFrame, ibase: str, ideri: IDeri, func, **kwargs):
 
 def cumprod(df: pd.DataFrame, ibase: str):
     ideri = "cumprod"
-    add_to = LB.standard_indi_name(ibase=ibase, deri=ideri)
+    add_to = LB.indi_name(ibase=ibase, deri=ideri)
     df[add_to] = (1 + (df[ibase] / 100)).cumprod()
     return add_to
 
@@ -821,7 +821,7 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
     ideri = ideri.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = LB.standard_indi_name(ibase=ibase, deri=ideri, dict_variables={"freq": freq, "re": re.value})
+    add_to = LB.indi_name(ibase=ibase, deri=ideri, dict_variables={"freq": freq, "re": re.value})
     add_column(df, add_to, ibase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html

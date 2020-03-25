@@ -89,7 +89,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     # chart add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
-        df_port_c["comp_chg_" + competitor[1]] = ICreate.column_add_comp_chg(df_port_c["pct_chg_" + competitor[1]])
+        df_port_c[f"comp_chg_{competitor[1]}"] = ICreate.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
 
     # tab_overview
     df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
@@ -100,8 +100,8 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     duration, Duration_rest = divmod(duration, 60)
     df_port_overview["SDate"] = day
     df_port_overview["STime"] = time
-    df_port_overview["SDuration"] = str(duration) + ":" + str(Duration_rest)
-    df_port_overview["strategy"] = setting["id"] = (str(setting_original["id"]) + "__" + str(setting_count))
+    df_port_overview["SDuration"] = f"{duration}:{Duration_rest}"
+    df_port_overview["strategy"] = setting["id"] = f"{setting_original['id']}__{setting_count}"
     df_port_overview["start_date"] = setting["start_date"]
     df_port_overview["end_date"] = setting["end_date"]
 
@@ -129,7 +129,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     except:
         df_port_overview.at[0, "all_comp_chg"] = float("nan")
 
-    df_port_overview.at[0, "port_beta"] = LB.calculate_beta(df_port_c["all_pct_chg"], df_port_c["pct_chg" + beta_against])
+    df_port_overview.at[0, "port_beta"] = LB.calculate_beta(df_port_c["all_pct_chg"], df_port_c[f"pct_chg{beta_against}"])
     df_port_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
     df_port_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
 
@@ -148,7 +148,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     for one_zero in [1, 0]:
         for rolling_freq in current_trend:
             try:  # calculate the pct_chg of all stocks 1 day after the trend shows buy signal
-                df_port_overview.at[0, "market_trend" + str(rolling_freq) + "_" + str(one_zero) + "_pct_chg_mean"] = df_port_c.loc[df_port_c["market_trend" + str(rolling_freq)] == one_zero, "tomorrow_pct_chg"].mean()
+                df_port_overview.at[0, f"market_trend{rolling_freq}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{rolling_freq}"] == one_zero, "tomorrow_pct_chg"].mean()
                 # condition_one_zero=df_port_c["market_trend" + str(rolling_freq)] == one_zero
                 # df_port_overview.at[0, "market_trend" + str(rolling_freq) +"_"+ str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
             except Exception as e:
@@ -156,30 +156,30 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
 
     # overview indicator combination
     for column, a_weight in s_weight1.items():
-        df_port_overview[column + "_ascending"] = a_weight[0]
-        df_port_overview[column + "_indicator_weight"] = a_weight[1]
-        df_port_overview[column + "_asset_weight"] = a_weight[2]
+        df_port_overview[f"{column}_ascending"] = a_weight[0]
+        df_port_overview[f"{column}_indicator_weight"] = a_weight[1]
+        df_port_overview[f"{column}_asset_weight"] = a_weight[2]
 
     # add overview for compare asset
     for i in range(len(p_compare), len(p_compare)):
         competitor_ts_code = p_compare[i][1]
         df_port_overview.at[i + 1, "strategy"] = competitor_ts_code
-        df_port_overview.at[i + 1, "pct_chg_mean"] = df_port_c["pct_chg_" + competitor_ts_code].mean()
-        df_port_overview.at[i + 1, "pct_chg_std"] = df_port_c["pct_chg_" + competitor_ts_code].std()
-        df_port_overview.at[i + 1, "winrate"] = len(df_port_c[(df_port_c["pct_chg_" + competitor_ts_code] >= 0) & (df_port_c["pct_chg_" + competitor_ts_code].notna())]) / len(df_port_c["pct_chg_" + competitor_ts_code].notna())
-        df_port_overview.at[i + 1, "period"] = len(df_port_c) - df_port_c["pct_chg_" + competitor_ts_code].isna().sum()
+        df_port_overview.at[i + 1, "pct_chg_mean"] = df_port_c[f"pct_chg_{competitor_ts_code}"].mean()
+        df_port_overview.at[i + 1, "pct_chg_std"] = df_port_c[f"pct_chg_{competitor_ts_code}"].std()
+        df_port_overview.at[i + 1, "winrate"] = len(df_port_c[(df_port_c[f"pct_chg_{competitor_ts_code}"] >= 0) & (df_port_c[f"pct_chg_{competitor_ts_code}"].notna())]) / len(df_port_c[f"pct_chg_{competitor_ts_code}"].notna())
+        df_port_overview.at[i + 1, "period"] = len(df_port_c) - df_port_c[f"pct_chg_{competitor_ts_code}"].isna().sum()
         df_port_overview.at[i + 1, "pct_days_involved"] = 1
-        df_port_overview.at[i + 1, "comp_chg"] = df_port_c.at[df_port_c["comp_chg_" + competitor_ts_code].last_valid_index(), "comp_chg_" + competitor_ts_code]
-        df_port_overview.at[i + 1, "beta"] = LB.calculate_beta(df_port_c["pct_chg_" + competitor_ts_code], df_port_c["pct_chg" + beta_against])
-        df_port_c["tomorrow_pct_chg_" + competitor_ts_code] = df_port_c["pct_chg_" + competitor_ts_code].shift(-1)  # add a future pct_chg 1 for easier target
+        df_port_overview.at[i + 1, "comp_chg"] = df_port_c.at[df_port_c[f"comp_chg_{competitor_ts_code}"].last_valid_index(), f"comp_chg_{competitor_ts_code}"]
+        df_port_overview.at[i + 1, "beta"] = LB.calculate_beta(df_port_c[f"pct_chg_{competitor_ts_code}"], df_port_c[f"pct_chg{beta_against}"])
+        df_port_c[f"tomorrow_pct_chg_{competitor_ts_code}"] = df_port_c[f"pct_chg_{competitor_ts_code}"].shift(-1)  # add a future pct_chg 1 for easier target
 
         # calculate percent change and winrate
-        condition_trade = df_port_c["tomorrow_pct_chg_" + competitor_ts_code].notna()
-        condition_win = df_port_c["tomorrow_pct_chg_" + competitor_ts_code] >= 0
+        condition_trade = df_port_c[f"tomorrow_pct_chg_{competitor_ts_code}"].notna()
+        condition_win = df_port_c[f"tomorrow_pct_chg_{competitor_ts_code}"] >= 0
         for one_zero in [1, 0]:
             for y in current_trend:
                 try:
-                    df_port_overview.at[i + 1, "market_trend" + str(y) + "_" + str(one_zero) + "_pct_chg_mean"] = df_port_c.loc[df_port_c["market_trend" + str(y)] == one_zero, "tomorrow_pct_chg_" + competitor_ts_code].mean()
+                    df_port_overview.at[i + 1, f"market_trend{y}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{y}"] == one_zero, f"tomorrow_pct_chg_{competitor_ts_code}"].mean()
                     # condition_one_zero = df_port_c["market_trend" + str(y)] == one_zero
                     # df_port_overview.at[i + 1, "market_trend" + str(y) +"_"+str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
                 except Exception as e:
@@ -188,15 +188,15 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = [f"close.market.trend{x}" for x in current_trend if x != 1]
     a_trend_label = []
-    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
+    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
-    portfolio_path = "Market/CN/Btest/Result/Portfolio_" + str(setting["id"])
-    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), skip_feather=True)
-    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), skip_feather=True)
-    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=True, skip_feather=True)
+    portfolio_path = f"Market/CN/Btest/Result/Portfolio_{setting['id']}"
+    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(f"{portfolio_path}/overview"), skip_feather=True)
+    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h"), skip_feather=True)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart"), index_relevant=True, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(portfolio_path + "/setting"), index_relevant=False, skip_feather=True)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting"), index_relevant=False, skip_feather=True)
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)
@@ -214,7 +214,7 @@ def btest_once(settings=[{}]):
         input('Press a key \n')  # no need to store input, any key will trigger break
         btest_break.btest_break = True
 
-    @LB.try_ignore
+    @LB.deco_try_ignore
     def try_select(select_from_df, select_size, select_by):
         return select_from_df.nsmallest(int(select_size), [select_by])
 
@@ -369,14 +369,14 @@ def btest_once(settings=[{}]):
                             tomorrow_open = dict_trade["today_close"]
                             tomorrow_close = dict_trade["today_close"]
                             sell = False
-                            reason = reason + "- not trading"
+                            reason = f"{reason} - not trading"
                             print("probably 停牌", ts_code)
 
                         if sell:  # Execute sell
                             shares = dict_trade["shares"]
                             realized_value = tomorrow_open * shares
                             fee = setting["p_fee"] * realized_value
-                            dict_capital[setting_count]["cash"] = dict_capital[setting_count]["cash"] + realized_value - fee
+                            dict_capital[setting_count]["cash"] += realized_value - fee
 
                             dict_trade_h[tomorrow]["sell"].append(
                                 {"reason": reason, "rank_final": dict_trade["rank_final"], "buy_imp": dict_trade["buy_imp"], "ts_code": dict_trade["ts_code"], "name": dict_trade["name"], "T+": hold_day_overnight, "buyout_price": dict_trade["buyout_price"],
@@ -421,34 +421,34 @@ def btest_once(settings=[{}]):
                                 print("NOT accelerated")
                                 for group, instance_array in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]).items():
                                     dict_replace = {}
-                                    df_today_mod["rank_" + column + "_" + group] = df_today_mod[group]  # to be replaced later by int value
+                                    df_today_mod[f"rank_{column}_{group}"] = df_today_mod[group]  # to be replaced later by int value
                                     for instance in instance_array:
                                         try:
-                                            dict_replace[instance] = df_group_instance_all[group + "_" + str(instance)].at[int(today), column]
+                                            dict_replace[instance] = df_group_instance_all[f"{group}_{instance}"].at[int(today), column]
                                         except Exception as e:
                                             print("(Could be normal if none of these group are trading on that day) ERROR on", today, group, instance)
                                             print(e)
                                             traceback.print_exc()
                                             dict_replace[instance] = 0
-                                    df_today_mod["rank_" + column + "_" + group].replace(to_replace=dict_replace, inplace=True)
+                                    df_today_mod[f"rank_{column}_{group}"].replace(to_replace=dict_replace, inplace=True)
                                 dict_weight_accelerator[column] = df_today_mod.copy()
 
                             # 2. calculate group score
-                            df_today_mod["rank_" + column + "_group"] = 0.0
+                            df_today_mod[f"rank_{column}_{group}"] = 0.0
                             for group in LB.c_groups_dict(assets=["E"], a_ignore=["asset", "industry3"]):
                                 try:
-                                    df_today_mod["rank_" + column + "_group"] = df_today_mod["rank_" + column + "_group"] + df_today_mod["rank_" + column + "_" + group] * dict_group_instance_weight[group]
+                                    df_today_mod[f"rank_{column}_{group}"] += df_today_mod[f"rank_{column}_{group}"] * dict_group_instance_weight[group]
                                 except Exception as e:
                                     print(e)
 
                         else:  # column does not use group rank
-                            df_today_mod["rank_" + column + "_group"] = 0.0
+                            df_today_mod[f"rank_{column}_{group}"] = 0.0
 
                         # 3. Create Indicator Rank= indicator_asset+indicator_group
-                        df_today_mod[column + "_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod["rank_" + column + "_group"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
+                        df_today_mod[f"{column}_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod[f"rank_{column}_{group}"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
 
                     # 4. Create Rank Final = indicator1+indicator2+indicator3
-                    df_today_mod["rank_final"] = sum([df_today_mod[column + "_rank"] * a_weight[1]
+                    df_today_mod["rank_final"] = sum([df_today_mod[f"{column}_rank"] * a_weight[1]
                                                       for column, a_weight in setting["s_weight1"].items()])  # if final rank is na, nsmallest will not select anyway
 
                 # sweight does not exist. using random values

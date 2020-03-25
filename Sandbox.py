@@ -12,6 +12,7 @@ from scipy.stats import gmean
 from scipy.stats.mstats import gmean
 from scipy.stats import entropy
 import sys
+from scipy.signal import argrelextrema
 
 sys.setrecursionlimit(1000000)
 
@@ -23,12 +24,12 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     a_small = [str(x) for x in a_all][:-1]
     a_big = [str(x) for x in a_all][1:]
 
-    rsi_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
-    phase_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}phase")
-    rsi_abv = standard_indi_name(ibase=ibase, deri=f"{market_suffix}rsi_abv")
-    turnpoint_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}turnpoint")
-    under_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}under")
-    trend_name = standard_indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
+    rsi_name = indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
+    phase_name = indi_name(ibase=ibase, deri=f"{market_suffix}phase")
+    rsi_abv = indi_name(ibase=ibase, deri=f"{market_suffix}rsi_abv")
+    turnpoint_name = indi_name(ibase=ibase, deri=f"{market_suffix}turnpoint")
+    under_name = indi_name(ibase=ibase, deri=f"{market_suffix}under")
+    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
 
     func = talib.RSI
     # RSI and CMO are the best. CMO is a modified RSI
@@ -120,36 +121,6 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     return trend_name
 
 
-def daily_stocks_abve():
-    """this tells me how difficult my goal is to select the stocks > certain pct_chg every day
-                get 1% everyday, 33% of stocks
-                2% everyday 25% stocks
-                3% everyda 19% stocks
-                4% everyday 12% stocks
-                5% everyday 7% stocks
-                6% everyday 5%stocks
-                7% everyday 3% stocks
-                8% everday  2.5% Stocks
-                9% everday  2% stocks
-                10% everday, 1,5% Stocks  """
-
-    df_asset = DB.preload("E", step=2)
-    df_result = pd.DataFrame()
-    for ts_code, df in df_asset.items():
-        print("ts_code", ts_code)
-        # for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
-        #     df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
-        #     df_result.at[ts_code,f"pct_chg_open > {pct} pct"]=len(df_copy)/len(df)
-        #
-        #     df_copy = df[(100 * (df["pct_chg_close"] - 1) > pct)]
-        #     df_result.at[ts_code, f"pct_chg_close > {pct} pct"] = len(df_copy) / len(df)
-        #
-        #     df_copy = df[(((df["close"]/df["open"]) - 1)*100 > pct)] #trade
-        #     df_result.at[ts_code, f"trade > {pct} pct"] = len(df_copy) / len(df)
-        #
-        #     df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
-        #     df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
-    df_result.to_csv("test.csv")
 
 
 def polyfit(df, column, degree):
@@ -173,7 +144,7 @@ def func(df, degree=1, column="close"):
     return data
 
 
-def sim_no_bins_multiple():
+def rsi_sim_no_bins_multiple():
     """the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
 
     def sim_no_bins_once(df_result, ts_code):
@@ -273,7 +244,7 @@ def sim_no_bins_multiple():
     DB.to_excel_with_static_data(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], asset=["E"], group_result=True)
 
 
-def sim_bins():
+def rsi_sim_bins():
     """the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
     df_ts_code = DB.get_ts_code()
     df_result_summary = pd.DataFrame()
@@ -2039,7 +2010,6 @@ def adjust_ma(df, ibase):
     for index, row in df.iterrows():
         d_period = row["d_period"]
         d_period = int(d_period) if not np.isnan(d_period) else 0
-
         if d_period == 0:
             a_d_mean.append(np.nan)
         else:
@@ -2047,13 +2017,10 @@ def adjust_ma(df, ibase):
             mean = supersmoother_3p(d_past, d_period)[-1]
             a_d_mean.append(mean)
             print(d_period)
-
     return a_d_mean
 
 
 def find_peaks_array(s, n=60):
-    from scipy.signal import argrelextrema
-
     # Generate a noisy AR(1) sample
     np.random.seed(0)
     xs = [0]
@@ -2063,30 +2030,19 @@ def find_peaks_array(s, n=60):
     # Find local peaks
     df[f'bot{n}'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
     df[f'peak{n}'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
-
     df[f"bot{n}"].update(df[f"peak{n}"].notna())
-
     return df[f"bot{n}"]
 
 
 def find_peaks(df, ibase, a_n=[60]):
     """
-    :param s: pd.series
-    :param n: how many n should observe before and after to check if it is peak
-    :return:
-
     Strengh of resistance support are defined by:
     1. how long it remains a resistance or support (remains good for n = 20,60,120,240?)
     2. How often the price can not break through it. (occurence)
-
     """
-    from scipy.signal import argrelextrema
-
     # Generate a noisy AR(1) sample
-
     a_bot_name = []
     a_peak_name = []
-
     np.random.seed(0)
     s = df[ibase]
     xs = [0]
@@ -2151,7 +2107,6 @@ def find_peaks(df, ibase, a_n=[60]):
         a_trend_name.append(f"{value1, value2}")
 
     # Create trend support resistance lines using two max and two mins
-
     df.to_csv("test.csv")
 
     # Plot results
@@ -2319,10 +2274,10 @@ def hypothesis_test():
 
 #generate test for all fund stock index and for all strategy and variables.
 
-def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4, asset="E", step=1):
+def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4, asset="E", step=1,query_ts_code={}):
 
 
-    dict_preload=DB.preload(load=asset,step=step,period_abv=1000)
+    dict_preload=DB.preload(load=asset,step=step,period_abv=1000,query_ts_code=query_ts_code)
     # elif asset== "groups":
     #     dict_preload=DB.preload_groups()
 
@@ -2334,9 +2289,7 @@ def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4,
 
             df_result = pd.DataFrame()
             for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
-
-                real_counter=real_counter+1
-                print(f"{real_counter} asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
+                print(f"{counter}: asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
 
                 try:
                     macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
@@ -2364,7 +2317,7 @@ def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4,
             DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
 
 
-    print("finished instance macd")
+    print(f"finished macd {asset}")
     #create summary for all
     df_summary=pd.DataFrame()
     for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
@@ -2399,9 +2352,9 @@ def macd_for_one(sfreq=240,bfreq=750,ts_code="000002.SZ",type=1,score=20):
 
 if __name__ == '__main__':
 
-
-    macd_for_all(type=1, asset="G", step=1)
-    #macd_for_all(type=1, asset="I", step=1)
+    macd_for_all(type=1, asset="G", step=1,query_ts_code={"G":["on_asset == 'E'", "group != 'industry3'"]})
+    macd_for_all(type=1, asset="I", step=1)
+    macd_for_all(type=1, asset="E", step=1)
     #macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
     #hypothesis_test()
 
