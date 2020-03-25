@@ -270,7 +270,7 @@ def sim_no_bins_multiple():
             except:
                 pass
 
-    DB.ts_code_series_to_excel(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], asset=["E"], group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], asset=["E"], group_result=True)
 
 
 def sim_bins():
@@ -977,7 +977,7 @@ def indicator_test():
         # plt.close()
 
     df_result["final_bullishness_rank"] = df_result["days_abv_ma5"].rank(ascending=False) + df_result["days_abv_ma240"].rank(ascending=False) + df_result["close_to_max"].rank(ascending=False) + df_result["general_gmean"].rank(ascending=False)
-    DB.ts_code_series_to_excel(df_result, path="dhp_result.xlsx", sort=[])
+    DB.to_excel_with_static_data(df_result, path="dhp_result.xlsx", sort=[])
 
 
 def ema_re(s, n):
@@ -2321,10 +2321,10 @@ def hypothesis_test():
 
 def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4, asset="E", step=1):
 
-    if asset in LB.c_assets():
-        dict_preload=DB.preload(load=asset,step=step,period_abv=1000)
-    elif asset== "groups":
-        dict_preload=DB.preload_groups()
+
+    dict_preload=DB.preload(load=asset,step=step,period_abv=1000)
+    # elif asset== "groups":
+    #     dict_preload=DB.preload_groups()
 
     for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
         if sfreq<bfreq:
@@ -2333,11 +2333,10 @@ def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4,
                 continue
 
             df_result = pd.DataFrame()
-            real_counter=-1
             for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
 
                 real_counter=real_counter+1
-                print(f"{counter}_{real_counter} asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
+                print(f"{real_counter} asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
 
                 try:
                     macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
@@ -2362,9 +2361,10 @@ def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4,
             df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
             df_result[ "up_down_gmean_diff"] =df_result["uptrend_gmean"]-df_result["downtrend_gmean"]
 
-            DB.ts_code_series_to_excel(df_ts_code=df_result,path=path, sort=[])
+            DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
 
 
+    print("finished instance macd")
     #create summary for all
     df_summary=pd.DataFrame()
     for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
@@ -2400,7 +2400,7 @@ def macd_for_one(sfreq=240,bfreq=750,ts_code="000002.SZ",type=1,score=20):
 if __name__ == '__main__':
 
 
-    macd_for_all(type=1, asset="I", step=1)
+    macd_for_all(type=1, asset="G", step=1)
     #macd_for_all(type=1, asset="I", step=1)
     #macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
     #hypothesis_test()

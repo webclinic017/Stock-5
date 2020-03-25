@@ -354,10 +354,6 @@ def line_print(text, lines=40):
     print("=" * lines)
 
 
-
-
-
-
 def shutdown_windows():
     os.system('shutdown -s')
 
@@ -451,6 +447,8 @@ def multi_process(func, a_kwargs, a_steps=[]):
 def c_assets():
     return [e.value for e in Assets]
 
+def c_assets_g():
+    return c_assets()+["G"]
 
 class Assets(enum.Enum):
     I = 'I'

@@ -119,7 +119,7 @@ def bruteforce_summary(folderPath, summarypath):
 
 # Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
 def bruteforce_iterate():
-    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query="trade_date > 20050101")
+    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query_on_df="trade_date > 20050101")
 
     e_ibase = ICreate.IBase
     e_ideri = ICreate.IDeri

@@ -78,7 +78,7 @@ def auto_corr_multiple():
         dict_year[counter] = (start_year, end_year)
 
     step = 1
-    df_ts_codes = DB.get_ts_code(asset="E")[::step]
+    df_ts_codes = DB.get_ts_code(a_asset=["E"])[::step]
     df_trade_dates = DB.get_trade_date(start_date="20000000", end_date="20200101", freq="D")[::step]
 
     # dict_df_ts_code = DB.preload("asset", step=step)
@@ -205,7 +205,7 @@ def cross_corr_multiple():
         dict_year[counter] = (start_year, end_year)
 
     step = 1
-    df_ts_codes = DB.get_ts_code(asset="E")[::step]
+    df_ts_codes = DB.get_ts_code(a_asset=["E"])[::step]
     df_trade_dates = DB.get_trade_date(start_date="20000000", end_date="20200101", freq="D")[::step]
 
     dict_df_ts_code = DB.preload("E", step=step)

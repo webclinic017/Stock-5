@@ -21,7 +21,7 @@ def date_seasonal_stats(group_instance="asset_E"):
     pdwriter = pd.ExcelWriter(path, engine='xlsxwriter')
 
     # perform seasonal stats for all stock market or for some groups only
-    df_group = DB.get_stock_market_all().reset_index() if group_instance=="" else  DB.get_group_instance(group_instance=group_instance).reset_index()
+    df_group = DB.get_stock_market_all().reset_index() if group_instance=="" else  DB.get_asset(ts_code=group_instance,asset="G").reset_index()
 
     # get all different groups
     a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],
@@ -134,7 +134,7 @@ def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]
 """does not work in general. past can not predict future here"""
 def asset_fundamental(start_date, end_date, freq, assets=["E"]):
     asset = assets[0]
-    ts_codes = DB.get_ts_code(asset)
+    ts_codes = DB.get_ts_code(a_asset=[asset])
     a_result_mean = []
     a_result_std = []
 
@@ -283,14 +283,14 @@ def asset_fundamental(start_date, end_date, freq, assets=["E"]):
     df_result_mean.sort_values(by=["final_fundamental_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Backtest_Single/" + "fundamental" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
-    DB.ts_code_series_to_excel(df_result_mean, path=path, sort=["final_fundamental_rank", True], asset=assets)
+    DB.to_excel_with_static_data(df_result_mean, path=path, sort=["final_fundamental_rank", True], asset=assets)
 
 
 # measures the volatility aspect
 def asset_volatility(start_date, end_date, assets, freq):
     a_result = []
     for asset in assets:
-        ts_codes = DB.get_ts_code(asset)
+        ts_codes = DB.get_ts_code(a_asset=[asset])
         for ts_code in ts_codes.ts_code:
             print("start appending to asset_volatility", ts_code)
 
@@ -355,14 +355,14 @@ def asset_volatility(start_date, end_date, assets, freq):
     df_result.sort_values(by=["final_volatility_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Backtest_Single/" + "volatility" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
-    DB.ts_code_series_to_excel(df_result, path=path, sort=["final_volatility_rank", True], asset=assets)
+    DB.to_excel_with_static_data(df_result, path=path, sort=["final_volatility_rank", True], asset=assets)
 
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
 def asset_bullishness():
     from scipy.stats import gmean
-    df_ts_code_E = DB.get_ts_code(asset="E")[::1]
-    df_ts_code_I = DB.get_ts_code(asset="I")[::1]
+    df_ts_code_E = DB.get_ts_code(a_asset=["E"])[::1]
+    df_ts_code_I = DB.get_ts_code(a_asset=["I"])[::1]
     df_ts_code=df_ts_code_E.append(df_ts_code_I)
     df_result = pd.DataFrame()
     a_freqs = [10, 20, 60, 120, 240]
@@ -433,7 +433,7 @@ def asset_bullishness():
                               + df_result["abv_ma"].rank(ascending=False) * 0.02 \
                               + df_result["rapid_down"].rank(ascending=True) * 0.02
 
-    DB.ts_code_series_to_excel(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Backtest_single/bullishness.xlsx", group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Backtest_single/bullishness.xlsx", group_result=True)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -473,7 +473,7 @@ def asset_candlestick_analysis_once(ts_code, pattern, func):
 
 def asset_candlestick_analysis_multiple():
     dict_pattern = LB.c_candle()
-    df_all_ts_code = DB.get_ts_code(asset="E")
+    df_all_ts_code = DB.get_ts_code(a_asset=["E"])
 
     for key, array in dict_pattern.items():
         function = array[0]

@@ -24,13 +24,58 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def update_general_trade_cal(start_date="19900101", end_date="20250101"):
-    df = API_Tushare.my_trade_cal(start_date=start_date, end_date=end_date)
-    a_path = LB.a_path("Market/CN/General/trade_cal_D")
-    df.set_index(keys="cal_date", inplace=True, drop=True)
-    LB.to_csv_feather(df, a_path)
+    df = API_Tushare.my_trade_cal(start_date=start_date, end_date=end_date).set_index(keys="cal_date", inplace=False, drop=True)
+    LB.to_csv_feather(df, LB.a_path("Market/CN/General/trade_cal_D"))
+
+def update_general_trade_date(freq="D", market="CN"):
+    def update_general_trade_date_stockcount(df, market="CN"):
+        df.index = df["trade_date"].astype(int)
+        for asset in c_assets():
+            df_ts_codes = get_ts_code(a_asset=[asset])
+            df_ts_codes = df_ts_codes.rename(columns={"list_date": "trade_date"})
+            df_grouped = df_ts_codes[["name", "trade_date"]].groupby(by="trade_date").count()
+            # vecorized approach faster than loop over individual date
+            df[asset + "_count"] = df_grouped["name"].astype(int).cumsum()
+            df[asset + "_count"] = df[asset + "_count"].fillna(method="ffill")
+            df[asset + "_count"] = df[asset + "_count"].fillna(0)
+        return df
+
+    def update_general_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
+        # get all indicator for each day
+        path_indicator = "Market/CN/Backtest_Single/seasonal/all_date_seasonal.xlsx"
+        xls = pd.ExcelFile(path_indicator)
+
+        # get all different groups
+        a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],  # 1-5
+                    [LB.get_trade_date_datetime_m, "monthofyear"],  # 1-12
+                    [LB.get_trade_date_datetime_d, "dayofmonth"],  # 1-31
+                    [LB.get_trade_date_datetime_weekofyear, "weekofyear"],  # 1-51
+                    [LB.get_trade_date_datetime_dayofyear, "dayofyear"],  # 1-365
+                    # TODO add [Library_Main.get_trade_date_datetime_s, "seasonofyear"]  # 1-4
+                    ]
+
+        # transform all trade_date into different format
+        for group in a_groups:
+            df_trade_date[group[1]] = df_trade_date["trade_date"].apply(lambda x: group[0](x)).astype(str)
+            df_score_board = pd.read_excel(xls, sheet_name=group[1], converters={group[1]: lambda x: str(x)})
+            df_score_board = df_score_board.fillna(0.0)  # if no information about certain period, assume the change is 0
+            df_score_board[group[1]] = df_score_board[group[1]].astype(str)
+
+            df_score_board = df_score_board.rename(columns={"pct_chg": group[1] + "_score"})
+            df_trade_date[group[1]] = df_trade_date[group[1]].astype(str)
+            df_trade_date = pd.merge(df_trade_date, df_score_board, how='left', on=group[1], suffixes=["", ""], sort=False)
+            df_trade_date[group[1] + "_score"] = df_trade_date[group[1] + "_score"].fillna(0.0)  # if information not enough, assume the pct_chg is 0.0
+
+        df_trade_date["seasonal_score"] = df_trade_date["dayofweek_score"] * 0.15 + \
+                                          df_trade_date["dayofmonth_score"] * 0.25 + \
+                                          df_trade_date["weekofyear_score"] * 0.20 + \
+                                          df_trade_date["dayofyear_score"] * 0.05 + \
+                                          df_trade_date["monthofyear_score"] * 0.35
+
+        df_trade_date["seasonal_score"] = df_trade_date["seasonal_score"].rolling(2).mean()
+        return df_trade_date
 
 
-def update_general_trade_date(freq="D", market="CN", big_update=True):
     if freq in ["D", "W"]:
         a_path = LB.a_path("Market/" + market + "/General/trade_date_" + freq)
         df = API_Tushare.my_pro_bar(ts_code="000001.SH", start_date="00000000", end_date=today(), freq=freq, asset="I")
@@ -42,62 +87,11 @@ def update_general_trade_date(freq="D", market="CN", big_update=True):
         LB.to_csv_feather(df, a_path, index_relevant=False)
 
 
-def update_general_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
-    # get all indicator for each day
-    path_indicator = "Market/CN/Backtest_Single/seasonal/all_date_seasonal.xlsx"
-    xls = pd.ExcelFile(path_indicator)
-
-    # get all different groups
-    a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],  # 1-5
-                [LB.get_trade_date_datetime_m, "monthofyear"],  # 1-12
-                [LB.get_trade_date_datetime_d, "dayofmonth"],  # 1-31
-                [LB.get_trade_date_datetime_weekofyear, "weekofyear"],  # 1-51
-                [LB.get_trade_date_datetime_dayofyear, "dayofyear"],  # 1-365
-                # TODO add [Library_Main.get_trade_date_datetime_s, "seasonofyear"]  # 1-4
-                ]
-
-    # transform all trade_date into different format
-    for group in a_groups:
-        df_trade_date[group[1]] = df_trade_date["trade_date"].apply(lambda x: group[0](x)).astype(str)
-        df_score_board = pd.read_excel(xls, sheet_name=group[1], converters={group[1]: lambda x: str(x)})
-        df_score_board = df_score_board.fillna(0.0)  # if no information about certain period, assume the change is 0
-        df_score_board[group[1]] = df_score_board[group[1]].astype(str)
-
-        df_score_board = df_score_board.rename(columns={"pct_chg": group[1] + "_score"})
-        df_trade_date[group[1]] = df_trade_date[group[1]].astype(str)
-        df_trade_date = pd.merge(df_trade_date, df_score_board, how='left', on=group[1], suffixes=["", ""], sort=False)
-        df_trade_date[group[1] + "_score"] = df_trade_date[group[1] + "_score"].fillna(0.0)  # if information not enough, assume the pct_chg is 0.0
-
-    df_trade_date["seasonal_score"] = df_trade_date["dayofweek_score"] * 0.15 + \
-                                      df_trade_date["dayofmonth_score"] * 0.25 + \
-                                      df_trade_date["weekofyear_score"] * 0.20 + \
-                                      df_trade_date["dayofyear_score"] * 0.05 + \
-                                      df_trade_date["monthofyear_score"] * 0.35
-
-    df_trade_date["seasonal_score"] = df_trade_date["seasonal_score"].rolling(2).mean()
-    return df_trade_date
-
-
-def update_general_trade_date_stockcount(df, market="CN"):
-    df.index = df["trade_date"].astype(int)
-    for asset in c_assets():
-        df_ts_codes = get_ts_code(asset)
-        df_ts_codes = df_ts_codes.rename(columns={"list_date": "trade_date"})
-        df_grouped = df_ts_codes[["name", "trade_date"]].groupby(by="trade_date").count()
-        # vecorized approach faster than loop over individual date
-        df[asset + "_count"] = df_grouped["name"].astype(int).cumsum()
-        df[asset + "_count"] = df[asset + "_count"].fillna(method="ffill")
-        df[asset + "_count"] = df[asset + "_count"].fillna(0)
-    return df
-
 
 def update_general_ts_code(asset="E", market="CN", big_update=True):
     print("start update general ts_code ", asset)
     if (asset == "E"):
         df = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
-
-        # add asset
-        df["asset"] = asset
 
         # add exchange info for each stock
         df["exchange"] = ["创业板" if x[0:3] in ["300"] else "中小板" if x[0:3] in ["002"] else "主板" if x[0:2] in ["00", "60"] else float("nan") for x in df.index]
@@ -133,25 +127,26 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
         df_SSE = API_Tushare.my_index_basic(market='SSE')
         df_SZSE = API_Tushare.my_index_basic(market='SZSE')
         df = df_SSE.append(df_SZSE, sort=False).set_index("ts_code")
-        df["asset"] = asset
     elif (asset == "FD"):
         df_E = API_Tushare.my_fund_basic(market='E')
         df_O = API_Tushare.my_fund_basic(market='O')
         df = df_E.append(df_O, sort=False).set_index("ts_code")
-        df["asset"] = asset
+    elif (asset == "G"):
+        df=pd.DataFrame()
+        for on_asset in c_assets():
+            for group, a_instance in c_groups_dict(assets=[on_asset]).items():
+                for instance in a_instance:
+                    df.at[f"{group}_{instance}","name"]=f"{group}_{instance}"
+                    df.at[f"{group}_{instance}","on_asset"]=on_asset
+                    df.at[f"{group}_{instance}","group"]=str(group)
+                    df.at[f"{group}_{instance}","instance"]=str(instance)
+        df.index.name="ts_code"
     else:
         df = pd.DataFrame()
-    a_path = LB.a_path("Market/" + market + "/General/ts_code_" + asset)
-    df["list_date"] = df["list_date"].fillna(method='ffill')
-    LB.to_csv_feather(df, a_path)
 
-
-def update_general_ts_code_all(market="CN"):
-    a_path = LB.a_path("Market/" + market + "/General/ts_code_all")
-    df = pd.DataFrame()
-    for asset in c_assets():
-        df_asset = get_ts_code(asset)
-        df = df.append(df_asset, sort=False)
+    df["asset"] = asset
+    df["list_date"] = df["list_date"].fillna(method='ffill') if asset != "G" else np.nan
+    a_path = LB.a_path(f"Market/{market}/General/ts_code_{asset}")
     LB.to_csv_feather(df, a_path)
 
 
@@ -175,7 +170,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
     def get_ts_code_ignore():
         return pd.DataFrame()
         df_saved = get(a_path_empty)
-        df_ts_code_all = get_ts_code_all()
+        df_ts_code_all = get_ts_code(a_asset=c_assets())
         df_ts_code_all = df_ts_code_all[["asset"]]
         if len(df_saved.columns) != 0 and not big_update:  # update existing ignore list with latest ts_code
             df_saved = pd.merge(df_ts_code_all, df_saved, how="left").set_index("ts_code")
@@ -202,7 +197,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
     df_ignore_EI = get_ts_code_ignore()
     df_ignore_EI["ignore"] = False
     print("Index not to consider:", df_ignore_EI[df_ignore_EI["ignore"] == True].index.tolist())
-    df_ts_codes = get_ts_code(asset)
+    df_ts_codes = get_ts_code(a_asset=[asset])
     if asset == "I":  # acceleration process to skip I TODO remove when I is fully used
         pass
         #df_ts_codes = df_ts_codes[df_ts_codes.index.isin(["000001.SH", "399006.SZ", "399001.SZ"])]
@@ -509,7 +504,7 @@ def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
 
 # recommended update frequency W
 def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, big_update=True):
-    for counter, ts_code in enumerate(get_ts_code("E").index[::step]):
+    for counter, ts_code in enumerate(get_ts_code(["E"]).index[::step]):
         a_path = LB.a_path("Market/" + market + "/Asset/E/W_pledge_stat/" + str(ts_code))
         if os.path.isfile(a_path[1]) and (not big_update):
             print(counter, ts_code, "pledge_stat Up-to-date")
@@ -521,7 +516,7 @@ def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, bi
             print(counter, ts_code, "pledge_stat UPDATED")
 
 
-def update_assets_E_top_holder(big_update=True, market="CN", step=1):
+def update_assets_E_D_top_holder(big_update=True, market="CN", step=1):
     df_ts_codes = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
     for counter, ts_code in enumerate(df_ts_codes.index[::step]):
         a_path = LB.a_path("Market/" + market + "/Asset/E/D_top_holder/" + str(ts_code))
@@ -536,7 +531,7 @@ def update_assets_E_top_holder(big_update=True, market="CN", step=1):
 
 
 def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN", step=1, big_update=True):
-    for counter, ts_code in enumerate(get_ts_code("E").index[::step]):
+    for counter, ts_code in enumerate(get_ts_code(["E"]).index[::step]):
         for fina_name, fina_function in c_assets_fina_function_dict().items():
             a_path = LB.a_path("Market/" + market + "/Asset/E/D_Fun/" + fina_name + "/" + ts_code)
             if os.path.isfile(a_path[1]) and (not big_update):  # skipp if small update or file exist
@@ -548,10 +543,62 @@ def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN"
                 LB.to_csv_feather(df, a_path)
                 print(counter, ts_code, f"{ts_code} {fina_name} UPDATED")
 
+def update_assets_G_D(assets=["E"], big_update=True):
+    """there are 2 approach to do this
+    1. Asset to industry group and then create date
+    2. Asset to date and then filter only stocks that belongs to one industry
 
+    This approach is using procedure 2. But both approach should produce same result
+    Requiement: df_date
+    """
+
+    # initialize all group as dict
+    dict_group_instance_update = {}  # dict of array
+    dict_group_instance_saved = {}  # dict of array
+    for group, a_instance in c_groups_dict(assets=assets).items():
+        for instance in a_instance:
+            dict_group_instance_update[str(group) + "_" + str(instance)] = []
+            dict_group_instance_saved[str(group) + "_" + str(instance)] = get_asset(group + "_" + str(instance),asset="G")
+
+    # get last saved trade_date on df_saved
+    last_trade_date = get_last_trade_date("D")
+    example_df = dict_group_instance_saved["asset_E"]
+    try:
+        last_saved_date = example_df.index[-1]
+    except:
+        last_saved_date = "19990101"
+
+    # if small update and saved_date==last trade_date
+    if last_trade_date == last_saved_date and (not big_update):
+        return print("ALL GROUP Up-to-date")
+
+    # initialize trade_date
+    df_trade_date = get_trade_date(end_date=today(), freq="D")
+    df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
+    print("START UPDATE GROUP since", last_saved_date)
+
+    # loop over date and get mean
+    for trade_date in df_trade_date.index:  # for each day
+        print(trade_date, "Updating GROUP")
+        df_date = get_date(trade_date=trade_date, assets=assets, freq="D")
+        for group, a_instance in c_groups_dict(assets=assets).items():  # for each group
+            df_date_grouped = df_date.groupby(by=group, ).mean()  # calculate mean
+            for instance, row in df_date_grouped.iterrows():  # append to dict
+                dict_group_instance_update[group + "_" + str(instance)].append(row)
+
+    # save all to df
+    for (key, a_update_instance), (key_saved, df_saved) in zip(dict_group_instance_update.items(), dict_group_instance_saved.items()):
+        df_update = pd.DataFrame(a_update_instance)
+        if not df_saved.empty:
+            df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
+        if not df_update.empty:
+            df_update.set_index(keys="trade_date",drop=True,inplace=True)#reset index after group
+        df_update.insert(0,"ts_code", key)
+        LB.to_csv_feather(df_update, LB.a_path(f"Market/CN/Asset/G/{key}"))
+        print(key, "UPDATED")
 
 def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):  # STEP only 1 or -1 !!!!
-    df_ts_codes = get_ts_code(asset)
+    df_ts_codes = get_ts_code(a_asset=[asset])
     df_ts_codes["list_date"] = df_ts_codes["list_date"].astype(int)
     trade_dates = get_trade_date("00000000", LB.today(), freq)
 
@@ -641,94 +688,6 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):  # S
             print(asset, freq, trade_date, "date updated")
 
 
-def update_date_EIFD_Expanding(asset="E", freq="D", market="CN", big_update=True, step=1):  # STEP only 1 or -1 !!!!
-    df_ts_codes = get_ts_code(asset)
-    df_ts_codes["list_date"] = df_ts_codes["list_date"].astype(int)
-    trade_dates = get_trade_date("00000000", LB.today(), freq)
-
-    # get the latest column of the asset file
-    code = "000001.SZ" if asset == "E" else "000001.SH" if asset == "I" else "150001.SZ"
-    example_column = list(get_asset_expanding(code, asset, freq).columns)
-
-    # makes searching for one day in asset time series faster. BUT can only be used with step=1 and ONLY using ONE THREAD
-    print("Update date preparing for setup. Please wait...")
-    dict_list_date = {ts_code: list_date for ts_code, list_date in zip(df_ts_codes.index, df_ts_codes["list_date"])}
-    dict_df = {ts_code: get_asset_expanding(ts_code=ts_code) for ts_code in df_ts_codes.index}
-
-    if step == 1:
-        dict_lookup_table = {ts_code: 0 for ts_code, df in dict_df.items()}
-    elif step == -1:
-        dict_lookup_table = {ts_code: len(df) - 1 for ts_code, df in dict_df.items()}
-    else:
-        return print("error Step must be 1 or -1")
-
-    for ts_code, length in dict_lookup_table.items():
-        print("len and ts_code", ts_code, length)
-
-    for trade_date in trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
-        a_path = LB.a_path("Market/" + market + "/Date/" + asset + "/" + freq + "_Expanding/" + str(trade_date))
-        a_date = []
-
-        if os.path.isfile(a_path[0]) and (not big_update):  # date file exists AND not big_update. If big_update, then always overwrite
-            # update lookup table before continue. So that skipped days still match
-            for (ts_code, list_date), (ts_code_unused, df_asset) in zip(dict_list_date.items(), dict_df.items()):
-                row_number = dict_lookup_table[ts_code]
-                if (step == -1) and (row_number == -1):
-                    # Case 1: step=-1. row_number=-1. This means the pointer is at row 0. which is max
-                    # Case 2: step=1. row_number=len(df) This happens automatically and does not need to take care
-                    continue
-                try:
-                    if df_asset.index[row_number] == trade_date:
-                        dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
-                except:
-                    pass
-            print(asset, freq, trade_date, "date file Up-to-date")
-            continue
-
-        else:  # date file does not exist or big_update
-            for (ts_code, list_date), (ts_code_unused, df_asset) in zip(dict_list_date.items(), dict_df.items()):
-                if int(list_date) > int(trade_date):
-                    continue
-
-                row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
-                if row_number < 0:
-                    continue
-
-                try:
-                    if int(df_asset.index[row_number]) == int(trade_date):
-                        a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
-                        dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
-                except Exception as e:
-                    print(f"version step {step} exception here: ", e)
-                    continue
-
-            df_date = pd.DataFrame(data=a_date, columns=example_column)
-            df_date.insert(loc=0, column='trade_date', value=int(trade_date))
-
-            df_date = pd.merge(df_date, df_ts_codes, how='left', on=["ts_code"], suffixes=[False, False], sort=False).set_index("ts_code")
-
-            # before save to date, calculate who is ranked 1 of today
-
-            df_date["final_rank"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
-                                    + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
-                                    + df_date["period"].rank(ascending=False) * 0.03 \
-                                    + df_date["e_highpass_mean240"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean60"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean20"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_mean5"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_highpass_std240"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std60"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std20"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_highpass_std5"].rank(ascending=True) * 0.01 \
-                                    + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
-                                    + df_date["e_rapid_down"].rank(ascending=True) * 0.03
-
-            LB.to_csv_feather(df_date, a_path)
-            print(asset, freq, trade_date, "date updated")
-
 def update_date_E_Oth(asset="E", freq="D", market="CN", big_update=True, step=1):
     trade_dates = get_trade_date(start_date="00000000", end_date=today(), freq=freq)
     for trade_date in trade_dates["trade_date"][::step]:
@@ -800,7 +759,7 @@ def update_date_Oth_analysis_market_D(freq, market="CN"):  # TODO add it to all 
     df_result.to_csv(path, index=False, encoding='utf-8_sig')
 
 
-def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
+def update_date_stock_market_all(start_date="00000000", end_date=today(), assets=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
     # check if big update and if the a previous saved file exists
     last_saved_date = "19990104"
     last_trade_date = get_last_trade_date("D")
@@ -867,85 +826,9 @@ def update_date_base(start_date="00000000", end_date=today(), assets=["E"], freq
     print("Date_Base UPDATED")
 
 
-def update_groups(assets=["E"], big_update=True):
-    # all stock market pct_chg
-    update_cj_index_000001_SH()
-
-    # initialize all group as dict
-    dict_group_instance_update = {}  # dict of array
-    dict_group_instance_saved = {}  # dict of array
-    for group, a_instance in c_groups_dict(assets=assets).items():
-        for instance in a_instance:
-            dict_group_instance_update[str(group) + "_" + str(instance)] = []
-            dict_group_instance_saved[str(group) + "_" + str(instance)] = get_group_instance(group + "_" + str(instance))
-
-    # get last saved trade_date on df_saved
-    last_trade_date = get_last_trade_date("D")
-    example_df = dict_group_instance_saved["asset_E"]
-    try:
-        last_saved_date = example_df.index[-1]
-    except:
-        last_saved_date = "19990101"
-
-    # if small update and saved_date==last trade_date
-    if last_trade_date == last_saved_date and (not big_update):
-        return print("ALL GROUP Up-to-date")
-
-    # initialize trade_date
-    df_trade_date = get_trade_date(end_date=today(), freq="D")
-    df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
-    print("START UPDATE GROUP since", last_saved_date)
-
-    # loop over date and get mean
-    for trade_date in df_trade_date.index:  # for each day
-        print(trade_date, "Updating GROUP")
-        df_date = get_date(trade_date=trade_date, assets=assets, freq="D")
-        for group, a_instance in c_groups_dict(assets=assets).items():  # for each group
-            df_date_grouped = df_date.groupby(by=group, ).mean()  # calculate mean
-            for instance, row in df_date_grouped.iterrows():  # append to dict
-                dict_group_instance_update[group + "_" + str(instance)].append(row)
-
-    # save all to df
-    for (key, a_update_instance), (key_saved, df_saved) in zip(dict_group_instance_update.items(), dict_group_instance_saved.items()):
-        df_update = pd.DataFrame(a_update_instance)
-        if not df_saved.empty:
-            df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
-
-        if not df_update.empty:
-            df_update.set_index(keys="trade_date",drop=True,inplace=True)#reset index after group
-        LB.to_csv_feather(df_update, LB.a_path(f"Market/CN/Backtest_Multiple/Setup/Stock_Market/Group/{key}"))
-        print(key, "UPDATED")
-
-
-#path =["column_name", True]
-def ts_code_series_to_excel(df_ts_code, path, sort: list = [], asset=["I", "E", "FD"], group_result=True):
-    df_ts_code = add_static_data(df_ts_code, assets=asset)
-    dict_df = {"Overview": df_ts_code}
-
-    # tab group
-    if group_result:
-        for group_column in LB.c_groups_dict(asset).keys():
-            try:
-                df_groupbyhelper = df_ts_code.groupby(group_column)
-                df_group = df_groupbyhelper.mean()
-                df_group["count"] = df_groupbyhelper.size()
-                print("not bug until here")
-                if sort:
-                    df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
-                dict_df[group_column] = df_group
-            except Exception as e:
-                print("error in group results", e)
-
-    LB.to_excel(path_excel=path, dict_df=dict_df)
-
-
-def update_cj_index_000001_SH():
-    df = get_stock_market_all()
-    df = df[["pct_chg"]]
-    a_path = LB.a_path("Market/CN/Asset/I/D/CJ000001.SH")
-    LB.to_csv_feather(df, a_path)
-
-
+@LB.except_empty_df
+def get_file(path):
+    return pd.read_csv(path)
 
 def get(a_path=[], set_index=""):  # read feather first
     for counter, func in [(1, pd.read_feather), (0, pd.read_csv)]:
@@ -957,43 +840,28 @@ def get(a_path=[], set_index=""):  # read feather first
                 df.set_index(keys=set_index, drop=True, inplace=True)
             return df
         except Exception as e:
-            print(f"read error {func}", e)
+            pass #print(f"read error {func.__name__}", e)
+    else:
+        print("DB READ File Not Exist!", a_path[0]+".feather")
+        return pd.DataFrame()
 
-    print("DB READ File Not Exist!", a_path[0])
-    return pd.DataFrame()
 
-
-def get_ts_code(asset="E", market="CN"):
-    df = get(LB.a_path("Market/" + market + "/General/ts_code_" + asset), set_index="ts_code")
-    if (asset == "FD"):
-        df = df[df["delist_date"].isna()]
-        df = df[df["market"] == "E"]  # for now, only consider Equity market traded funds
-    return df
+def get_ts_code(a_asset=["E"], market="CN"):
+    a_result=[]
+    for asset in a_asset:
+        df = get(LB.a_path(f"Market/{market}/General/ts_code_{asset}"), set_index="ts_code")
+        if (a_asset == "FD"):
+            df = df[df["delist_date"].isna()]
+            df = df[df["market"] == "E"]  # for now, only consider Equity market traded funds
+        a_result.append(df)
+    return pd.concat(a_result,sort=False)
 
 def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
-    return get(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "/" + str(ts_code)), set_index="trade_date")
+    return get(LB.a_path(f"Market/{market}/Asset/{asset}/{freq}/{ts_code}"), set_index="trade_date")
 
-
-def get_asset_expanding(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
-    df = get(LB.a_path("Market/" + market + "/Asset/" + str(asset) + "/" + str(freq) + "_Expanding/" + str(ts_code)), set_index="trade_date")
-    df["ts_code"] = ts_code  # TODO FOROGT TO ADD, PLEASE REMOVE IN FUTURE
-    return df
-
-
-@LB.except_empty_df
-def get_file(path):
-    return pd.read_csv(path)
-
-
-def get_ts_code_all(market="CN"):
-    return get(LB.a_path("Market/" + market + "/General/ts_code_all"), set_index="ts_code")
-
-
-def get_group_instance(group_instance="asset_E", market="CN"):
-    return get(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/Group/" + group_instance), set_index="trade_date")
-
-
-
+#should be fully replaced by get asset by now. Waiting for bug confirmation
+# def get_group_instance(ts_code="asset_E", market="CN", freq="D"):
+#     return get(LB.a_path(f"Market/{market}/Asset/G/{freq}/{ts_code}"), set_index="trade_date")
 
 
 def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
@@ -1027,11 +895,14 @@ def get_trade_date(start_date="000000", end_date=today(), freq="D", market="CN")
     df = get(LB.a_path("Market/" + market + "/General/trade_date_" + freq), set_index="trade_date")
     return df[(df.index >= int(start_date)) & (df.index <= int(end_date))]
 
+def get_trade_cal_D(start_date="19900101", end_date="88888888", a_is_open=[1]):
+    df = get(LB.a_path("Market/CN/General/trade_cal_D"), set_index="cal_date")
+    df.index.name = "trade_date"
+    return df[(df["is_open"].isin(a_is_open)) & (df.index >= int(start_date)) & (df.index <= int(end_date))]
 
-def get_last_trade_date(freq="D", market="CN"):
+def get_last_trade_date(freq="D", market="CN",type=str):
     df_trade_date = get_trade_date(start_date="00000000", end_date=LB.today(), freq=freq, market=market)
-    return str(df_trade_date.index[-1])
-
+    return type(df_trade_date.index[-1])
 
 def get_next_trade_date(freq="D", market="CN"):  # TODO might be wrong
     df = get_trade_cal_D(a_is_open=[1])  # todo next trade date should be set to 17:00 after tushare has released its new data
@@ -1040,37 +911,21 @@ def get_next_trade_date(freq="D", market="CN"):  # TODO might be wrong
     return df.at[0, "trade_date"]
 
 
-def get_trade_cal_D(start_date="19900101", end_date="88888888", a_is_open=[1]):
-    df = get(LB.a_path("Market/CN/General/trade_cal_D"), set_index="cal_date")
-    df.index.name = "trade_date"
-    return df[(df["is_open"].isin(a_is_open)) & (df.index >= int(start_date)) & (df.index <= int(end_date))]
-
-
 def get_stock_market_all(market="CN"):
-    return get(LB.a_path("Market/" + market + "/Backtest_Multiple/Setup/Stock_Market/all_stock_market"), set_index="trade_date")
-
+    return get(LB.a_path(f"Market/{market}/Backtest_Multiple/Setup/Stock_Market/all_stock_market"), set_index="trade_date")
 
 def get_industry_member(level, market="CN"):
-    return get(LB.a_path("Market/" + market + "/General/industry_" + level), set_index="index_code")
-
+    return get(LB.a_path(f"Market/{market}/General/industry_{level}"), set_index="index_code")
 
 def get_industry_index(index, level, market="CN"):
-    return get(LB.a_path("Market/" + market + "/General/industry/" + level + "/" + index), set_index="con_code")
+    return get(LB.a_path(f"Market/{market}/General/industry/{level}/{index}"), set_index="con_code")
 
 
 def get_date(trade_date, assets=["E"], freq="D", market="CN"):
-    if len(assets) != 1:
-        return get_date_all()
+    if len(assets) != 1: #for efficieny use get_date_all
+        return get_date_all(trade_date=trade_date)
     else:
-        return  get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "/" + str(trade_date)), set_index="ts_code")
-
-
-def get_date_expanding(trade_date, assets=["E"], freq="D", market="CN"):
-    if len(assets) != 1:
-        return get_date_all()
-    else:
-        return get(LB.a_path("Market/" + market + "/Date/" + assets[0] + "/" + freq + "_Expanding/" + str(trade_date)), set_index="ts_code")
-
+        return  get(LB.a_path(f"Market/{market}/Date/{assets[0]}/{freq}/{trade_date}"), set_index="ts_code")
 
 def get_date_all(trade_date, assets=["E", "I", "FD"], freq="D", format=".feather", market="CN"):
     if len(assets) == 1:
@@ -1079,28 +934,42 @@ def get_date_all(trade_date, assets=["E", "I", "FD"], freq="D", format=".feather
         raise NotImplementedError('This function is not implemented yet')
     # TODO implement it
 
-
 def get_date_E_oth(trade_date, oth_name, market="CN"):
-    return get(LB.a_path("Market/" + market + "/Date/E/" + oth_name + "/" + str(trade_date)), set_index="")  # nothing to set
+    return get(LB.a_path(f"Market/{market}/Date/E/{oth_name}/{trade_date}"), set_index="")  # nothing to set
 
+#path =["column_name", True]
+def to_excel_with_static_data(df_ts_code, path, sort: list = [], asset=["I", "E", "FD"], group_result=True):
+    df_ts_code = add_static_data(df_ts_code, assets=asset)
+    dict_df = {"Overview": df_ts_code}
 
-def get_market(freq, market="CN"):
-    return get(LB.a_path("Market/" + market + "/Date/market/" + freq + ".csv"), set_index="")  # dont know what to set
-
+    # tab group
+    if group_result:
+        for group_column in LB.c_groups_dict(asset).keys():
+            try:
+                df_groupbyhelper = df_ts_code.groupby(group_column)
+                df_group = df_groupbyhelper.mean()
+                df_group["count"] = df_groupbyhelper.size()
+                print("not bug until here")
+                if sort:
+                    df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
+                dict_df[group_column] = df_group
+            except Exception as e:
+                print("error in group results", e)
+    LB.to_excel(path_excel=path, dict_df=dict_df)
 
 # needs to be optimized for speed and efficiency
 def add_static_data(df, assets=["E", "I", "FD"], market="CN"):
     df_result = pd.DataFrame()
     for asset in assets:
-        df_asset = get_ts_code(asset)
+        df_asset = get_ts_code(a_asset=[asset])
         df_result = df_result.append(df_asset, sort=False, ignore_index=False)
     df.index.name = "ts_code"  # important, otherwise merge will fail
     return pd.merge(df, df_result, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
 
-# require: trade_date
-# function: adds another asset close price
 def add_asset_comparison(df, freq, asset, ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"]):
+    """ require: trade_date
+        function: adds another asset close price"""
     dict_rename = {column: f"{column}_{ts_code}" for column in a_compare_label}
     df_compare = get_asset(ts_code, asset, freq)[a_compare_label]
     df_compare.rename(columns=dict_rename, inplace=True)
@@ -1116,21 +985,25 @@ def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", mark
     return pd.merge(df, df_analysis, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
 #TODO preload also for E, FD, I
-def preload(load="E", step=1, query="",period_abv=240):
+def preload(load="E", step=1, query_on_df="", period_abv=240):
+    """
+    query_on_df: filters df_asset/df_date by some criteria. If the result is empty dataframe, it will NOT be included in dict_result
+    """
     dict_result = {}
-    df_listing = get_ts_code(asset=load)[::step] if load in LB.c_assets() else get_trade_date(start_date="20000101")[::step]
-    func = get_asset if load in LB.c_assets() else get_date
-    kwargs= {"asset":load} if load in LB.c_assets() else {}
+    df_listing = get_ts_code(a_asset=[load])[::step] if load in LB.c_assets_g() else get_trade_date(start_date="20000101")[::step]
+    func = get_asset if load in LB.c_assets_g() else get_date
+    kwargs= {"asset":load} if load in LB.c_assets_g() else {}
 
     print(f"try to load {len(df_listing)}")
     bar = tqdm(range(len(df_listing)))
-    bar.set_description(f"loading {load}...")
+
     for index, i in zip(df_listing.index, bar):
+        bar.set_description(f"{i}: {load}: {index}")
         try:
             df = func(index, **kwargs)
             df = df[(df["period"] > period_abv)]
-            if query:
-                df = df.query(expr=query)
+            if query_on_df:
+                df = df.query(expr=query_on_df)
             if df.empty:
                 continue
             else:  # only take df that satisfy ALL conditions and is non empty
@@ -1142,6 +1015,7 @@ def preload(load="E", step=1, query="",period_abv=240):
     print(f"really loaded {len(dict_result)}")
     return dict_result
 
+"""shuld be fully replaced by preload by now"""
 def preload_groups(assets=["E"]):
     dict_result = {}
     dict_group_label_pair = c_groups_dict(assets=assets, a_ignore=["asset", "industry3"])
@@ -1150,8 +1024,9 @@ def preload_groups(assets=["E"]):
     bar.set_description(f"loading groups...")
     for (group, instance_array),i in zip(dict_group_label_pair.items(), bar):
         for instance in instance_array:
-            dict_result[group + "_" + str(instance)] = get_group_instance(group_instance=group + "_" + str(instance))
+            dict_result[group + "_" + str(instance)] = get_asset(ts_code=group + "_" + str(instance), asset="G")
     bar.close()
+
     return dict_result
 
 
@@ -1179,9 +1054,8 @@ def update_all_in_one(big_update=False):
     #multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
     #
     # # 1.3. GENERAL - TS_CODE
-    # for asset in c_assets():
+    #for asset in c_assets() + ["G"]:
     #     update_general_ts_code(asset)  # ALWAYS UPDATE
-    # update_general_ts_code_all()
     # #
     # # 1.5. GENERAL - TRADE_DATE
     # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
@@ -1194,7 +1068,7 @@ def update_all_in_one(big_update=False):
     # 2.2. ASSET - DF
     #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
     #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
+    #multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
 
 
     # 3.1. DATE - OTH
@@ -1206,7 +1080,7 @@ def update_all_in_one(big_update=False):
     #multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
     #
     # # 3.3. DATE - BASE
-    #update_date_base(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+    #update_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
     #
     # # 3.4. DATE - TREND
     # df = get_stock_market_all()  # ALWAS
@@ -1214,7 +1088,7 @@ def update_all_in_one(big_update=False):
     # LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Backtest_Multiple/Setup/Stock_Market/all_stock_market"))
     #
     # # 4.1. CUSTOM - INDEX
-    #update_groups(big_update=big_update)
+    update_assets_G_D(big_update=big_update)
 
 
 # speed order=remove apply and loc, use vectorize where possible
@@ -1230,7 +1104,10 @@ if __name__ == '__main__':
     try:
         df_asset = get_asset()
         big_update = False
-        update_all_in_one(big_update=big_update)
+
+        test=get_asset(ts_code="asset_E", asset="G", freq="D", market="CN")
+
+        #update_all_in_one(big_update=big_update)
         # TODO add update ts_code back and update it make it fastr
 
 

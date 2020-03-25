@@ -191,7 +191,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + ["pct_chg_" + x for x in [x[1] for x in p_compare]] + ["comp_chg_" + x for x in [x[1] for x in p_compare]] + a_trend_label]
 
     # write portfolio
-    portfolio_path = "Market/CN/Backtest_Multiple/Result/Portfolio_" + str(setting["id"])
+    portfolio_path = "Market/CN/Btest/Result/Portfolio_" + str(setting["id"])
     LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(portfolio_path + "/overview"), skip_feather=True)
     LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(portfolio_path + "/trade_h"), skip_feather=True)
     LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(portfolio_path + "/chart"), index_relevant=True, skip_feather=True)
@@ -249,7 +249,8 @@ def btest_once(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates.index.values
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
-    df_group_instance_all = DB.preload_groups(assets=["E"])
+    #df_group_instance_all = DB.preload_groups(assets=["E"])
+    df_group_instance_all = DB.preload(load="E")
     print("what", df_stock_market_all.index)
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
@@ -572,7 +573,7 @@ def btest_once(settings=[{}]):
             print("summarizing ERROR:", e)
             traceback.print_exc()
 
-    path = LB.a_path("Market/CN/Backtest_Multiple/Backtest_Summary")
+    path = LB.a_path("Market/CN/Btest/Backtest_Summary")
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
     df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
     LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
