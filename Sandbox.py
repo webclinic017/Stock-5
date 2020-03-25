@@ -133,7 +133,7 @@ def daily_stocks_abve():
                 9% everday  2% stocks
                 10% everday, 1,5% Stocks  """
 
-    df_asset = DB.preload("asset", step=2)
+    df_asset = DB.preload("E", step=2)
     df_result = pd.DataFrame()
     for ts_code, df in df_asset.items():
         print("ts_code", ts_code)
@@ -2285,7 +2285,7 @@ def find_flat(df, ibase):
     plt.show()
 
 
-# test if stocks that are currently at their best, will last for the next freq.
+# test if stocks that are currently at their best, will last for the next freq. If I remember correctly the hypo test failed. This strategy dont work
 def hypothesis_test():
     """
     1. go through all date
@@ -2317,53 +2317,75 @@ def hypothesis_test():
     df_result.to_csv("hypo_test.csv")
 
 
-def macd_for_all(a_freqs=[5, 10, 20, 40, 60, 120, 180, 240, 300, 500, 620, 750], type=4, preload="stocks"):
+#generate test for all fund stock index and for all strategy and variables.
 
-    if preload=="stocks":
-        dict_preload=DB.preload(load="asset",step=1)
-    elif preload=="groups":
+def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4, asset="E", step=1):
+
+    if asset in LB.c_assets():
+        dict_preload=DB.preload(load=asset,step=step,period_abv=1000)
+    elif asset== "groups":
         dict_preload=DB.preload_groups()
 
-    # for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
-    #     if sfreq<bfreq:
-    #         path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
-    #         if os.path.exists(path):
-    #             continue
-    #
-    #         df_result = pd.DataFrame()
-    #         for ts_code, df_asset in dict_preload.items():
-    #             print(f"{ts_code}, sfreq {sfreq}, bfreq {bfreq}")
-    #             if len(df_asset)<2000:
-    #                 continue
-    #
-    #             macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
-    #
-    #             df_asset["tomorrow1"]=df_asset["close"].shift(-1)/df_asset["close"]
-    #             df_result.at[ts_code,"period"]=len(df_asset)
-    #             df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
-    #
-    #             df_macd_buy=df_asset[df_asset[macd_name]==20]
-    #             df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
-    #
-    #             df_macd_sell = df_asset[df_asset[macd_name] == -20]
-    #             df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
-    #
-    #         df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
-    #         df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
-    #         df_result.to_csv(path,encoding='utf-8_sig')
+    for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
+        if sfreq<bfreq:
+            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{asset}.xlsx"
+            if os.path.exists(path):
+                continue
+
+            df_result = pd.DataFrame()
+            real_counter=-1
+            for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
+
+                real_counter=real_counter+1
+                print(f"{counter}_{real_counter} asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
+
+                try:
+                    macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
+                except Exception as e:
+                    print("error in macd_for_all", e)
+                    continue
+                df_asset["tomorrow1"]=1+ df_asset["open.fgain1"].shift(-1) #one day delayed signal. today signal, tomorrow buy, atomorrow sell
+                df_result.at[ts_code,"period"]=len(df_asset)
+                df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
+                df_result.at[ts_code,"general_daily_winrate"]=((df_asset["tomorrow1"]>1).astype(int)).mean()
+
+                df_macd_buy=df_asset[df_asset[macd_name]==20]
+                df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
+                df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
+
+                df_macd_sell = df_asset[df_asset[macd_name] == -20]
+                df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
+                df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
+
+
+            df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
+            df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
+            df_result[ "up_down_gmean_diff"] =df_result["uptrend_gmean"]-df_result["downtrend_gmean"]
+
+            DB.ts_code_series_to_excel(df_ts_code=df_result,path=path, sort=[])
+
 
     #create summary for all
     df_summary=pd.DataFrame()
     for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
         if sfreq < bfreq:
-            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{preload}.csv"
-            df_macd=pd.read_csv(path)
+            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{asset}.xlsx"
+            xlsx=pd.ExcelFile(path)
+            df_macd=pd.read_excel(xlsx,"Overview")
             df_summary.at[path,"gmean"]=df_macd["gmean"].mean()
+            df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
+
             df_summary.at[path,"uptrend_gmean"]=df_macd["uptrend_gmean"].mean()
+            df_summary.at[path, "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
+
             df_summary.at[path,"downtrend_gmean"]=df_macd["downtrend_gmean"].mean()
+            df_summary.at[path, "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
+
             df_summary.at[path,"up_better_mean"]=df_macd["up_better_mean"].mean()
             df_summary.at[path,"up_better_sell"]=df_macd["up_better_sell"].mean()
-    df_summary.to_excel(f"Market/CN/Backtest_Single/macd/macd_for_all_summary_type{type}_{preload}.xlsx")
+            df_summary.at[path,"up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
+
+    df_summary.to_excel(f"Market/CN/Backtest_Single/macd/macd_for_all_summary_type{type}_{asset}.xlsx")
 
 
 
@@ -2378,7 +2400,8 @@ def macd_for_one(sfreq=240,bfreq=750,ts_code="000002.SZ",type=1,score=20):
 if __name__ == '__main__':
 
 
-    macd_for_all(type=1, preload="stocks")
+    macd_for_all(type=1, asset="I", step=1)
+    #macd_for_all(type=1, asset="I", step=1)
     #macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
     #hypothesis_test()
 

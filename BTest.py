@@ -45,7 +45,7 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
             if (key == "p_compare"):
                 setting["p_compare"] = ', '.join([x[1] for x in setting["p_compare"]])
             else:
-                setting[key] = ', '.join(value)
+                setting[key] = ', '.join([str(x) for x in value])
 
     # create trade_h and port_h from array
     # everything under this line has integer as index
@@ -112,16 +112,16 @@ def btest_portfolio(setting_original, dict_trade_h, df_stock_market_all, backtes
     df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
 
     df_port_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
-    df_port_overview.at[0, "asset_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
-    df_port_overview.at[0, "all_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
+    df_port_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
+    df_port_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
 
-    df_port_overview.at[0, "asset_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()) #everytime you sell a stock
+    df_port_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()) #everytime you sell a stock
     df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna()) #everyday
 
-    df_port_overview.at[0, "asset_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean() #everytime you sell a stock
+    df_port_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean() #everytime you sell a stock
     df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean() #everyday
 
-    df_port_overview.at[0, "asset_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
+    df_port_overview.at[0, "asset_sell_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
     df_port_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
 
     try:
@@ -290,7 +290,9 @@ def btest_once(settings=[{}]):
             now = mytime.time()
             setting["id"] = datetime.now().strftime('%Y%m%d%H%M%S')
 
-            p_maxsize = setting["p_maxsize"]
+            a_p_maxsize = setting["p_maxsize"]
+            p_maxsize = a_p_maxsize[0] if a_p_maxsize[1] else int((a_p_maxsize[0]/100) * len(df_today)) #if true take fixed value. False takes percentage of all trading stocks today
+
             p_feedbackday = setting["p_feedbackday"]
             market_trend = df_stock_market_all.at[int(today), setting["trend"]] if setting["trend"] else 1
 
@@ -302,9 +304,16 @@ def btest_once(settings=[{}]):
             # 1.1 FILTER
             a_filter = True
             for column, a_op in setting["f_query_asset"].items():  # very slow and expensive for small operation because parsing the string takes long
-                print("filter", column)
                 func = a_op[0]
-                a_filter = a_filter & func(df_today[column], a_op[1])
+                if a_op[2]:
+                    argument2 = a_op[1]
+                    print(f"filter {column} {func.__name__} {argument2}", )
+                else:
+                    argument2= df_today[a_op[1]] # compare against fixed value(True) or against another series(False)
+                    print(f"filter {column} {func.__name__} {argument2.name}", )
+
+                a_filter = a_filter & func(df_today[column], argument2)
+
             df_today_mod = df_today[a_filter]
             print("today after filter", len(df_today_mod))
             now = print_and_time(setting_count=setting_count, phase=f"FILTER", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
@@ -444,7 +453,7 @@ def btest_once(settings=[{}]):
                 # sweight does not exist. using random values
                 else:
                     print("select using random criteria")
-                    df_today_mod["rank_final"] = np.random.randint(low=1,high=len(df_today_mod)+1)
+                    df_today_mod["rank_final"] = np.random.randint(low=0,high=len(df_today_mod), size=len(df_today_mod))
 
                 now = print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
                                      prev_time=now)
@@ -462,24 +471,37 @@ def btest_once(settings=[{}]):
                     # 6.7 PORTFOLIO BUY SELECT TOMORROW: select Stocks that really TRADES
                     df_select_tomorrow = df_tomorrow[df_tomorrow.index.isin(df_select.index)]
 
-                    if len(df_select_tomorrow) > buyable_size:
+
+                    #if count stocks that trade tomorrow
+                    if len(df_select_tomorrow) >= buyable_size:
                         break
                     else:
                         print(f"selection failed, reselect {i}")
+
+                #if have not found enough stocks that trade tomorrow
                 else:
                     #this probably means none of the stocks meats the criteria due to filter and rank.
                     #for none of the selected stocks trade tomorrow
                     #or something wrong with the ranking
                     #or you buy less than the size you want to buy
                     #LB.sound("error.mp3")
+                    #df_select_tomorrow=pd.DataFrame()
+
+                    #two options.
+                    # case 1 normal test: if max port size is 10 but only 5 stocks met that criteria: carry and buy 5
+
+                    # case 2 single stock test: if max port size is 1 but only 0 stocks met that criteria: not carry and buy 0
                     pass
 
                 # carry final rank, otherwise the second select will not be able to select
-                df_select_tomorrow["rank_final"] = df_today_mod["rank_final"]
+                df_select_tomorrow["rank_final"] = df_today_mod.loc[df_select_tomorrow.index, "rank_final"]
 
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 2
                 df_select_tomorrow = try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by=setting["f_percentile_column"])
+
                 now = print_and_time(setting_count=setting_count, phase=f"BUY SELECT", dict_trade_h_hold=dict_trade_h[tomorrow]["hold"], dict_trade_h_buy=dict_trade_h[tomorrow]["buy"], dict_trade_h_sell=dict_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+
+
 
                 # 6.11 BUY EXECUTE:
                 p_fee = setting["p_fee"]
@@ -561,11 +583,11 @@ def btest_multiple(loop_indicator=1):
     a_settings = []
     setting_base = {
         # general = Non changeable through one run
-        "start_date": "20000101",
+        "start_date": "20050101",
         "end_date": "20200101",
         "freq": "D",
         "market": "CN",
-        "assets": ["E"],  # E,I,FD
+        "assets": ["I"],  # E,I,FD,G
 
         # meta
         "id": "",  # datetime.now().strftime('%Y%m%d%H%M%S'), but done in backtest_once_loop
@@ -577,7 +599,7 @@ def btest_multiple(loop_indicator=1):
         # buy focus = Select.
         "trend": False,  # possible values: False(all days),trend2,trend3,trend240. Basically trend shown on all_stock_market.csv
         "f_percentile_column": "rank_final",  # always from small to big. 0%-20% is small.    80%-100% is big. (0 , 18),(18, 50),(50, 82),( 82, 100)
-        "f_query_asset": {"period": [operator.ge, 240]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
+        "f_query_asset": {"period": [operator.ge, 240, True]},  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
         "f_query_date": {},  # filter days vs filter assets
 
         "s_weight1": {  # ascending True= small, False is big
@@ -604,12 +626,12 @@ def btest_multiple(loop_indicator=1):
         # int: random_weight: random number spread to be added to asset # TODO add small random weight to each
 
         # portfolio
-        "p_capital": 10000,  # start capital
+        "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 1,  # not too low, otherwise volatility too big
+        "p_maxsize": [30,True],  # True for fixed number, False for Percent. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
-        "p_feedbackday": 60,
+        "p_feedbackday": 20,
         "p_proportion": False,  # False = evenly weighted, "prop" = Score propotional weighted #fiboTODO Add fibonacci proportion
         "p_winner_abv": False,  # options False, >1. e.g. 1.2 means if one stock gained 20%, sell
         "p_loser_und": False,  # options False, <1. e.g. 0.8 means if one stocks gained -20%, sell
@@ -622,21 +644,30 @@ def btest_multiple(loop_indicator=1):
     a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["trend2", False, 1, 1], ["trend10", False, 1, 1], ["candle_net_pos", False, 1, 1], ["candle_net_pos5", False, 1, 1], ["pjump_up", False, 1, 1], ["pjump_up10", False, 1, 1], ["ivola", True, 1, 1], ["ivola5", True, 1, 1],
                  ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
 
+
+    name_sample=DB.get_ts_code()
+    name_sample=list(name_sample["name"].sample(10))
+
     # settings creation
-    for zlmacd in ["zlmacd_close.(1, 300, 500)"]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
-        for signal in [10,-10]:
-            setting_copy = copy.deepcopy(setting_base)
 
-            #filter
-            setting_copy["f_query_asset"] ={"period": [operator.ge, 240],
-                                            zlmacd : [operator.eq, signal],
-                                            "name": [operator.eq, "平安银行"],}
-                                            #"name": [operator.eq, "平安银行"],}
+    # "ema2_close.(1, 10, 20)"
+    for ema in ["ema1_close.(1, 5, 10)","ema1_close.(1, 10, 20)","ema1_close.(1, 240, 300)"]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
+    #for zlmacd in ["zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 5, 10)"]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
+        for signal in [operator.gt,operator.lt]:
+            #for exchange in ["创业板","中小板","主板"]:
+                setting_copy = copy.deepcopy(setting_base)
 
-            #s weight
-            setting_copy["s_weight1"] ={}
-            a_settings.append(setting_copy)
-            print(setting_copy["s_weight1"])
+                #filter
+                setting_copy["f_query_asset"] ={"period": [operator.ge, 1000,True],
+                                                "close" : [signal, ema, False],
+                                                #"exchange": [operator.eq, exchange,True],
+                                                }
+                                                #"name": [operator.eq, "平安银行"],}
+
+                #s weight
+                setting_copy["s_weight1"] ={}
+                a_settings.append(setting_copy)
+                print(setting_copy["s_weight1"])
 
 
     print("Total Settings:", len(a_settings))
@@ -647,6 +678,18 @@ if __name__ == '__main__':
     try:
         pr = cProfile.Profile()
         pr.enable()
+
+        #
+        # df_asset=DB.get_asset(ts_code="600499.SH")
+        # df_asset = df_asset[(df_asset["period"] > 2000)]
+        #
+        # df_asset["tomorrow1"]=1+ df_asset["open.fgain1"].shift(-1)
+        # gmeanis = gmean(df_asset["tomorrow1"].dropna())
+        # print(gmeanis)
+        #
+        #
+        # pct_chg=LB.my_gmean(df_asset["pct_chg"])
+        # print(pct_chg)
 
 
         btest_multiple(5)

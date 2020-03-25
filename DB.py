@@ -601,10 +601,12 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):  # S
 
                 row_number = dict_lookup_table[ts_code]  # lookup table can not be changed while iterating over it.
 
-                print(f"step {step}, ts_code {ts_code}, len {len(df_asset)}  row number {row_number}")
+                #debugger. do not delete
+                #print(f"step {step}, ts_code {ts_code}, len {len(df_asset)}  row number {row_number}")
                 if int(df_asset.index[row_number]) == int(trade_date):
                     a_date.append(df_asset.loc[trade_date].to_numpy().flatten())
                     dict_lookup_table[ts_code] = dict_lookup_table[ts_code] + step
+
 
                 # try:
                 #     if int(df_asset.index[row_number]) == int(trade_date):
@@ -915,7 +917,8 @@ def update_groups(assets=["E"], big_update=True):
         print(key, "UPDATED")
 
 
-def ts_code_series_to_excel(df_ts_code, path, sort: list = ["column_name", True], asset=["I", "E", "FD"], group_result=True):
+#path =["column_name", True]
+def ts_code_series_to_excel(df_ts_code, path, sort: list = [], asset=["I", "E", "FD"], group_result=True):
     df_ts_code = add_static_data(df_ts_code, assets=asset)
     dict_df = {"Overview": df_ts_code}
 
@@ -926,14 +929,12 @@ def ts_code_series_to_excel(df_ts_code, path, sort: list = ["column_name", True]
                 df_groupbyhelper = df_ts_code.groupby(group_column)
                 df_group = df_groupbyhelper.mean()
                 df_group["count"] = df_groupbyhelper.size()
-                print("not bug here")
+                print("not bug until here")
                 if sort:
                     df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
                 dict_df[group_column] = df_group
             except Exception as e:
                 print("error in group results", e)
-
-
 
     LB.to_excel(path_excel=path, dict_df=dict_df)
 
@@ -1114,27 +1115,31 @@ def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", mark
     df_analysis = df_analysis[final_score_label]
     return pd.merge(df, df_analysis, how='left', on=["ts_code"], suffixes=[False, False], sort=False)
 
-
-def preload(load="asset", step=1, query=""):
+#TODO preload also for E, FD, I
+def preload(load="E", step=1, query="",period_abv=240):
     dict_result = {}
-    df_listing = get_ts_code()[::step] if load == "asset" else get_trade_date(start_date="20000101")[::step]
-    func = get_asset if load == "asset" else get_date
+    df_listing = get_ts_code(asset=load)[::step] if load in LB.c_assets() else get_trade_date(start_date="20000101")[::step]
+    func = get_asset if load in LB.c_assets() else get_date
+    kwargs= {"asset":load} if load in LB.c_assets() else {}
 
+    print(f"try to load {len(df_listing)}")
     bar = tqdm(range(len(df_listing)))
     bar.set_description(f"loading {load}...")
-    for iterator, i in zip(df_listing.index, bar):
+    for index, i in zip(df_listing.index, bar):
         try:
-            df = func(iterator)
-            df = df[(df["period"] > 240)]
+            df = func(index, **kwargs)
+            df = df[(df["period"] > period_abv)]
             if query:
                 df = df.query(expr=query)
             if df.empty:
                 continue
             else:  # only take df that satisfy ALL conditions and is non empty
-                dict_result[iterator] = df
-        except:
-            pass
+                dict_result[index] = df
+        except Exception as e:
+            print("preload exception", e)
     bar.close()
+
+    print(f"really loaded {len(dict_result)}")
     return dict_result
 
 def preload_groups(assets=["E"]):

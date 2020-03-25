@@ -288,7 +288,9 @@ def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     return add_to
 
 
-#future n days from today on
+#future n days from today on. e.g. open.fgain1 for 20080101 is 20080102/20080101
+#CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
+#day1: Signal tells you to buy. day2: BUY. day3. SELL
 def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.fgain{freq}"
     add_column(df, add_to, f"close", 1)

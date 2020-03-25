@@ -307,7 +307,12 @@ def close_file(filepath):
     filepath = "D:/GoogleDrive/私人/私人 Stock 2.0/" + filepath
     xl = Dispatch('Excel.Application')
     wb = xl.Workbooks.Open(filepath)
+    xl.Quit()
     wb.Close(True)
+
+    #new
+    xl.DisplayAlerts=False
+
 
 
 def groups_dict_to_string_iterable(dict_groups: dict):

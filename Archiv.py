@@ -361,7 +361,9 @@ def asset_volatility(start_date, end_date, assets, freq):
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
 def asset_bullishness():
     from scipy.stats import gmean
-    df_ts_code = DB.get_ts_code()[::1]
+    df_ts_code_E = DB.get_ts_code(asset="E")[::1]
+    df_ts_code_I = DB.get_ts_code(asset="I")[::1]
+    df_ts_code=df_ts_code_E.append(df_ts_code_I)
     df_result = pd.DataFrame()
     a_freqs = [10, 20, 60, 120, 240]
 
@@ -507,9 +509,9 @@ if __name__ == '__main__':
     # df_asset=DB.get_asset()
     # df_asset["pcut"]=pd.qcut(df_asset["pct_chg"],10,labels=False)
     # df_asset[["pct_chg","pcut"]].to_csv("qcut.csv")
-    #asset_bullishness()
-    date_seasonal_stats(group_instance="")
-    date_seasonal_stats(group_instance="Exchange_主板")
-    date_seasonal_stats(group_instance="Exchange_中小板")
-    date_seasonal_stats(group_instance="Exchange_创业板")
+    asset_bullishness()
+    # date_seasonal_stats(group_instance="")
+    # date_seasonal_stats(group_instance="Exchange_主板")
+    # date_seasonal_stats(group_instance="Exchange_中小板")
+    # date_seasonal_stats(group_instance="Exchange_创业板")
     #price_statistic_predict()
