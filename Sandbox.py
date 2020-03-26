@@ -121,8 +121,6 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     return trend_name
 
 
-
-
 def polyfit(df, column, degree):
     s_index = df[column].index
     weights = np.polyfit(s_index, df[column], degree)
@@ -546,7 +544,7 @@ def macd_tor(df, ibase, sfreq):
     return [f"macd_tor_{name}", f"macd_tor_diff{name}", f"macd_tor_dea_{name}"]
 
 
-def custommacd(df, ibase, sfreq, bfreq, type=1, score=10):
+def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
     """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
         on daily chart, useable freqs are 12*60, 24*60 ,5*60
 
@@ -568,7 +566,7 @@ def custommacd(df, ibase, sfreq, bfreq, type=1, score=10):
         df[f"ema1_{name}"] = df[ibase].rolling(sfreq).mean()
         df[f"ema2_{name}"] = df[ibase].rolling(bfreq).mean()
         df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
-        df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq/2))
+        df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq / 2))
         df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
         df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
         df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
@@ -590,7 +588,7 @@ def custommacd(df, ibase, sfreq, bfreq, type=1, score=10):
         df[f"ema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
         df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
         df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
-    elif type == 4:  # macd with lowpass constructed from highpass
+    elif type == 4:  # macd with lowpass constructed from highpass. This basically replaces abv_ma
         df[f"ema1_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
         df[f"ema2_{name}"] = df[ibase] - highpass(df[ibase], int(bfreq))
         df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
@@ -609,6 +607,34 @@ def custommacd(df, ibase, sfreq, bfreq, type=1, score=10):
         df.loc[(df[f"zldea_{name}"] <= 0), f"zlmacd_{name}"] = -score
     df[f"zlmacd_{name}"] = df[f"zlmacd_{name}"].fillna(method="ffill")
     return [f"zlmacd_{name}", f"ema1_{name}", f"ema2_{name}", f"zldif_{name}", f"zldea_{name}"]
+
+
+def my_ismax(df, ibase, type=1, score=10):
+    name = f"{ibase}.{type}"
+    if type == 0:  # the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
+        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.95, 1).astype(int) * score
+    elif type == 1:
+        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.90, 1).astype(int) * score
+    elif type == 2:
+        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.85, 1).astype(int) * score
+    elif type == 3:
+        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.80, 1).astype(int) * score
+    df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
+    return [f"ismax_{name}"]
+
+
+def my_ismin(df, ibase, type=1, score=10):
+    name = f"{ibase}.{type}"
+    if type == 0:#the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
+        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.95, 1).astype(int) * score
+    elif type == 1:
+        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.90, 1).astype(int) * score
+    elif type == 2:
+        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.85, 1).astype(int) * score
+    elif type == 3:
+        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.80, 1).astype(int) * score
+    df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
+    return [f"ismin_{name}"]
 
 
 def slopecross(df, ibase, sfreq, bfreq, smfreq):
@@ -849,7 +875,7 @@ def indicator_test():
         df["expand_max"] = df[ibase].expanding(freq).max()
         df["is_max"] = ((df[ibase].rolling(10).mean() / df["expand_max"]) > 0.85).astype(int)
         df["is_max"] = df["is_max"] * 1.25 * score_base
-        custom_macd_name1, macd1_ema1, macd1_ema2, macd1_diff, macd1_dea = custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq * 2, type=4, score=score_base * 1)
+        custom_macd_name1, macd1_ema1, macd1_ema2, macd1_diff, macd1_dea = my_macd(df=df, ibase=ibase, sfreq=freq, bfreq=freq * 2, type=4, score=score_base * 1)
         # custom_macd_name5, macd5_ema1, macd5_ema2, macd5_diff, macd5_dea = custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq * 2, type=5, score=score_base * 1.05)
         # custom_macd_name2= custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq*2, type=2, score=score_base*1.05)
         # custom_macd_name3, macd3_ema1,macd3_ema2, macd3_diff,macd3_dea= custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq*2, type=3, score=score_base*1.1)
@@ -1506,8 +1532,8 @@ def highpass(s, n):
                 result = (1 - alpha1 / 2) * (1 - alpha1 / 2) * (close - 2 * close1 + close2) + 2 * (1 - alpha1) * result1 - (1 - alpha1) * (1 - alpha1) * result2  # ehlers formula
                 a_result.append(result)
 
-    #first n highpass are always too high. make them none in order not to disturb corret values
-    #a_result[:n*2] = [np.nan] * n*2
+    # first n highpass are always too high. make them none in order not to disturb corret values
+    # a_result[:n*2] = [np.nan] * n*2
     return a_result
 
 
@@ -2146,7 +2172,6 @@ def find_flat(df, ibase):
         2. count the peak and bot value of an OSCILATOR. IF last peak and bot are very close, then probably flat time
         """
 
-
         # MOMENTUM INDICATORS
         """ok 0 to 100, rarely over 60 https://www.fmlabs.com/reference/ADX.htm similar to dx"""
         df[f"adx{freq}"] = talib.ADX(df["high"], df["low"], df["close"], timeperiod=freq)
@@ -2199,7 +2224,6 @@ def find_flat(df, ibase):
         df["test"] = find_peaks_array(df[f"ppo{freq}"], freq)
         df["test"] = df["test"].fillna(method="ffill")
         print(df["test"].notna())
-
 
         """http://www.fmlabs.com/reference/PriceOscillatorPct.htm"""
         df[f"roc{freq}"] = talib.ROC(df["close"], freq)
@@ -2272,104 +2296,123 @@ def hypothesis_test():
     df_result.to_csv("hypo_test.csv")
 
 
-#generate test for all fund stock index and for all strategy and variables.
+# generate test for all fund stock index and for all strategy and variables.
+# a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
+def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
+    """
+    This is a general statistic test creator
+    1. provide all cases
+    2. The little difference between this and brute force: bruteforce only creates indicator, but not assign buy/sell signals with 10 or -10
+    Variables on how to loop over are in the function. apply function variables are in the dict kwargs
+    """
+    dict_preload = DB.preload(asset=asset, step=step, period_abv=1000, query_ts_code=query_ts_code)
 
-def macd_for_all(a_freqs=[5,10,20,40,60,80,120,160,200,240,360,500,750], type=4, asset="E", step=1,query_ts_code={}):
+    for one_kwarg in kwargs["a_kwargs"]:
+        param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
+        path = f"Market/CN/Backtest_Single/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        if os.path.exists(path):
+            print(f"path exists: {path}")
+            continue
 
+        df_result = pd.DataFrame()
+        for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
+            print(f"{counter}: asset:{asset}, {ts_code}, step:{step}, {kwargs['fname']}, {one_kwarg}")
 
-    dict_preload=DB.preload(load=asset,step=step,period_abv=1000,query_ts_code=query_ts_code)
-    # elif asset== "groups":
-    #     dict_preload=DB.preload_groups()
-
-    for sfreq,bfreq in LB.custom_pairwise_combination(a_freqs,2):
-        if sfreq<bfreq:
-            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{asset}.xlsx"
-            if os.path.exists(path):
+            try:
+                func_return_column = kwargs["func"](df=df_asset, **one_kwarg)[0]
+            except Exception as e:
+                print(f"error in {kwargs['fname']}", e)
                 continue
 
-            df_result = pd.DataFrame()
-            for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
-                print(f"{counter}: asset {asset}, {ts_code}, sfreq {sfreq}, bfreq {bfreq}, step {step}")
+            df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
+            df_result.at[ts_code, "period"] = len(df_asset)
+            df_result.at[ts_code, "gmean"] = gmean(df_asset["tomorrow1"].dropna())
+            df_result.at[ts_code, "general_daily_winrate"] = ((df_asset["tomorrow1"] > 1).astype(int)).mean()
 
-                try:
-                    macd_name=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=20)[0]
-                except Exception as e:
-                    print("error in macd_for_all", e)
-                    continue
-                df_asset["tomorrow1"]=1+ df_asset["open.fgain1"].shift(-1) #one day delayed signal. today signal, tomorrow buy, atomorrow sell
-                df_result.at[ts_code,"period"]=len(df_asset)
-                df_result.at[ts_code,"gmean"]=gmean(df_asset["tomorrow1"].dropna())
-                df_result.at[ts_code,"general_daily_winrate"]=((df_asset["tomorrow1"]>1).astype(int)).mean()
+            df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
+            df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna())
+            df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
 
-                df_macd_buy=df_asset[df_asset[macd_name]==20]
-                df_result.at[ts_code,"uptrend_gmean"]=gmean(df_macd_buy["tomorrow1"].dropna())
-                df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
+            df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
+            df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna())
+            df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
 
-                df_macd_sell = df_asset[df_asset[macd_name] == -20]
-                df_result.at[ts_code,"downtrend_gmean"]=gmean(df_macd_sell["tomorrow1"].dropna())
-                df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
+        df_result["up_better_mean"] = (df_result["uptrend_gmean"] > df_result["gmean"]).astype(int)
+        df_result["down_better_mean"] = (df_result["downtrend_gmean"] > df_result["gmean"]).astype(int)
+        df_result["up_down_gmean_diff"] = df_result["uptrend_gmean"] - df_result["downtrend_gmean"]
+        DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
 
+    # create summary for all
+    df_summary = pd.DataFrame()
+    df_uptrend_gmean = pd.DataFrame()
+    df_downtrend_gmean = pd.DataFrame()
+    df_up_better_mean = pd.DataFrame()
+    df_down_better_mean = pd.DataFrame()
+    for one_kwarg in kwargs["a_kwargs"]:
+        param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
+        path = f"Market/CN/Backtest_Single/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
 
-            df_result["up_better_mean"]=(df_result["uptrend_gmean"]>df_result["gmean"]).astype(int)
-            df_result["up_better_sell"]=(df_result["uptrend_gmean"]>df_result["downtrend_gmean"]).astype(int)
-            df_result[ "up_down_gmean_diff"] =df_result["uptrend_gmean"]-df_result["downtrend_gmean"]
+        print(f"summarizing {path}")
+        df_macd = pd.read_excel(path)
+        df_summary.at[path, "gmean"] = df_macd["gmean"].mean()
+        df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
+        df_summary.at[path, "uptrend_gmean"] = uptrend_gmean = df_macd["uptrend_gmean"].mean()
+        df_summary.at[path, "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
+        df_summary.at[path, "downtrend_gmean"] = downtrend_gmean = df_macd["downtrend_gmean"].mean()
+        df_summary.at[path, "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
+        df_summary.at[path, "up_better_mean"] = up_better_mean = df_macd["up_better_mean"].mean()
+        df_summary.at[path, "down_better_mean"] = down_better_mean = df_macd["down_better_mean"].mean()
+        df_summary.at[path, "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
 
-            DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
+        # create heatmap only if two frequencies are involved in creation
+        if "sfreq" in one_kwarg and "bfreq" in one_kwarg:
+            df_uptrend_gmean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = uptrend_gmean
+            df_downtrend_gmean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = downtrend_gmean
+            df_up_better_mean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = up_better_mean
+            df_down_better_mean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = down_better_mean
 
-
-    print(f"finished macd {asset}")
-    #create summary for all
-    df_summary=pd.DataFrame()
-    for sfreq, bfreq in LB.custom_pairwise_combination(a_freqs, 2):
-        if sfreq < bfreq:
-            path=f"Market/CN/Backtest_Single/macd/macd_for_all_sfreq{sfreq}_bfreq{bfreq}_type{type}_{asset}.xlsx"
-            xlsx=pd.ExcelFile(path)
-            df_macd=pd.read_excel(xlsx,"Overview")
-            df_summary.at[path,"gmean"]=df_macd["gmean"].mean()
-            df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
-
-            df_summary.at[path,"uptrend_gmean"]=df_macd["uptrend_gmean"].mean()
-            df_summary.at[path, "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
-
-            df_summary.at[path,"downtrend_gmean"]=df_macd["downtrend_gmean"].mean()
-            df_summary.at[path, "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
-
-            df_summary.at[path,"up_better_mean"]=df_macd["up_better_mean"].mean()
-            df_summary.at[path,"up_better_sell"]=df_macd["up_better_sell"].mean()
-            df_summary.at[path,"up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
-
-    df_summary.to_excel(f"Market/CN/Backtest_Single/macd/macd_for_all_summary_type{type}_{asset}.xlsx")
+    dict_summary = {"Overview": df_summary, "uptrend_gmean": df_uptrend_gmean, "downtrend_gmean": df_downtrend_gmean, "up_better_mean": df_up_better_mean, "down_better_mean": df_down_better_mean}
+    LB.to_excel(path=f"Market/CN/Backtest_Single/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", dict_df=dict_summary)
 
 
+def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
+    df_asset = DB.get_asset(ts_code=ts_code)
+    print("ts_code", ts_code)
+    macd_labels = my_macd(df=df_asset, ibase="close", sfreq=sfreq, bfreq=bfreq, type=type, score=score)
+    df_asset = df_asset[macd_labels + ["close"]]
+    Plot.plot_chart(df_asset, df_asset.columns)
+    # df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
 
-def macd_for_one(sfreq=240,bfreq=750,ts_code="000002.SZ",type=1,score=20):
-    df_asset=DB.get_asset(ts_code=ts_code)
-    print("ts_code",ts_code)
-    macd_labels=custommacd(df=df_asset,ibase="close",sfreq=sfreq,bfreq=bfreq,type=type,score=score)
-    df_asset=df_asset[macd_labels+["close"]]
-    Plot.plot_chart(df_asset,df_asset.columns)
-    #df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
+
+def statistic_initiator(fname="macd"):
+    # macd iterator generation
+    a_kwargs = []
+
+    if fname == "macd":
+        func = my_macd
+        for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
+            if sfreq < bfreq:
+                a_kwargs.append({"ibase": "close", "sfreq": sfreq, "bfreq": bfreq, "type": 4, "score": 1})
+    elif fname == "is_max":
+        func = my_ismax
+        for type in [1, 2, 3, 4]:
+            a_kwargs.append(a_kwargs.append({"ibase": "close", "type": type, "score": 1}))
+    elif fname == "is_min":
+        func = my_ismin
+        for type in [1, 2, 3, 4]:
+            a_kwargs.append(a_kwargs.append({"ibase": "close", "type": type, "score": 1}))
+
+    statistic_eval(asset="F", step=1, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="FD", step=3, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="G", step=1, query_ts_code={"G": ["on_asset == 'E'", "group != 'industry3'"]}, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="I", step=3, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="E", step=5, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+
 
 if __name__ == '__main__':
-
-    macd_for_all(type=1, asset="G", step=1,query_ts_code={"G":["on_asset == 'E'", "group != 'industry3'"]})
-    macd_for_all(type=1, asset="I", step=1)
-    macd_for_all(type=1, asset="E", step=1)
-    #macd_for_one(sfreq=5,bfreq=10,type=1, score=200,ts_code="600519.SH")
-    #hypothesis_test()
-
-
-    # find_peaks(df=df,ibase="close", a_n=[120])
-
-    # find_flat(df, "close")
-
-    # df_result=support_resistance_horizontal_expansive(df_asset=df)
-    # df_result.to_csv("support.csv")
-
-    # indicator_test()
+    statistic_initiator(fname="is_max")
 
 """
-
 useful techniqes
 1. MACD with EMA and SS
 2. Bandpass filter (as oscilator) + macd (bandpass is always later than MACD) 

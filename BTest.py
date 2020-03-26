@@ -250,7 +250,7 @@ def btest_once(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
     #df_group_instance_all = DB.preload_groups(assets=["E"])
-    df_group_instance_all = DB.preload(load="E")
+    df_group_instance_all = DB.preload(asset="E")
     print("what", df_stock_market_all.index)
     last_simulated_date = df_stock_market_all.index[-1]
     df_today_accelerator = pd.DataFrame()
@@ -279,8 +279,8 @@ def btest_once(settings=[{}]):
             df_tomorrow = df_today_accelerator.copy()  # bug here?
             df_tomorrow[["high", "low", "close", "pct_chg"]] = np.nan
         else:
-            df_tomorrow = DB.get_date(trade_date=tomorrow, assets=assets, freq="D", market=market)
-            df_today = DB.get_date(trade_date=today, assets=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
+            df_tomorrow = DB.get_date(trade_date=tomorrow, a_assets=assets, freq="D", market=market)
+            df_today = DB.get_date(trade_date=today, a_assets=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
             df_today_accelerator = df_tomorrow
             dict_weight_accelerator = {}
 
@@ -624,7 +624,6 @@ def btest_multiple(loop_indicator=1):
         # bool: ascending True= small, False is big
         # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
         # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
-        # int: random_weight: random number spread to be added to asset # TODO add small random weight to each
 
         # portfolio
         "p_capital": 1000000,  # start capital

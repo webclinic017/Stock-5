@@ -344,16 +344,16 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
             handle_save_exception(e, a_path[1])
 
 
-def to_excel(path_excel, dict_df):
+def to_excel(path, dict_df):
     for i in range(0, 10):
         try:
-            portfolio_writer = pd.ExcelWriter(path_excel, engine='xlsxwriter')
+            portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
             for key, df in dict_df.items():
                 df.to_excel(portfolio_writer, sheet_name=key, index=True, encoding='utf-8_sig')
             portfolio_writer.save()
             break
         except Exception as e:
-            handle_save_exception(e, path_excel)
+            handle_save_exception(e, path)
 
 
 def send_mail(trade_string="what to buy and sell"):
@@ -393,8 +393,8 @@ def multi_process(func, a_kwargs, a_steps=[]):
 def c_assets():
     return [e.value for e in Assets]
 
-def c_assets_g():
-    return c_assets()+["G"]
+def c_assets_big():
+    return c_assets()+["G","F"]
 
 class Assets(enum.Enum):
     I = 'I'

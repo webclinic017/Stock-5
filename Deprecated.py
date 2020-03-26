@@ -62,7 +62,7 @@ def increaselimit(increase=1):
                 df_summary_asset.at[f"days{days}", f"{gain}{freq}"] = df_result_asset[f"days{days}_{gain}{freq}"].mean()
 
     path = "Market/CN/Indicator/increaselimit.xlsx" if increase == 1 else "Market/CN/Indicator/decreaselimit.xlsx"
-    LB.to_excel(path_excel=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
+    LB.to_excel(path=path, dict_df={"a": df_result_asset, "a_sum": df_summary_asset})
 
 
 

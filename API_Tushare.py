@@ -8,103 +8,115 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
-def get(function, dict_arg, df_if_empty=pd.DataFrame()):
-    # because some tushare function has no __name__ attribute which wi
-    def message(message, function, kwargs):
-        try:
-            print("Tushare", function.__name__, message, kwargs)
-        except:
-            print("Tushare", message, "BUT NO FUNCTION NAME!", kwargs)
-
+def get(func, fname, kwargs, df_fallback=pd.DataFrame()):
     for _ in range(200):
         try:
-            df = function(**dict_arg)
+            df = func(**kwargs)
             if df is None:
-                message("NONE", function, dict_arg)
-                return df_if_empty
+                print("Tushare", fname, "NONE", kwargs)
+                return df_fallback
             elif df.empty:
-                message("EMPTY", function, dict_arg)
-                return df_if_empty
+                print("Tushare", fname, "EMPTY", kwargs)
+                return df_fallback
             else:
-                message("SUCCESS", function, dict_arg)
+                print("Tushare", fname, "SUCCESS", kwargs)
                 return df
         except Exception as e:
-            message("ERROR", function, dict_arg)
+            print("Tushare", fname, "ERROR", kwargs)
             traceback.print_exc()
             time.sleep(10)
 
 
 def my_pro_bar(asset: str, ts_code: str, freq: str, start_date: str, end_date: str, adj="qfq", factors=[]):
-    return get(function=ts.pro_bar, dict_arg=locals(), df_if_empty=LB.empty_df("pro_bar"))
+    """for FD limited to 1000 rows. For E, limited to 4000 Rows"""
+    return get(func=ts.pro_bar, fname="ts.pro_bar", kwargs=locals(), df_fallback=LB.empty_df("pro_bar"))
 
 
 def my_query(api_name="", ts_code="000001.SZ", start_date="00000000", end_date="00000000"):
-    return get(function=pro.query, dict_arg=locals())
+    return get(func=pro.query, fname="pro.query", kwargs=locals())
 
 
 def my_stockbasic(is_hs="", list_status="L", exchange="", fields='ts_code,name,area,list_date,is_hs'):
-    return get(function=pro.stock_basic, dict_arg=locals())
+    return get(func=pro.stock_basic, fname="pro.stock_basic", kwargs=locals())
 
 
 def my_pro_daily(trade_date="00000000"):
-    return get(function=pro.daily, dict_arg=locals())
+    return get(func=pro.daily, fname="pro.daily", kwargs=locals())
 
 
 def my_trade_cal(api_name="trade_cal", start_date="00000000", end_date="00000000"):
-    return get(function=pro.query, dict_arg=locals())
+    return get(func=pro.query, fname="pro.query", kwargs=locals())
 
 
 def my_holdertrade(ann_date, fields="ts_code,ann_date,holder_name,holder_type,in_de,change_vol,change_ratio,after_share,after_ratio,avg_price,total_share,begin_date,close_date"):
-    return get(function=pro.stk_holdertrade, dict_arg=locals(), df_if_empty=LB.empty_df("holdertrade"))
+    return get(func=pro.stk_holdertrade, fname="pro.stk_holdertrade", kwargs=locals(), df_fallback=LB.empty_df("holdertrade"))
 
 
 def my_pledge_stat(ts_code="000001.SZ"):
-    return get(function=pro.pledge_stat, dict_arg=locals(), df_if_empty=LB.empty_df("pledge_stat"))
+    return get(func=pro.pledge_stat, fname="pro.pledge_stat", kwargs=locals(), df_fallback=LB.empty_df("pledge_stat"))
 
 
 def my_cashflow(ts_code, start_date, end_date):
-    return get(function=pro.cashflow, dict_arg=locals(), df_if_empty=LB.empty_df("cashflow"))
+    return get(func=pro.cashflow, fname="pro.cashflow", kwargs=locals(), df_fallback=LB.empty_df("cashflow"))
 
 
 def my_fina_indicator(ts_code, start_date, end_date):
-    return get(function=pro.fina_indicator, dict_arg=locals(), df_if_empty=LB.empty_df("fina_indicator"))
+    return get(func=pro.fina_indicator, fname="pro.fina_indicator", kwargs=locals(), df_fallback=LB.empty_df("fina_indicator"))
 
 
 def my_balancesheet(ts_code, start_date, end_date):
-    return get(function=pro.balancesheet, dict_arg=locals(), df_if_empty=LB.empty_df("balancesheet"))
+    return get(func=pro.balancesheet, fname="pro.balancesheet", kwargs=locals(), df_fallback=LB.empty_df("balancesheet"))
 
 
 def my_income(ts_code, start_date, end_date):
-    return get(function=pro.income, dict_arg=locals(), df_if_empty=LB.empty_df("income"))
+    return get(func=pro.income, fname="pro.income", kwargs=locals(), df_fallback=LB.empty_df("income"))
 
 
 def my_block_trade(trade_date):
-    return get(function=pro.block_trade, dict_arg=locals(), df_if_empty=LB.empty_df("block_trade"))
+    return get(func=pro.block_trade, fname="pro.block_trade", kwargs=locals(), df_fallback=LB.empty_df("block_trade"))
 
 
 def my_share_float(ann_date):
-    return get(function=pro.share_float, dict_arg=locals())
+    return get(func=pro.share_float, fname="pro.share_float", kwargs=locals())
 
 
 def my_repurchase(ann_date):
-    return get(function=pro.repurchase, dict_arg=locals())
+    return get(func=pro.repurchase, fname="pro.repurchase", kwargs=locals())
 
 
 def my_index_classify(level="L1", src="SW"):
-    return get(function=pro.index_classify, dict_arg=locals())
+    return get(func=pro.index_classify, fname="pro.index_classify", kwargs=locals())
 
 
 def my_index_basic(market="SSE"):
-    return get(function=pro.index_basic, dict_arg=locals())
+    return get(func=pro.index_basic, fname="pro.index_basic", kwargs=locals())
 
 
 def my_index_member(index_code):
-    return get(function=pro.index_member, dict_arg=locals())
+    return get(func=pro.index_member, fname="pro.index_member", kwargs=locals())
 
 
 def my_fund_basic(market="E", fields="ts_code,name,fund_type,list_date,delist_date,issue_amount,m_fee,c_fee,benchmark,invest_type,type,market,custodian,management"):
-    return get(function=pro.fund_basic, dict_arg=locals())
+    return get(func=pro.fund_basic, fname="pro.fund_basic", kwargs=locals())
+
+
+def my_fx_daily(ts_code="", trade_date="", start_date="", end_date=""):
+    """limited to 1000 rows"""
+    return get(func=pro.fx_daily, fname="pro.fx_daily", kwargs=locals())
+
+
+def my_cb_basic(ts_code="", list_date="", exchange=""):
+    return get(func=pro.cb_basic, fname="pro.cb_basic", kwargs=locals())
+
+def my_cb_daily(ts_code="", trade_date="", start_date="",end_date=""):
+    return get(func=pro.cb_daily, fname="pro.cb_daily", kwargs=locals())
+
+def my_yc_cb(ts_code="", curve_type="", trade_date="",start_date="",end_date=""):
+    return get(func=pro.yc_cb, fname="pro.yc_cb", kwargs=locals())
 
 
 if __name__ == '__main__':
+    df = my_yc_cb()
+    print(df)
+    df.to_csv("b.csv")
     pass

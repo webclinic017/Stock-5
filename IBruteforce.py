@@ -7,7 +7,9 @@ import LB
 import random
 from scipy.stats.mstats import gmean
 import traceback
+
 pd.options.mode.chained_assignment = None  # default='warn'
+
 
 # evaluate a columns agains fgain in various aspects
 def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_gmean_detail):
@@ -16,11 +18,11 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_gmean_detail):
     try:
         std = df[column].std()
         nd_pct = len(df[df[column].isna() | df[column] != 0.0]) / len(df)
-        #autocorr2 = df[column].autocorr(2)
-        #autocorr20 = df[column].autocorr(20)
-        #autocorr240 = df[column].autocorr(240)
-        #skew = df[column].skew()
-        #kurt = df[column].kurt()
+        # autocorr2 = df[column].autocorr(2)
+        # autocorr20 = df[column].autocorr(20)
+        # autocorr240 = df[column].autocorr(240)
+        # skew = df[column].skew()
+        # kurt = df[column].kurt()
 
         for fgain, df_fgain_mean in dict_fgain_gmean_detail.items():
             # general ts_code pgain
@@ -43,7 +45,7 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_gmean_detail):
             df_percentile = df[df[column].between(low_val, high_val)]
 
             for fgain, df_fgain_mean in dict_fgain_gmean_detail.items():
-                df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] =  gmean(df_percentile[fgain])/ dict_ts_code_mean[fgain]
+                df_fgain_mean.at[ts_code, f"{fgain}_p{low_quant, high_quant}"] = gmean(df_percentile[fgain]) / dict_ts_code_mean[fgain]
     except Exception as e:
         print("Quantile did not work")
 
@@ -54,7 +56,7 @@ def bruteforce_eval_fgain(df, ts_code, column, dict_fgain_gmean_detail):
         for counter, (index, value) in enumerate(s_occurence.iteritems()):
             df_occ = df[df[column].between(index.left, index.right)]
             for fgain, df_fgain_mean in dict_fgain_gmean_detail.items():
-                df_fgain_mean.at[ts_code, f"{fgain}_o{counter}"] = gmean(df_occ[fgain])/ dict_ts_code_mean[fgain]
+                df_fgain_mean.at[ts_code, f"{fgain}_o{counter}"] = gmean(df_occ[fgain]) / dict_ts_code_mean[fgain]
     except Exception as e:
         print("Occurence did not work")
 
@@ -119,7 +121,7 @@ def bruteforce_summary(folderPath, summarypath):
 
 # Bruteforce all: Indicator X Derivation X Derivation variables  for all ts_code through all time
 def bruteforce_iterate():
-    dict_df_asset = DB.preload(load=setting["target"], step=setting["preload_step"], query_df="trade_date > 20050101")
+    dict_df_asset = DB.preload(asset=setting["target"], step=setting["preload_step"], query_df="trade_date > 20050101")
 
     e_ibase = ICreate.IBase
     e_ideri = ICreate.IDeri

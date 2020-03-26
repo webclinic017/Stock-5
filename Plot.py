@@ -17,7 +17,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 def create_gif(ts_code="000002.SZ"):
     images = []
-    for jpgfile in glob.iglob(os.path.join("Media/Plot/stock/" + ts_code, "*.jpg")):
+    for jpgfile in glob.iglob(os.path.join(f"Media/Plot/stock/{ts_code}", "*.jpg")):
         images.append(imageio.imread(jpgfile))
         print(f"{ts_code} load image", jpgfile)
     output_file = f"Media/Plot/stock/{ts_code}_{datetime.datetime.now().strftime('%Y_%M_%d_%H_%M_%S')}.gif"
@@ -64,7 +64,7 @@ def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.S
         newpath = f"Media/Plot/stock/{ts_code}/"
         if not os.path.exists(newpath):
             os.makedirs(newpath)
-        plt.savefig(newpath + f"{start_date}_{end_date}.jpg")
+        plt.savefig(f"{newpath}{start_date}_{end_date}.jpg")
         # plt.show()
         # df_partcial.to_csv(f"resistance{row}.csv", index=False)
         plt.close()
@@ -108,7 +108,7 @@ def plot_polynomials():
         newpath = f"Media/Plot/stock/000938.SZ/"
         if not os.path.exists(newpath):
             os.makedirs(newpath)
-        plt.savefig(newpath + f"{trade_date}.jpg")
+        plt.savefig(f"{newpath}{trade_date}.jpg")
         df.plot(legend=True)
     plt.close()
 

@@ -236,6 +236,8 @@ def vol(df: pd.DataFrame, ibase: str): return ibase
 
 
 def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
+
+
 def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
 
 
@@ -276,7 +278,7 @@ def ivola(df: pd.DataFrame, ibase: str = "ivola"):
     return add_to
 
 
-#past n days until today
+# past n days until today
 def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.pgain{freq}"
     add_column(df, add_to, f"close", 1)
@@ -288,9 +290,9 @@ def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     return add_to
 
 
-#future n days from today on. e.g. open.fgain1 for 20080101 is 20080102/20080101
-#CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
-#day1: Signal tells you to buy. day2: BUY. day3. SELL
+# future n days from today on. e.g. open.fgain1 for 20080101 is 20080102/20080101
+# CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
+# day1: Signal tells you to buy. day2: BUY. day3. SELL
 def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.fgain{freq}"
     add_column(df, add_to, f"close", 1)
@@ -303,6 +305,7 @@ def pct_chg_close(df: pd.DataFrame, ibase: str = "pct_chg_close"):
     add_column(df, add_to, "close", 1)
     df[add_to] = (1 + df["close"].pct_change())
     return add_to
+
 
 def pct_chg_open(df: pd.DataFrame, ibase: str = "pct_chg_open"):
     add_to = f"pct_chg_open"
@@ -351,56 +354,59 @@ def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
 
-def zlmacd(df, ibase, sfreq, bfreq,smfreq):
-    name=f"{sfreq, bfreq,smfreq}"
-    df[f"zlema1_{name}"] =my_best_ec((df[ibase]), sfreq)
-    df[f"zlema2_{name}"] =my_best_ec((df[ibase]), bfreq)
 
-    df[f"zldif_{name}"]= df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
-    #df[f"zldea_{name}"]= df[f"zldif_{name}"] -df[f"zldif_{name}"].rolling(smfreq).mean() # ma as smoother, but tradeoff is lag
-    df[f"zldea_{name}"]= df[f"zldif_{name}"] - my_best_ec(df[f"zldif_{name}"], smfreq)
+def zlmacd(df, ibase, sfreq, bfreq, smfreq):
+    name = f"{sfreq, bfreq, smfreq}"
+    df[f"zlema1_{name}"] = my_best_ec((df[ibase]), sfreq)
+    df[f"zlema2_{name}"] = my_best_ec((df[ibase]), bfreq)
 
-    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"]=10
-    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"]=-10
+    df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
+    # df[f"zldea_{name}"]= df[f"zldif_{name}"] -df[f"zldif_{name}"].rolling(smfreq).mean() # ma as smoother, but tradeoff is lag
+    df[f"zldea_{name}"] = df[f"zldif_{name}"] - my_best_ec(df[f"zldif_{name}"], smfreq)
 
-def my_ec_it(s,n,gain):
+    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
+    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
+
+
+def my_ec_it(s, n, gain):
     a_result = []
     k = 2 / (n + 1)
-    counter=0
+    counter = 0
     for i in range(0, len(s)):
         if i < n - 1:
-            counter+=1
+            counter += 1
             a_result.append(np.nan)
         elif i == n - 1:
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         elif i > n - 1:
             last_day_ema = a_result[-1]
-            if np.isnan(last_day_ema): # if the first n days are also nan
+            if np.isnan(last_day_ema):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
                 a_result.append(result)
             else:
-                today_close=s .iloc[i]
+                today_close = s.iloc[i]
                 result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
                 a_result.append(result)
 
     return a_result
 
 
-def my_best_ec(s,n,gain_limit=50):
-    least_error=1000000
-    best_gain=0
-    for value1 in range(-gain_limit, gain_limit,4):
+def my_best_ec(s, n, gain_limit=50):
+    least_error = 1000000
+    best_gain = 0
+    for value1 in range(-gain_limit, gain_limit, 4):
 
-        gain=value1/10
-        ec=my_ec_it(s,n,gain)
-        error= (s-ec).mean()
-        print(value1, len(s),len(ec), (error),n)
+        gain = value1 / 10
+        ec = my_ec_it(s, n, gain)
+        error = (s - ec).mean()
+        print(value1, len(s), len(ec), (error), n)
         if abs(error) < least_error:
-            least_error= abs(error)
-            best_gain=gain
-    best_ec=my_ec_it(s,n,best_gain)
+            least_error = abs(error)
+            best_gain = gain
+    best_ec = my_ec_it(s, n, best_gain)
     return best_ec
+
 
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
 # 1.Step Create RSI or Abv_ma
@@ -624,7 +630,6 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
             if i < max_rs:
                 df_asset.loc[end_date:f_end_date, f"rs{abv_und}{i}"] = item
 
-
     if len(df_asset) > start_window:
         #  calculate all min max for acceleration used for later simulation
         try:
@@ -632,7 +637,6 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
             s_maxall = df_asset["close"].rolling(rolling_freq).max()
         except:
             return
-
 
         # iterate over past data as window. This simulates rs for past times/frames
         for row in range(0, len(df_asset), step):
@@ -647,7 +651,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
                     break
 
                 f_end_date = df_asset.index[row + start_window + step]
-                s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])  #create an array of all pst min and max
+                s_minmax = (s_minall.loc[start_date:end_date]).append(s_maxall.loc[start_date:end_date])  # create an array of all pst min and max
                 support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
 
         # calcualte individual rs score
@@ -659,7 +663,6 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 
                 df_asset[f"rs{abv_und}{i}_abv"] = (df_asset[f"rs{abv_und}{i}"] > df_asset["close"]).astype(int)
                 df_asset[f"rs{abv_und}{i}_cross"] = df_asset[f"rs{abv_und}{i}_abv"].diff().fillna(0).astype(int)
-
 
         df_asset["rs_abv"] = 0  # for detecting breakout to top: happens often
         df_asset["rs_und"] = 0  # for detecting breakout to bottom: happens rare
@@ -709,8 +712,6 @@ def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreat
         pdegree = degree - i
         data += (polynom * (s_index ** pdegree))
     return data
-
-
 
 
 # IMPORTANT NORMALIZE DOES NOT ADD LABEL
