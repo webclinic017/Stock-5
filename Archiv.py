@@ -66,7 +66,7 @@ def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]
         for past_freq in a_all_freq:
 
             #1. train past values and create matrix
-            df_predict_matrix=price_statistic_train(a_freq=a_all_freq,past=past_freq, q_step=10,df=df_past)
+            df_pred_matrix=price_statistic_train(a_freq=a_all_freq,past=past_freq, q_step=10,df=df_past)
 
             for future_freq in a_future_freq:
 
@@ -74,26 +74,26 @@ def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]
                 todays_value = float(df.at[trade_date, f"past{past_freq}"])
                 try:
                     #todays value has been happened in the past
-                    predicted_value=df_predict_matrix.loc[ (df_predict_matrix["q1_val"]<=todays_value) & (todays_value<=df_predict_matrix["q2_val"]), f"tomorrow{future_freq}gmean"].values[0]
+                    predicted_value=df_pred_matrix.loc[ (df_pred_matrix["q1_val"]<=todays_value) & (todays_value<=df_pred_matrix["q2_val"]), f"tomorrow{future_freq}gmean"].values[0]
                 except :
                     #todays value is extrem value, either maxima or minima.
                     if todays_value > 1:#maxima
-                        predicted_value=df_predict_matrix.tail(1)[f"tomorrow{future_freq}gmean"].values[0]
+                        predicted_value=df_pred_matrix.tail(1)[f"tomorrow{future_freq}gmean"].values[0]
                     else: #minima
-                        predicted_value=df_predict_matrix.head(1)[f"tomorrow{future_freq}gmean"].values[0]
+                        predicted_value=df_pred_matrix.head(1)[f"tomorrow{future_freq}gmean"].values[0]
                 print(f"{trade_date} past{past_freq} predicted future{future_freq} =", predicted_value)
-                df_result.at[trade_date, f"past{past_freq}_predict_future{future_freq}"] = predicted_value
+                df_result.at[trade_date, f"past{past_freq}_pred_future{future_freq}"] = predicted_value
 
     #combine the score using mean
     for future_freq in a_future_freq:
         #combined score
-        df_result[f"predict_future{future_freq}"]=sum([df_result[f"past{past_freq}_predict_future{future_freq}"] for past_freq in a_past_freq]) / len(a_past_freq)
+        df_result[f"pred_future{future_freq}"]=sum([df_result[f"past{past_freq}_pred_future{future_freq}"] for past_freq in a_past_freq]) / len(a_past_freq)
 
         #combined score bin
-        df_result[f"predict_future{future_freq}_bin"] =pd.qcut(df_result[f"predict_future{future_freq}"], q=10, labels=False)
+        df_result[f"pred_future{future_freq}_bin"] =pd.qcut(df_result[f"pred_future{future_freq}"], q=10, labels=False)
 
     df_result.to_csv("past_test.csv")
-    df_predict_matrix.to_csv(("last_predict_matrix.csv"))
+    df_pred_matrix.to_csv(("last_pred_matrix.csv"))
 
 
 
@@ -443,10 +443,10 @@ def asset_candlestick_analysis_once(ts_code, pattern, func):
 
 
 def asset_candlestick_analysis_multiple():
-    dict_pattern = LB.c_candle()
+    d_pattern = LB.c_candle()
     df_all_ts_code = DB.get_ts_code(a_asset=["E"])
 
-    for key, array in dict_pattern.items():
+    for key, array in d_pattern.items():
         function = array[0]
         a_result = []
         for ts_code in df_all_ts_code.ts_code:
@@ -459,7 +459,7 @@ def asset_candlestick_analysis_multiple():
             print("SAVED candlestick", key, ts_code)
 
     a_all_results = []
-    for key, array in dict_pattern.items():
+    for key, array in d_pattern.items():
         path = "Market/CN/Backtest_Single/candlestick/" + key + ".csv"
         df_pattern = pd.read_csv(path)
         df_pattern = df_pattern.mean()

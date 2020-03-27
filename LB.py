@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import talib
+import xlsxwriter
 import smtplib
 from email.message import EmailMessage
 import os
@@ -71,9 +72,9 @@ def wrap_line(func):
 def today():
     return str(datetime.now().date()).replace("-", "")
 
-def indi_name(ibase, deri, dict_variables={}):
+def indi_name(ibase, deri, d_variables={}):
     variables = ""
-    for key, enum_val in dict_variables.items():
+    for key, enum_val in d_variables.items():
         if key not in ["df", "ibase"]:
             # if issubclass(enum_val, enum.Enum):
             try:
@@ -277,16 +278,16 @@ def close_file(filepath):
     xl.DisplayAlerts=False
 
 #maybe create a rekursive version
-def groups_dict_to_string_iterable(dict_groups: dict):
+def groups_d_to_string_iterable(d_groups: dict):
     result = ""
-    for key, dict_value in dict_groups.items():
-        if type(dict_value) in [list,dict]:
-            a_string_helper = [str(x.__name__) if callable(x) else str(x) for x in dict_value]
+    for key, d_value in d_groups.items():
+        if type(d_value) in [list,dict]:
+            a_string_helper = [str(x.__name__) if callable(x) else str(x) for x in d_value]
             result = f"{result}{key}: [{', '.join(a_string_helper)}], "
-        elif callable(dict_value):
-            result = f"{result}{dict_value.__name__}: {dict_value}, "
+        elif callable(d_value):
+            result = f"{result}{d_value.__name__}: {d_value}, "
         else: # bool, string, scalar, int
-            result = f"{result}{key}: {dict_value}, "
+            result = f"{result}{key}: {d_value}, "
     return result
 
 
@@ -313,7 +314,7 @@ def a_path(path: str = ""):
 
 
 def handle_save_exception(e, path):
-    if type(e) == FileNotFoundError:
+    if type(e) in [FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -344,15 +345,16 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
             handle_save_exception(e, a_path[1])
 
 
-def to_excel(path, dict_df):
+def to_excel(path, d_df):
     for i in range(0, 10):
         try:
             portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
-            for key, df in dict_df.items():
+            for key, df in d_df.items():
                 df.to_excel(portfolio_writer, sheet_name=key, index=True, encoding='utf-8_sig')
             portfolio_writer.save()
             break
         except Exception as e:
+            print("excel save exception type",type(e))
             handle_save_exception(e, path)
 
 
@@ -404,6 +406,8 @@ class Assets(enum.Enum):
 def c_bfreq():
     return [e.value for e in BFreq]
 
+def c_G_queries():
+    return {"G": ["on_asset == 'E'", "group != 'industry3'"]}
 
 class BFreq(enum.Enum):
     f1 = 1
@@ -531,11 +535,11 @@ def c_candle():
             }
 
 
-def c_groups_dict(assets=c_assets(), a_ignore=[]):
+def c_d_groups(assets=c_assets(), a_ignore=[]):
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
     asset = {"asset": c_assets()}
     if "E" in assets:
-        dict_e = {"industry1": ["建筑装饰", "纺织服装", "采掘", "汽车", "电气设备", "传媒", "机械设备", "钢铁", "银行", "轻工制造", "交通运输", "非银金融", "公用事业", "化工", "有色金属", "家用电器", "房地产", "综合", "农林牧渔", "建筑材料", "商业贸易", "通信", "计算机", "国防军工", "休闲服务", "食品饮料", "医药生物", "电子"],
+        d_e = {"industry1": ["建筑装饰", "纺织服装", "采掘", "汽车", "电气设备", "传媒", "机械设备", "钢铁", "银行", "轻工制造", "交通运输", "非银金融", "公用事业", "化工", "有色金属", "家用电器", "房地产", "综合", "农林牧渔", "建筑材料", "商业贸易", "通信", "计算机", "国防军工", "休闲服务", "食品饮料", "医药生物", "电子"],
                   "industry2": ["装修装饰", "园林工程", "其他轻工制造", "服装家纺", "采掘服务", "石油开采", "餐饮", "汽车零部件", "运输设备", "电机", "航空运输", "证券", "营销传播", "渔业", "金属制品", "玻璃制造", "基础建设", "文化传媒", "航运", "物流", "家用轻工", "房屋建设", "电源设备", "专业工程", "通用机械", "工业金属", "电气自动化设备", "水务", "其他采掘", "钢铁", "环保工程及服务", "银行", "专用设备",
                                 "商业物业经营", "燃气",
                                 "港口", "包装印刷", "高低压设备", "煤炭开采", "仪器仪表", "种植业", "视听器材", "专业零售", "互联网传媒", "船舶制造", "化学原料", "公交", "农产品加工", "其他建材", "塑料", "石油化工", "其他交运设备", "化学制品", "房地产开发", "高速公路", "汽车服务", "综合", "黄金", "白色家电", "动物保健", "橡胶", "航空装备", "造纸", "光学光电子", "食品加工", "纺织制造", "园区开发", "通信设备",
@@ -558,13 +562,13 @@ def c_groups_dict(assets=c_assets(), a_ignore=[]):
                   "exchange": ["主板", "中小板", "创业板"],
                   "is_hs": ["N", "S", "H"],
                   "state_company": [True, False]}
-        asset = {**asset, **dict_e}
+        asset = {**asset, **d_e}
     if "I" in assets:
-        dict_i = {"category": ["三级行业指数", "四级行业指数", "行业指数", "综合指数", "其他", "一级行业指数", "主题指数", "成长指数", "价值指数", "二级行业指数", "基金指数", "规模指数", "策略指数", "债券指数"],
+        d_i = {"category": ["三级行业指数", "四级行业指数", "行业指数", "综合指数", "其他", "一级行业指数", "主题指数", "成长指数", "价值指数", "二级行业指数", "基金指数", "规模指数", "策略指数", "债券指数"],
                   "publisher": ["上交所", "中证公司", "深交所"]}
-        asset = {**asset, **dict_i}
+        asset = {**asset, **d_i}
     if "FD" in assets:
-        dict_fd = {"fund_type": ["货币市场型", "商品型", "股票型", "混合型", "另类投资型", "债券型"],
+        d_fd = {"fund_type": ["货币市场型", "商品型", "股票型", "混合型", "另类投资型", "债券型"],
                    "invest_type": ["白银期货型", "有色金属期货型", "主题型", "豆粕期货型", "货币型", "积极配置型", "偏股混合型", "成长型", "被动指数型", "增强指数型", "灵活配置型", "股票型", "黄金现货合约", "原油主题基金", "混合型", "债券型", "强化收益型", "稳定型"],
                    "type": ["契约型封闭式", "契约型开放式"],
                    "management": ["华泰证券资管", "兴业基金", "财通证券资管", "信达澳银基金", "中信建投基金", "国寿安保基金", "东吴基金", "泓德基金", "东海基金", "南华基金", "平安基金", "汇添富基金", "弘毅远方基金", "华宝基金", "九泰基金", "中海基金", "国联安基金", "诺德基金", "财通基金", "富国基金", "申万菱信基金", "国金基金", "广发基金", "大成基金", "中融基金", "天治基金", "西部利得基金", "新华基金", "融通基金", "浦银安盛基金",
@@ -573,7 +577,7 @@ def c_groups_dict(assets=c_assets(), a_ignore=[]):
                                   "前海开源基金",
                                   "景顺长城基金", "泰信基金", "长信基金", "长城基金", "万家基金", "摩根士丹利华鑫基金", "中银基金", "东证资管", "兴全基金", "民生加银基金", "华富基金", "红土创新基金"],
                    "custodian": ["中信证券", "渤海银行", "招商证券", "国泰君安", "中信建投", "广发证券", "平安银行", "中金公司", "北京银行", "招商银行", "浦发银行", "中国工商银行", "中国银行", "中国建设银行", "海通证券", "浙商银行", "中国农业银行", "中国银河", "中国民生银行", "兴业银行", "兴业证券", "国信证券", "中信银行", "交通银行", "广发银行", "中国光大银行", "邮储银行", "宁波银行", "上海银行", "华夏银行"]}
-        asset = {**asset, **dict_fd}
+        asset = {**asset, **d_fd}
     asset = {key: value for key, value in asset.items() if key not in a_ignore}
     return asset
 
@@ -667,19 +671,19 @@ def timeseries_to_month(df):
     return df_copy.loc[a_index]
 
 def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
-    dict_df = {}
+    d_df = {}
     p_setting=[x/100 for x in p_setting]
     for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
-        dict_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
-    return dict_df
+        d_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
+    return d_df
 
 def custom_expand(df, min_freq):
-    dict_result = {}
+    d_result = {}
     for counter, expanding_index in enumerate(df.index):
         if counter >= min_freq:
-            dict_result[expanding_index] = df.loc[df.index[0]:expanding_index]
-    return dict_result
+            d_result[expanding_index] = df.loc[df.index[0]:expanding_index]
+    return d_result
 
 def custom_pairwise_noverlap(iterables):
     result = []

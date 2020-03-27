@@ -341,7 +341,7 @@ def cdl(df: pd.DataFrame, ibase: str):
 
 
 def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(ibase=ibase, deri="crossma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_to = LB.indi_name(ibase=ibase, deri="crossma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     df[add_to] = (df[add_to].diff()).fillna(0)
@@ -349,7 +349,7 @@ def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
 
 
 def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(ibase=ibase, deri="overma", dict_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_to = LB.indi_name(ibase=ibase, deri="overma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
     add_column(df, add_to, ibase, 1)
     df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
@@ -474,7 +474,7 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     return trend_name
 
 
-def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, dict_rs={"abv": 10}, df_asset=pd.DataFrame(), delay=3):
+def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 10}, df_asset=pd.DataFrame(), delay=3):
     """
 
 
@@ -493,7 +493,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
     step: then simulating past rs, how big is the step
     spread: distance rs-price: when creating multiple rs, how big should the spread/distance between price and rs be. The bigger the spread, the more far away they are.
     bins: distance rs-rs: when picking rs from many occurnece, How far should distance between resistance be. You should let algo naturally decide which rs is second strongest and not set limit to them by hand.
-    dict_rs: how many rs lines you need. Actually deprecated by bins
+    d_rs: how many rs lines you need. Actually deprecated by bins
     df_asset: the df containing close price
     delay: optional
 
@@ -542,7 +542,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
             start_date = df_asset.index[0]
             end_date = df_asset.index[row + start_window]
             print("start end", start_date, end_date)
-            for abv_und, max_rs in dict_rs.items():
+            for abv_und, max_rs in d_rs.items():
                 if row + start_window + step > len(df_asset) - 1:
                     break
 
@@ -551,7 +551,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
                 support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
 
         # calcualte individual rs score
-        for abv_und, count in dict_rs.items():
+        for abv_und, count in d_rs.items():
             for i in range(0, count):
                 # first fill na for the last period because rolling does not reach
                 df_asset[f"rs{abv_und}{i}"].fillna(method="ffill", inplace=True)
@@ -562,7 +562,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
 
         df_asset["rs_abv"] = 0  # for detecting breakout to top: happens often
         df_asset["rs_und"] = 0  # for detecting breakout to bottom: happens rare
-        for abv_und, max_rs in dict_rs.items():
+        for abv_und, max_rs in d_rs.items():
             for i in range(0, max_rs):
                 try:
                     df_asset[f"rs_{abv_und}"] += df_asset[f"rs{abv_und}{i}_cross"].abs()
@@ -574,7 +574,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
         df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
     else:
         print(f"df is len is under {start_window}. probably new stock")
-        for abv_und, max_rs in dict_rs.items():
+        for abv_und, max_rs in d_rs.items():
             for i in range(0, max_rs):  # only consider rs und 2,3,4,5, evenly weighted. middle ones have most predictive power
                 df_asset[f"rs{abv_und}{i}"] = np.nan
                 df_asset[f"rs{abv_und}{i}_abv"] = np.nan
@@ -586,14 +586,14 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
     return df_asset
 
 
-def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, dict_rs={"abv": 4, "und": 4}, df_asset=pd.DataFrame(), delay=3):
+def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 4, "und": 4}, df_asset=pd.DataFrame(), delay=3):
     """
     start_window: when iterating in the past, how big should the minimum window be. not so relevant actually
     rolling_freq: when creating rolling min or max, how long should past be considered
     step: then simulating past rs, how big is the step
     spread: distance rs-price: when creating multiple rs, how big should the spread/distance between price and rs be. The bigger the spread, the more far away they are.
     bins: distance rs-rs: when picking rs from many occurnece, How far should distance between resistance be. You should let algo naturally decide which rs is second strongest and not set limit to them by hand.
-    dict_rs: how many rs lines you need. Actually deprecated by bins
+    d_rs: how many rs lines you need. Actually deprecated by bins
     df_asset: the df containing close price
     delay: optional
 
@@ -646,7 +646,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
             start_date = df_asset.index[0]
             end_date = df_asset.index[row + start_window]
             print("start end", start_date, end_date)
-            for abv_und, max_rs in dict_rs.items():
+            for abv_und, max_rs in d_rs.items():
                 if row + start_window + step > len(df_asset) - 1:
                     break
 
@@ -655,7 +655,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
                 support_resistance_acc(abv_und=abv_und, max_rs=max_rs, s_minmax=s_minmax, end_date=end_date, f_end_date=f_end_date, df_asset=df_asset)
 
         # calcualte individual rs score
-        for abv_und, count in dict_rs.items():
+        for abv_und, count in d_rs.items():
             for i in range(0, count):
                 # first fill na for the last period because rolling does not reach
                 df_asset[f"rs{abv_und}{i}"].fillna(method="ffill", inplace=True)
@@ -666,7 +666,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 
         df_asset["rs_abv"] = 0  # for detecting breakout to top: happens often
         df_asset["rs_und"] = 0  # for detecting breakout to bottom: happens rare
-        for abv_und, max_rs in dict_rs.items():
+        for abv_und, max_rs in d_rs.items():
             for i in range(0, max_rs):
                 try:
                     df_asset[f"rs_{abv_und}"] = df_asset[f"rs_{abv_und}"] + df_asset[f"rs{abv_und}{i}_cross"].abs()
@@ -678,7 +678,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
         df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
     else:
         print(f"df is len is under {start_window}. probably new stock")
-        for abv_und, max_rs in dict_rs.items():
+        for abv_und, max_rs in d_rs.items():
             for i in range(0, max_rs):  # only consider rs und 2,3,4,5, evenly weighted. middle ones have most predictive power
                 df_asset[f"rs{abv_und}{i}"] = np.nan
                 df_asset[f"rs{abv_und}{i}_abv"] = np.nan
@@ -693,7 +693,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 # TODO this article
 # https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
 # def rsi(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
-#     add_to = LB.standard_indi_name(ibase=ibase, deri=IDeri.rsi.value, dict_variables={"freq": freq, "re": re.value})
+#     add_to = LB.standard_indi_name(ibase=ibase, deri=IDeri.rsi.value, d_variables={"freq": freq, "re": re.value})
 #     try:
 #         df[add_to]=talib.RSI(df[ibase], timeperiod=freq.value)
 #     except:
@@ -749,7 +749,7 @@ def rsi(df: pd.DataFrame, ibase: str, freq: BFreq):
 
 @deco_try_ignore  # try ignore because all talib function can not handle nan input values. so this wrapper ignores all nan input values and creates add_to_column at one point
 def deri_tec(df: pd.DataFrame, ibase: str, ideri: IDeri, func, **kwargs):
-    add_to = LB.indi_name(ibase=ibase, deri=ideri.value, dict_variables=kwargs)
+    add_to = LB.indi_name(ibase=ibase, deri=ideri.value, d_variables=kwargs)
     add_column(df, add_to, ibase, 1)
     df[add_to] = func(df[ibase], **kwargs)
     return add_to
@@ -822,7 +822,7 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
     ideri = ideri.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = LB.indi_name(ibase=ibase, deri=ideri, dict_variables={"freq": freq, "re": re.value})
+    add_to = LB.indi_name(ibase=ibase, deri=ideri, d_variables={"freq": freq, "re": re.value})
     add_column(df, add_to, ibase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
@@ -856,19 +856,19 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
 
 
 # input a dict with all variables. Output a list of all possible combinations
-def explode_settings(dict_one_indicator_variables):
+def explode_settings(d_one_indicator_variables):
     # 1. only get values form above dict
     # 2. create cartesian product of the list
     # 3. create dict out of list
 
     # first list out all possible choices
-    for key, value in dict_one_indicator_variables.items():
+    for key, value in d_one_indicator_variables.items():
         print(f"Input ---> {key}: {value}")
 
     a_product_result = []
-    for one_combination in itertools.product(*dict_one_indicator_variables.values()):
-        dict_result = dict(zip(dict_one_indicator_variables.keys(), one_combination))
-        a_product_result.append(dict_result)
+    for one_combination in itertools.product(*d_one_indicator_variables.values()):
+        d_result = dict(zip(d_one_indicator_variables.keys(), one_combination))
+        a_product_result.append(d_result)
     print(f"there are that many combinations: {len(a_product_result)}")
     return a_product_result
 

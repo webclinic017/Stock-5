@@ -279,7 +279,7 @@ def rsi_sim_bins():
             df_today = df_result.loc[(df_result.index < last_Day)]
             print(f"{ts_code} {trade_date}. last day is {last_Day}", )
 
-            dict_accel = {}
+            d_accel = {}
             # create quantile
             for column in all_column:
                 for freq in all_freq:
@@ -287,14 +287,14 @@ def rsi_sim_bins():
                     a_q_result = list(df_today[f"{column}.rsi{freq}"].quantile(all_q))
                     for counter, item in enumerate(a_q_result):
                         df_result.at[trade_date, f"{column}.freq{freq}_q{counter}"] = item
-                        dict_accel[f"{column}.freq{freq}_q{counter}"] = item
+                        d_accel[f"{column}.freq{freq}_q{counter}"] = item
 
             # for each day check what category todays rsi belong
             for column in all_column:
                 for freq in all_freq:
                     for counter in range(0, len(all_q) - 1):
-                        under_limit = dict_accel[f"{column}.freq{freq}_q{counter}"]
-                        above_limit = dict_accel[f"{column}.freq{freq}_q{counter + 1}"]
+                        under_limit = d_accel[f"{column}.freq{freq}_q{counter}"]
+                        above_limit = d_accel[f"{column}.freq{freq}_q{counter + 1}"]
                         today_rsi_value = df_result.at[trade_date, f"{column}.rsi{freq}"]
                         if under_limit <= today_rsi_value <= above_limit:
                             df_result.at[trade_date, f"{column}.rsi{freq}_bin"] = int(counter)
@@ -303,18 +303,18 @@ def rsi_sim_bins():
             # calculate simulated value
 
             for column in all_column:
-                dict_column_target_results = {key: [] for key in all_target}
+                d_column_target_results = {key: [] for key in all_target}
                 for small, big in all_freq_comb:
                     try:
                         small_bin = df_result.at[trade_date, f"{column}.rsi{small}_bin"]
                         big_bin = df_result.at[trade_date, f"{column}.rsi{big}_bin"]
                         df_filtered = df_today[(df_today[f"{column}.rsi{big}_bin"] == big_bin) & (df_today[f"{column}.rsi{small}_bin"] == small_bin)]
-                        for target in dict_column_target_results.keys():
-                            dict_column_target_results[target] = df_filtered[f"tomorrow{target}"].mean()
+                        for target in d_column_target_results.keys():
+                            d_column_target_results[target] = df_filtered[f"tomorrow{target}"].mean()
                     except Exception as e:
                         print("error", e)
 
-                for target, a_estimates in dict_column_target_results.items():
+                for target, a_estimates in d_column_target_results.items():
                     df_result.at[trade_date, f"{column}.score{target}"] = pd.Series(data=a_estimates).mean()
 
         # create sume of all results
@@ -400,11 +400,11 @@ def MESA(df):
     ts_code = "000002.SZ"
     df = DB.get_asset(ts_code=ts_code)
     df = df[df.index > 20000101]
-    dict_mean = {}
+    d_mean = {}
     for target in [5, 10, 20, 120, 240]:
         df[f"tomorrow{target}"] = df["open"].shift(-target) / df["open"].shift(-1)
         period_mean = df[f"tomorrow{target}"].mean()
-        dict_mean[target] = period_mean
+        d_mean[target] = period_mean
         print(f"ts_code {ts_code} {target} mean is {period_mean}")
 
     df["rsi5"] = talib.RSI(df["close"], timeperiod=5)
@@ -432,53 +432,53 @@ def MESA(df):
     for mode in [1, 0]:
         df_filtered = df[df["mode"] == mode]
         for target in [5, 10, 20, 120, 240]:
-            mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+            mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
             print(f"trend vs cycle mode. trend mode = {mode}. {target} mean {mean}")
     # conclusion. Trendmode earns more money than cycle mode. Trend contributes more to the overall stock gain than cycle mode.
 
     # uptrend price vs trend
     df_filtered = df[(df["mode"] == 1) & (df["close"] > df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"uptrend mode. {target} mean {mean}")
     # vs downtrend
     df_filtered = df[(df["mode"] == 1) & (df["close"] < df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"downtrend mode. {target} mean {mean}")
     # conclusion uptrendmode is better than downtrendmode. Downtrend mode is better than Cycle mode which is strange
 
     # sine vs lead sine
     df_filtered = df[(df["mode"] == 1) & (df["sine"] > df["leadsine"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"sine  above lead {target} mean {mean}")
     # vs downtrend
     df_filtered = df[(df["mode"] == 1) & (df["sine"] < df["leadsine"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"sine  under lead  {target} mean {mean}")
     # conclusion  uptrend (sine>leadsine) >  uptrend (close>trend) > uptrend
 
     # ma vs hilbert trendline
     df_filtered = df[(df["mode"] == 1) & (df["kalman"] > df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"kalman over trend {target} mean {mean}")
     # vs downtrend
     df_filtered = df[(df["mode"] == 1) & (df["kalman"] < df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"kalman under trend {target} mean {mean}")
 
     df_filtered = df[(df["mode"] == 1) & (df["sine"] > df["leadsine"]) & (df["close"] > df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"trend mode. sine  above lead {target} mean {mean}")
     # vs downtrend
     df_filtered = df[(df["mode"] == 1) & (df["sine"] < df["leadsine"]) & (df["close"] < df["trend"])]
     for target in [5, 10, 20, 120, 240]:
-        mean = df_filtered[f"tomorrow{target}"].mean() / dict_mean[target]
+        mean = df_filtered[f"tomorrow{target}"].mean() / d_mean[target]
         print(f"trend mode. sine  under lead  {target} mean {mean}")
     # conclusion additive: trend+sine>leadsine+close>trend
 
@@ -609,32 +609,20 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
     return [f"zlmacd_{name}", f"ema1_{name}", f"ema2_{name}", f"zldif_{name}", f"zldea_{name}"]
 
 
-def my_ismax(df, ibase, type=1, score=10):
+def my_ismax(df, ibase, thresh=0.95, score=10):
     name = f"{ibase}.{type}"
-    if type == 0:  # the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
-        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.95, 1).astype(int) * score
-    elif type == 1:
-        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.90, 1).astype(int) * score
-    elif type == 2:
-        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.85, 1).astype(int) * score
-    elif type == 3:
-        df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(0.80, 1).astype(int) * score
+    # the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
+    df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(thresh, thresh + 0.05).astype(int) * score
     df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
-    return [f"ismax_{name}"]
+    return [f"ismax_{name}", ]
 
 
-def my_ismin(df, ibase, type=1, score=10):
+def my_ismin(df, ibase, thresh=0.95, score=10):
     name = f"{ibase}.{type}"
-    if type == 0:#the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
-        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.95, 1).astype(int) * score
-    elif type == 1:
-        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.90, 1).astype(int) * score
-    elif type == 2:
-        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.85, 1).astype(int) * score
-    elif type == 3:
-        df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(0.80, 1).astype(int) * score
+    # the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
+    df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(thresh, thresh + 0.05).astype(int) * score
     df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
-    return [f"ismin_{name}"]
+    return [f"ismin_{name}", ]
 
 
 def slopecross(df, ibase, sfreq, bfreq, smfreq):
@@ -2087,30 +2075,30 @@ def find_peaks(df, ibase, a_n=[60]):
     df["resistance_strengh"] = df[a_peak_name].count(axis=1)
 
     # puts all maxima and minimaxs togehter
-    dict_all_rs = {}
+    d_all_rs = {}
     for n in a_n:
-        dict_value_index_pairs = df.loc[df[f'bot{n}'].notna(), f'bot{n}'].to_dict()
-        dict_all_rs.update(dict_value_index_pairs)
+        d_value_index_pairs = df.loc[df[f'bot{n}'].notna(), f'bot{n}'].to_dict()
+        d_all_rs.update(d_value_index_pairs)
 
-        dict_value_index_pairs = df.loc[df[f'peak{n}'].notna(), f'peak{n}'].to_dict()
-        dict_all_rs.update(dict_value_index_pairs)
+        d_value_index_pairs = df.loc[df[f'peak{n}'].notna(), f'peak{n}'].to_dict()
+        d_all_rs.update(d_value_index_pairs)
 
-    dict_final_rs = {}
-    for index_1, value_1 in dict_all_rs.items():
+    d_final_rs = {}
+    for index_1, value_1 in d_all_rs.items():
         keep = True
-        for index_2, value_2 in dict_final_rs.items():
+        for index_2, value_2 in d_final_rs.items():
             closeness = value_2 / value_1
             if 0.95 < closeness < 1.05:
                 keep = False
         if keep:
-            dict_final_rs[index_1] = value_1
+            d_final_rs[index_1] = value_1
 
     # count how many rs we have. How many support is under price, how many support is over price
     df["total_support_resistance"] = 0
     df["abv_support"] = 0
     df["und_resistance"] = 0
     a_rs_names = []
-    for counter, (resistance_index, resistance_val) in enumerate(dict_final_rs.items()):
+    for counter, (resistance_index, resistance_val) in enumerate(d_final_rs.items()):
         print("unique", resistance_index, resistance_val)
         df.loc[df.index >= resistance_index, f"rs{counter}"] = resistance_val
         a_rs_names.append(f"rs{counter}")
@@ -2123,10 +2111,10 @@ def find_peaks(df, ibase, a_n=[60]):
         df["und_resistance"] = df["und_resistance"] + (df["close"] < df[f"rs{counter}"]).astype(int)
 
     a_trend_name = []
-    for index1, index2 in LB.custom_pairwise_overlap([*dict_final_rs]):
+    for index1, index2 in LB.custom_pairwise_overlap([*d_final_rs]):
         print(f"pair {index1, index2}")
-        value1 = dict_final_rs[index1]
-        value2 = dict_final_rs[index2]
+        value1 = d_final_rs[index1]
+        value2 = d_final_rs[index2]
         df.loc[df.index == index1, f"{value1, value2}"] = value1
         df.loc[df.index == index2, f"{value1, value2}"] = value2
         df[f"{value1, value2}"] = df[f"{value1, value2}"].interpolate()
@@ -2298,14 +2286,14 @@ def hypothesis_test():
 
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
-def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
+def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
     """
     This is a general statistic test creator
     1. provide all cases
     2. The little difference between this and brute force: bruteforce only creates indicator, but not assign buy/sell signals with 10 or -10
     Variables on how to loop over are in the function. apply function variables are in the dict kwargs
     """
-    dict_preload = DB.preload(asset=asset, step=step, period_abv=1000, query_ts_code=query_ts_code)
+    d_preload = DB.preload(asset=asset, step=step, period_abv=1000, d_queries_ts_code=d_queries)
 
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
@@ -2315,13 +2303,13 @@ def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd,
             continue
 
         df_result = pd.DataFrame()
-        for counter, (ts_code, df_asset) in enumerate(dict_preload.items()):
+        for counter, (ts_code, df_asset) in enumerate(d_preload.items()):
             print(f"{counter}: asset:{asset}, {ts_code}, step:{step}, {kwargs['fname']}, {one_kwarg}")
 
             try:
                 func_return_column = kwargs["func"](df=df_asset, **one_kwarg)[0]
             except Exception as e:
-                print(f"error in {kwargs['fname']}", e)
+                print("exception at func execute", e)
                 continue
 
             df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
@@ -2337,8 +2325,9 @@ def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd,
             df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna())
             df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
 
-        df_result["up_better_mean"] = (df_result["uptrend_gmean"] > df_result["gmean"]).astype(int)
-        df_result["down_better_mean"] = (df_result["downtrend_gmean"] > df_result["gmean"]).astype(int)
+        # important check only if up/downtrend_gmean are not nan. Which means they actually exist for this strategy.
+        df_result.loc[df_result["uptrend_gmean"].notna(), "up_better_mean"] = (df_result.loc[df_result["uptrend_gmean"].notna(), "uptrend_gmean"] > df_result.loc[df_result["uptrend_gmean"].notna(), "gmean"]).astype(int)
+        df_result.loc[df_result["downtrend_gmean"].notna(), "down_better_mean"] = (df_result.loc[df_result["downtrend_gmean"].notna(), "downtrend_gmean"] > df_result.loc[df_result["downtrend_gmean"].notna(), "gmean"]).astype(int)
         df_result["up_down_gmean_diff"] = df_result["uptrend_gmean"] - df_result["downtrend_gmean"]
         DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
 
@@ -2351,8 +2340,8 @@ def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd,
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
         path = f"Market/CN/Backtest_Single/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
-
         print(f"summarizing {path}")
+
         df_macd = pd.read_excel(path)
         df_summary.at[path, "gmean"] = df_macd["gmean"].mean()
         df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
@@ -2365,14 +2354,19 @@ def statistic_eval(asset="E", step=1, query_ts_code={}, kwargs={"func": my_macd,
         df_summary.at[path, "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
 
         # create heatmap only if two frequencies are involved in creation
+        #if up/downtrend exists, is it better than mean?
         if "sfreq" in one_kwarg and "bfreq" in one_kwarg:
-            df_uptrend_gmean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = uptrend_gmean
-            df_downtrend_gmean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = downtrend_gmean
-            df_up_better_mean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = up_better_mean
-            df_down_better_mean.at[one_kwarg["sfreq"] + "_abv", one_kwarg["bfreq"]] = down_better_mean
+            df_uptrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = uptrend_gmean
+            df_downtrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = downtrend_gmean
+            df_up_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = up_better_mean
+            df_down_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = down_better_mean
 
-    dict_summary = {"Overview": df_summary, "uptrend_gmean": df_uptrend_gmean, "downtrend_gmean": df_downtrend_gmean, "up_better_mean": df_up_better_mean, "down_better_mean": df_down_better_mean}
-    LB.to_excel(path=f"Market/CN/Backtest_Single/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", dict_df=dict_summary)
+    d_summary = {"Overview": df_summary}
+    d_summary["uptrend_gmean"] = df_uptrend_gmean
+    d_summary["downtrend_gmean"] = df_downtrend_gmean
+    d_summary["up_better_mean"] = df_up_better_mean
+    d_summary["down_better_mean"] = df_down_better_mean
+    LB.to_excel(path=f"Market/CN/Backtest_Single/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
 
 
 def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
@@ -2384,33 +2378,37 @@ def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
     # df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
 
 
-def statistic_initiator(fname="macd"):
+def statistic_initiator(fname="macd", lazy=1):
     # macd iterator generation
     a_kwargs = []
-
     if fname == "macd":
         func = my_macd
+        d_steps = {"F": 1, "FD": 2, "G": 1, "I": 2, "E": 6}
         for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
             if sfreq < bfreq:
-                a_kwargs.append({"ibase": "close", "sfreq": sfreq, "bfreq": bfreq, "type": 4, "score": 1})
+                a_kwargs.append({"ibase": "close", "sfreq": sfreq, "bfreq": bfreq, "type": lazy, "score": 1})
     elif fname == "is_max":
         func = my_ismax
-        for type in [1, 2, 3, 4]:
-            a_kwargs.append(a_kwargs.append({"ibase": "close", "type": type, "score": 1}))
+        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+        for thresh in [x / 100 for x in range(0, 100, 5)]:
+            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
     elif fname == "is_min":
         func = my_ismin
-        for type in [1, 2, 3, 4]:
-            a_kwargs.append(a_kwargs.append({"ibase": "close", "type": type, "score": 1}))
+        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+        for thresh in [x / 100 for x in range(0, 100, 5)]:
+            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
 
-    statistic_eval(asset="F", step=1, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="FD", step=3, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="G", step=1, query_ts_code={"G": ["on_asset == 'E'", "group != 'industry3'"]}, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="I", step=3, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="E", step=5, kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    print(a_kwargs)
+    statistic_eval(asset="F", step=d_steps["F"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="FD", step=d_steps["FD"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="G", step=d_steps["G"], d_queries=LB.c_G_queries(), kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="I", step=d_steps["I"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    statistic_eval(asset="E", step=d_steps["E"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
 
 
 if __name__ == '__main__':
-    statistic_initiator(fname="is_max")
+    for lazy in [1,4]:
+        statistic_initiator(fname="macd", lazy=lazy)
 
 """
 useful techniqes

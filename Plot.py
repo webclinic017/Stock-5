@@ -32,7 +32,7 @@ def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.S
             df[f"rs{freq}_{counter}"].replace(0, np.nan, inplace=True)
 
     # 1 to 6 means 5 resistance freq with each 2 pieces
-    dict_rs = {int(round(window / (2 ** i))): 4 for i in range(0, 6)}
+    d_rs = {int(round(window / (2 ** i))): 4 for i in range(0, 6)}
 
     # calculate all min max for acceleration used for later simulation
     df_asset = DB.get_asset(ts_code=ts_code)
@@ -52,7 +52,7 @@ def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.S
         df_partcial = df_asset.loc[start_date: end_date]
         print(f"resistance {ts_code} {start_date} to {end_date}")
 
-        for freq, max_rs in dict_rs.items():
+        for freq, max_rs in d_rs.items():
             adj_start = df_asset.index[row + window - freq]
             s_minmax = (s_minall.loc[adj_start:end_date]).append(s_maxall.loc[adj_start:end_date])
             support_resistance_acc(df=df_partcial, freq=freq, max_rs=max_rs, s_minmax=s_minmax, adj_start_date=adj_start, end_date=end_date, df_asset=df_asset)
