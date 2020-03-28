@@ -112,7 +112,7 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
 
     df_port_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
     df_port_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
-    df_port_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] >= 1]) / len(df_port_c)
+    df_port_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] > 1]) / len(df_port_c)
 
     df_port_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()) #everytime you sell a stock
     df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna()) #everyday
@@ -552,8 +552,7 @@ def btest_once(settings=[{}]):
 
 
 def btest_multiple(loop_indicator=1):
-    # Initialize setting array
-    a_settings = []
+    # Initialize settings
     setting_base = {
         # general = Non changeable through one run
         "start_date": "20000101",
@@ -594,7 +593,7 @@ def btest_multiple(loop_indicator=1):
         # portfolio
         "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 12,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
+        "p_maxsize": 10,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_proportion": False,  # choices: False(evenly), prop(proportional to rank), fibo(fibonacci)
@@ -604,21 +603,34 @@ def btest_multiple(loop_indicator=1):
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # temp
-    a_columns = [["total_mv", True, 0.05, 1], ["p5", False, 0.15, 1], ["pct_chg", False, 0.25, 1], ["trend", False, 0.25, 1], ["pjump_up", False, 0.05, 1], ["ivola", True, 0.05, 1], ["candle_net_pos", False, 0.15, 1]]  #
-    a_columns = [["pct_chg", False, 1, 1], ["trend", False, 1, 1], ["trend2", False, 1, 1], ["trend10", False, 1, 1], ["candle_net_pos", False, 1, 1], ["candle_net_pos5", False, 1, 1], ["pjump_up", False, 1, 1], ["pjump_up10", False, 1, 1], ["ivola", True, 1, 1], ["ivola5", True, 1, 1],
-                 ["pgain2", True, 1, 1], ["pgain5", True, 1, 1], ["pgain60", True, 1, 1], ["pgain240", True, 1, 1], ["turnover_rate", True, 1, 1], ["turnover_rate_pct2", True, 1, 1], ["pb", True, 1, 1], ["dv_ttm", True, 1, 1], ["ps_ttm", True, 1, 1], ["pe_ttm", True, 1, 1], ["total_mv", 1, 1]]  #
-
     # settings creation
-    for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
-        setting_copy = copy.deepcopy(setting_base)
-        setting_copy["f_query_asset"] =[f"df_today['period']>240",
-                                        f"(df_today['close']/df_today['e_max']).between({thresh},{thresh+0.05})"]
-        setting_copy["s_weight1"] ={}
-        a_settings.append(setting_copy)
+    for asset in ["E","I","FD","F","G"]:
+        a_settings = []
 
-    print("Total Settings:", len(a_settings))
-    btest_once(settings=a_settings)
+        #is_max is_min
+        # for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
+        #     setting_copy = copy.deepcopy(setting_base)
+        #     setting_copy["assets"] = [asset]
+        #     setting_copy["f_query_asset"] =[f"df_today['period']>240",
+        #                                       f"(df_today['e_min']/df_today['close']).between({thresh},{thresh+0.05})"]
+        #     setting_copy["s_weight1"] ={}
+        #     a_settings.append(setting_copy)
+        #
+
+        #macd
+        for macd in ["zlmacd_close.(1, 5, 10)","zlmacd_close.(1, 10, 20)","zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 300, 500)"]:
+            for macd_bool in [10,-10]:
+                setting_copy = copy.deepcopy(setting_base)
+                setting_copy["assets"]=[asset]
+
+                setting_copy["f_query_asset"] = [f"df_today['period']>240",
+                                                 f"(df_today['{macd}']=={macd_bool})"]
+
+                setting_copy["s_weight1"] ={}
+                a_settings.append(setting_copy)
+
+        print("Total Settings:", len(a_settings))
+        btest_once(settings=a_settings)
 
 
 if __name__ == '__main__':

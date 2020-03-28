@@ -2320,10 +2320,12 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
             df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
             df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna())
             df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
+            df_result.at[ts_code, "uptrend_occ"] = len(df_macd_buy)/len(df_asset)
 
             df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
             df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna())
             df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
+            df_result.at[ts_code, "downtrend_occ"] = len(df_macd_sell) / len(df_asset)
 
         # important check only if up/downtrend_gmean are not nan. Which means they actually exist for this strategy.
         df_result.loc[df_result["uptrend_gmean"].notna(), "up_better_mean"] = (df_result.loc[df_result["uptrend_gmean"].notna(), "uptrend_gmean"] > df_result.loc[df_result["uptrend_gmean"].notna(), "gmean"]).astype(int)
@@ -2347,8 +2349,10 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
         df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
         df_summary.at[path, "uptrend_gmean"] = uptrend_gmean = df_macd["uptrend_gmean"].mean()
         df_summary.at[path, "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
+        df_summary.at[path, "uptrend_occ"]=df_macd["uptrend_occ"].mean()
         df_summary.at[path, "downtrend_gmean"] = downtrend_gmean = df_macd["downtrend_gmean"].mean()
         df_summary.at[path, "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
+        df_summary.at[path, "downtrend_occ"] = df_macd["downtrend_occ"].mean()
         df_summary.at[path, "up_better_mean"] = up_better_mean = df_macd["up_better_mean"].mean()
         df_summary.at[path, "down_better_mean"] = down_better_mean = df_macd["down_better_mean"].mean()
         df_summary.at[path, "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()

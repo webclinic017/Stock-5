@@ -40,7 +40,9 @@ def deco_only_big_update(func):
             if kwargs["big_update"]:
                 return func(*args, **kwargs)  # only return original function if kwargs has keyword "big_update" and big_update is true
         return
+
     return this_invisible_func
+
 
 # TODO very dangerous function, check it often
 def deco_try_ignore(func):
@@ -49,7 +51,9 @@ def deco_try_ignore(func):
             return func(*args, **kwargs)
         except Exception as e:
             return
+
     return this_function_will_never_be_seen
+
 
 def deco_except_empty_df(func):
     def this_function_will_never_be_seen(*args, **kwargs):
@@ -57,6 +61,7 @@ def deco_except_empty_df(func):
             return func(*args, **kwargs)
         except:
             return pd.DataFrame()
+
     return this_function_will_never_be_seen
 
 
@@ -66,11 +71,13 @@ def wrap_line(func):
         result = func(*args, **kwargs)
         print("=" * 50)
         return result
+
     return this_function_will_never_be_seen
 
 
 def today():
     return str(datetime.now().date()).replace("-", "")
+
 
 def indi_name(ibase, deri, d_variables={}):
     variables = ""
@@ -178,8 +185,10 @@ def empty_df(query):
 def get_trade_date_datetime(trade_date):
     return datetime.strptime(str(trade_date), '%Y%m%d')
 
+
 def get_trade_date_datetime_y(trade_date):
     return get_trade_date_datetime(trade_date).year
+
 
 def get_trade_date_datetime_s(trade_date):
     date = get_trade_date_datetime_m(trade_date)
@@ -198,27 +207,34 @@ def get_trade_date_datetime_s(trade_date):
 def get_trade_date_datetime_m(trade_date):
     return get_trade_date_datetime(trade_date).month
 
+
 def get_trade_date_datetime_d(trade_date):
     return get_trade_date_datetime(trade_date).day
+
 
 # D-W 1-7 in words
 def get_trade_date_datetime_dayofweek(trade_date):
     return get_trade_date_datetime(trade_date).strftime("%A")
 
+
 # D-Y 1-365
 def get_trade_date_datetime_dayofyear(trade_date):
     return get_trade_date_datetime(trade_date).strftime("%j")
+
 
 # W-Y 1-52
 def get_trade_date_datetime_weekofyear(trade_date):
     return get_trade_date_datetime(trade_date).strftime("%W")
 
+
 def df_reverse_reindex(df):
     df = df.reindex(index=df.index[::-1]).set_index(pd.Series(range(0, len(df.index))))
     return df
 
+
 def df_reindex(df):
     return df.reset_index(drop=True, inplace=False)
+
 
 def df_drop_duplicated_reindex(df, column_name):
     df[column_name] = df[column_name].astype(int)
@@ -226,9 +242,11 @@ def df_drop_duplicated_reindex(df, column_name):
     df = df_reindex(df)
     return df
 
+
 @deco_try_ignore
 def add_column(df, add_to, add_after, position):  # position 1 means 1 after add_after column. Position -1 means 1 before add_after column
     df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
+
 
 def columns_remove(df, columns_array):
     for column in columns_array:
@@ -237,12 +255,15 @@ def columns_remove(df, columns_array):
         except Exception as e:
             pass
 
+
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     return pd.Series(index=s_index, data=s_index * z[0] + z[1])
 
+
 def get_linear_regression_variables(s_index, s_data):
     return np.polyfit(s_index, s_data, 1)
+
 
 def get_linear_regression_slope(s_index, s_data):
     return np.polyfit(s_index, s_data, 1)[0]  # if degree is 1, then [0] is slope
@@ -258,6 +279,7 @@ def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan becau
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
     return asset_all[s1_name].corr(asset_all[s2_name], method="pearson")
 
+
 def open_file(filepath):
     filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
     if platform.system() == 'Darwin':  # macOS
@@ -267,6 +289,7 @@ def open_file(filepath):
     else:  # linux variants
         subprocess.call(('xdg-open', filepath))
 
+
 @deco_try_ignore
 def close_file(filepath):
     filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
@@ -274,19 +297,20 @@ def close_file(filepath):
     wb = xl.Workbooks.Open(filepath)
     xl.Quit()
     wb.Close(True)
-    #new
-    xl.DisplayAlerts=False
+    # new
+    xl.DisplayAlerts = False
 
-#maybe create a rekursive version
+
+# maybe create a rekursive version
 def groups_d_to_string_iterable(d_groups: dict):
     result = ""
     for key, d_value in d_groups.items():
-        if type(d_value) in [list,dict]:
+        if type(d_value) in [list, dict]:
             a_string_helper = [str(x.__name__) if callable(x) else str(x) for x in d_value]
             result = f"{result}{key}: [{', '.join(a_string_helper)}], "
         elif callable(d_value):
             result = f"{result}{d_value.__name__}: {d_value}, "
-        else: # bool, string, scalar, int
+        else:  # bool, string, scalar, int
             result = f"{result}{key}: {d_value}, "
     return result
 
@@ -294,6 +318,7 @@ def groups_d_to_string_iterable(d_groups: dict):
 # returns only numeric volumns in a df
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
+
 
 def line_print(text, lines=40):
     print("=" * lines)
@@ -354,7 +379,7 @@ def to_excel(path, d_df):
             portfolio_writer.save()
             break
         except Exception as e:
-            print("excel save exception type",type(e))
+            print("excel save exception type", type(e))
             handle_save_exception(e, path)
 
 
@@ -395,19 +420,24 @@ def multi_process(func, a_kwargs, a_steps=[]):
 def c_assets():
     return [e.value for e in Assets]
 
+
 def c_assets_big():
-    return c_assets()+["G","F"]
+    return c_assets() + ["G", "F"]
+
 
 class Assets(enum.Enum):
     I = 'I'
     E = 'E'
     FD = 'FD'
 
+
 def c_bfreq():
     return [e.value for e in BFreq]
 
+
 def c_G_queries():
     return {"G": ["on_asset == 'E'", "group != 'industry3'"]}
+
 
 class BFreq(enum.Enum):
     f1 = 1
@@ -446,6 +476,7 @@ def c_date_oth():
             "holdertrade": API_Tushare.my_holdertrade,
             "repurchase": API_Tushare.my_repurchase,
             "share_float": API_Tushare.my_share_float}
+
 
 def c_assets_fina_function_dict():
     return {"fina_indicator": API_Tushare.my_fina_indicator,
@@ -535,63 +566,53 @@ def c_candle():
             }
 
 
+# TODO transform hard coded to soft coded
 def c_d_groups(assets=c_assets(), a_ignore=[]):
+    import DB
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
     asset = {"asset": c_assets()}
     if "E" in assets:
-        d_e = {"industry1": ["建筑装饰", "纺织服装", "采掘", "汽车", "电气设备", "传媒", "机械设备", "钢铁", "银行", "轻工制造", "交通运输", "非银金融", "公用事业", "化工", "有色金属", "家用电器", "房地产", "综合", "农林牧渔", "建筑材料", "商业贸易", "通信", "计算机", "国防军工", "休闲服务", "食品饮料", "医药生物", "电子"],
-                  "industry2": ["装修装饰", "园林工程", "其他轻工制造", "服装家纺", "采掘服务", "石油开采", "餐饮", "汽车零部件", "运输设备", "电机", "航空运输", "证券", "营销传播", "渔业", "金属制品", "玻璃制造", "基础建设", "文化传媒", "航运", "物流", "家用轻工", "房屋建设", "电源设备", "专业工程", "通用机械", "工业金属", "电气自动化设备", "水务", "其他采掘", "钢铁", "环保工程及服务", "银行", "专用设备",
-                                "商业物业经营", "燃气",
-                                "港口", "包装印刷", "高低压设备", "煤炭开采", "仪器仪表", "种植业", "视听器材", "专业零售", "互联网传媒", "船舶制造", "化学原料", "公交", "农产品加工", "其他建材", "塑料", "石油化工", "其他交运设备", "化学制品", "房地产开发", "高速公路", "汽车服务", "综合", "黄金", "白色家电", "动物保健", "橡胶", "航空装备", "造纸", "光学光电子", "食品加工", "纺织制造", "园区开发", "通信设备",
-                                "医疗器械", "计算机设备",
-                                "通信运营", "保险", "计算机应用", "旅游综合", "电力", "稀有金属", "贸易", "化学纤维", "多元金融", "中药", "其他电子", "一般零售", "化学制药", "金属非金属新材料", "景点", "畜禽养殖", "电子制造", "医药商业", "铁路运输", "酒店", "航天装备", "汽车整车", "医疗服务", "饲料", "饮料制造", "农业综合", "半导体", "生物制品", "元件", "林业", "地面兵装", "其他休闲服务", "水泥制造", "机场"],
-                  "industry3": ["鞋帽", "女装", "铁路建设", "其他互联网服务", "休闲服装", "印刷包装机械", "粮食种植", "粮油加工", "农用机械", "装修装饰", "园林工程", "风电设备", "其他轻工制造", "其他采掘服务", "油气钻采服务", "有线电视网络", "毛纺", "其他服装", "石油开采", "路桥施工", "一般物业经营", "焦炭加工", "工控自动化", "化学工程", "餐饮", "影视动漫", "铝", "复合肥", "汽车零部件", "其他专业工程", "钢结构", "铁路设备",
-                                "水产养殖",
-                                "电机", "珠宝首饰", "冶金矿采化工设备", "航空运输", "证券", "营销服务", "平面媒体", "其他纺织", "环保设备", "其他基础建设", "重型机械", "金属制品", "普钢", "磨具磨料", "其他家用轻工", "纺织化学用品", "玻璃制造", "机械基础件", "炭黑", "家具", "新能源发电", "家电零部件", "航运", "物流", "氟化工及制冷剂", "线缆部件及其他", "储能设备", "机床工具", "房屋建设", "火电设备", "水务", "其他酒类",
-                                "其他采掘", "男装",
-                                "软饮料", "海洋捕捞", "乳品", "葡萄酒", "其它通用机械", "环保工程及服务", "其他种植业", "管材", "银行", "其他化学原料", "彩电", "燃气", "纯碱", "港口", "包装印刷", "制冷空调设备", "综合电力设备商", "其它电源设备", "民爆用品", "中压设备", "其他塑料制品", "楼宇设备", "铜", "其它专用机械", "涂料油漆油墨制造", "石油加工", "仪器仪表", "电网自动化", "计量仪表", "钨", "专业市场", "专业连锁",
-                                "移动互联网服务",
-                                "船舶制造", "磷化工及磷酸盐", "公交", "煤炭开采", "纺织服装设备", "互联网信息服务", "光伏设备", "内燃机", "氯碱", "铅锌", "其他建材", "低压设备", "聚氨酯", "其它视听器材", "其他交运设备", "耐火材料", "改性塑料", "其他化学制品", "农药", "食品综合", "无机盐", "房地产开发", "高压设备", "自然景点", "文娱用品", "高速公路", "汽车服务", "综合", "粘胶", "其他农产品加工", "黄金", "百货",
-                                "动物保健", "显示器件",
-                                "家纺", "其他纤维", "水利工程", "通信配套服务", "航空装备", "造纸", "轮胎", "终端设备", "LED", "金属新材料", "日用化学产品", "果蔬加工", "特钢", "其他稀有小金属", "火电", "园区开发", "医疗器械", "IT服务", "计算机设备", "洗衣机", "涤纶", "通信运营", "保险", "其他橡胶制品", "旅游综合", "光学元件", "贸易", "小家电", "电子零部件制造", "通信传输设备", "多元金融", "中药", "软件开发",
-                                "冰箱", "其他电子",
-                                "热电", "石油贸易", "化学制剂", "种子生产", "超市", "化学原料药", "乘用车", "畜禽养殖", "其他文化传媒", "非金属新材料", "医药商业", "铁路运输", "丝绸", "被动元件", "调味发酵品", "半导体材料", "酒店", "工程机械", "氮肥", "黄酒", "航天装备", "商用载客车", "医疗服务", "磷肥", "磁性材料", "饲料", "稀土", "农业综合", "集成电路", "啤酒", "钾肥", "肉制品", "生物制品", "合成革", "辅料",
-                                "棉纺", "林业",
-                                "多业态零售", "水电", "地面兵装", "其他休闲服务", "维纶", "印染", "印制电路板", "电子系统组装", "锂", "分立器件", "商用载货车", "玻纤", "国际工程承包", "水泥制造", "城轨建设", "空调", "燃机发电", "氨纶", "白酒", "人工景点", "机场"],
-                  "area": ["海南", "西藏", "黑龙江", "青海", "江苏", "广西", "天津", "重庆", "吉林", "甘肃", "陕西", "浙江", "北京", "广东", "河南", "湖南", "辽宁", "上海", "新疆", "河北", "贵州", "山东", "深圳", "四川", "安徽", "湖北", "福建", "宁夏", "内蒙", "山西", "云南", "江西"],
-                  "exchange": ["主板", "中小板", "创业板"],
-                  "is_hs": ["N", "S", "H"],
-                  "state_company": [True, False]}
+        df_ts_code_E = DB.get_ts_code("E")
+        df_ts_code_concept=DB.get_ts_code("concept")
+        d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
+               "industry2": list(df_ts_code_E["industry2"].unique()),
+               "industry3": list(df_ts_code_E["industry3"].unique()),
+               "concept": list(df_ts_code_concept["concept_name"].unique),
+               "area": list(df_ts_code_E["area"].unique()),
+               "exchange": list(df_ts_code_E["exchange"].unique()),
+               "is_hs": list(df_ts_code_E["is_hs"].unique()),
+               "state_company": list(df_ts_code_E["state_company"].unique()),}
         asset = {**asset, **d_e}
     if "I" in assets:
-        d_i = {"category": ["三级行业指数", "四级行业指数", "行业指数", "综合指数", "其他", "一级行业指数", "主题指数", "成长指数", "价值指数", "二级行业指数", "基金指数", "规模指数", "策略指数", "债券指数"],
-                  "publisher": ["上交所", "中证公司", "深交所"]}
+        df_ts_code_I = DB.get_ts_code("I")
+        d_i = {"category": list(df_ts_code_I["category"].unique()),
+               "publisher": list(df_ts_code_I["publisher"].unique()), }
         asset = {**asset, **d_i}
     if "FD" in assets:
-        d_fd = {"fund_type": ["货币市场型", "商品型", "股票型", "混合型", "另类投资型", "债券型"],
-                   "invest_type": ["白银期货型", "有色金属期货型", "主题型", "豆粕期货型", "货币型", "积极配置型", "偏股混合型", "成长型", "被动指数型", "增强指数型", "灵活配置型", "股票型", "黄金现货合约", "原油主题基金", "混合型", "债券型", "强化收益型", "稳定型"],
-                   "type": ["契约型封闭式", "契约型开放式"],
-                   "management": ["华泰证券资管", "兴业基金", "财通证券资管", "信达澳银基金", "中信建投基金", "国寿安保基金", "东吴基金", "泓德基金", "东海基金", "南华基金", "平安基金", "汇添富基金", "弘毅远方基金", "华宝基金", "九泰基金", "中海基金", "国联安基金", "诺德基金", "财通基金", "富国基金", "申万菱信基金", "国金基金", "广发基金", "大成基金", "中融基金", "天治基金", "西部利得基金", "新华基金", "融通基金", "浦银安盛基金",
-                                  "中金基金",
-                                  "浙商资管", "华安基金", "银华基金", "华夏基金", "鹏华基金", "银河基金", "汇安基金", "嘉实基金", "金鹰基金", "工银瑞信基金", "国泰基金", "方正富邦基金", "海富通基金", "招商基金", "华泰柏瑞基金", "安信基金", "南方基金", "诺安基金", "中信保诚基金", "博时基金", "易方达基金", "长盛基金", "圆信永丰基金", "交银施罗德基金", "泰达宏利基金", "建信基金", "国投瑞银基金", "中欧基金", "国海富兰克林基金", "天弘基金",
-                                  "前海开源基金",
-                                  "景顺长城基金", "泰信基金", "长信基金", "长城基金", "万家基金", "摩根士丹利华鑫基金", "中银基金", "东证资管", "兴全基金", "民生加银基金", "华富基金", "红土创新基金"],
-                   "custodian": ["中信证券", "渤海银行", "招商证券", "国泰君安", "中信建投", "广发证券", "平安银行", "中金公司", "北京银行", "招商银行", "浦发银行", "中国工商银行", "中国银行", "中国建设银行", "海通证券", "浙商银行", "中国农业银行", "中国银河", "中国民生银行", "兴业银行", "兴业证券", "国信证券", "中信银行", "交通银行", "广发银行", "中国光大银行", "邮储银行", "宁波银行", "上海银行", "华夏银行"]}
+        df_ts_code_FD = DB.get_ts_code("FD")
+        d_fd = {"fund_type": list(df_ts_code_FD["fund_type"].unique()),
+                "invest_type": list(df_ts_code_FD["invest_type"].unique()),
+                "type": list(df_ts_code_FD["type"].unique()),
+                "management": list(df_ts_code_FD["management"].unique()),
+                "custodian": list(df_ts_code_FD["custodian"].unique()), }
         asset = {**asset, **d_fd}
-    asset = {key: value for key, value in asset.items() if key not in a_ignore}
-    return asset
+    return {key: value for key, value in asset.items() if key not in a_ignore}
+
 
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
+
 
 @wrap_line
 def log(message, elapsed=None):
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
 
+
 def endlog():
     sound("finished_all.mp3")
     log("END", secondsToStr(time.time() - start))
     time.sleep(2)
+
 
 # skip rolling values that are already calculated and only treat nan values
 # def fast_add_rolling(df, add_from="", add_to="", rolling_freq=5, func=pd.Series.mean):
@@ -627,30 +648,31 @@ def std(xs):
     return std
 
 
-
 def timeseries_to_season(df):
     """converts a df time series to another df containing only the last day of season"""
-    df_copy=df.copy()
+    df_copy = df.copy()
     df_copy["trade_date_copy"] = df_copy.index
-    df_copy["year"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_y(x)) #can be way more efficient
-    df_copy["month"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_m(x)) #can be way more efficient
+    df_copy["year"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+    df_copy["month"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
 
-    a_index=[]
+    a_index = []
     for year in df_copy["year"].unique():
-        df_year=df_copy[df_copy["year"]==year]
-        for month in [3,6,9,12]:
-            last_season_day=df_year[df_year["month"]==month].last_valid_index()
+        df_year = df_copy[df_copy["year"] == year]
+        for month in [3, 6, 9, 12]:
+            last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
 
     return df_copy.loc[a_index]
 
+
 def timeseries_to_week(df):
     """converts a df time series to another df containing only fridays"""
-    df_copy=df.copy()
+    df_copy = df.copy()
     df_copy["weekday"] = df_copy.index
-    df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x)) #can be way more efficient
-    return df_copy[df_copy["weekday"]=="Friday"]
+    df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x))  # can be way more efficient
+    return df_copy[df_copy["weekday"] == "Friday"]
+
 
 def timeseries_to_month(df):
     """converts a df time series to another df containing only the last day of month"""
@@ -663,20 +685,22 @@ def timeseries_to_month(df):
     a_index = []
     for year in df_copy["year"].unique():
         df_year = df_copy[df_copy["year"] == year]
-        for month in range(1,13):
+        for month in range(1, 13):
             last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
 
     return df_copy.loc[a_index]
 
+
 def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
     d_df = {}
-    p_setting=[x/100 for x in p_setting]
+    p_setting = [x / 100 for x in p_setting]
     for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
         d_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
     return d_df
+
 
 def custom_expand(df, min_freq):
     d_result = {}
@@ -685,23 +709,29 @@ def custom_expand(df, min_freq):
             d_result[expanding_index] = df.loc[df.index[0]:expanding_index]
     return d_result
 
+
 def custom_pairwise_noverlap(iterables):
     result = []
     for i, k in zip(iterables[0::2], iterables[1::2]):
         result.append((i, k))
     return result
 
-def custom_pairwise_combination(a_array,n):
+
+def custom_pairwise_combination(a_array, n):
     return list(itertools.combinations(a_array, n))
+
 
 def my_gmean(series):
     return gmean((series / 100) + 1)
 
+
 def my_mean(series):
     return ((series / 100) + 1).mean()
 
+
 def my_std(series):
     return ((series / 100) + 1).std()
+
 
 def my_mean_std_diff(series):
     new_series = (series / 100) + 1
@@ -709,9 +739,11 @@ def my_mean_std_diff(series):
     series_std = new_series.std()
     return series_mean - series_std
 
-#for some reason the last one is always wrong
+
+# for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
+
 
 if __name__ == '__main__':
     pass

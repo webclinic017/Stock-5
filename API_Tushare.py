@@ -115,8 +115,13 @@ def my_yc_cb(ts_code="", curve_type="", trade_date="",start_date="",end_date="")
     return get(func=pro.yc_cb, fname="pro.yc_cb", kwargs=locals())
 
 
+def my_concept(src="ts"):
+    return get(func=pro.concept, fname="pro.concept", kwargs=locals())
+
+def my_concept_detail(id="TS2",ts_code=""):
+    return get(func=pro.concept_detail, fname="pro.concept_detail", kwargs=locals())
+
 if __name__ == '__main__':
-    df = my_yc_cb()
+    df = my_concept()
     print(df)
-    df.to_csv("b.csv")
     pass
