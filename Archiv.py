@@ -254,7 +254,7 @@ def asset_fundamental(start_date, end_date, freq, assets=["E"]):
     df_result_mean.sort_values(by=["final_fundamental_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Backtest_Single/" + "fundamental" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
-    DB.to_excel_with_static_data(df_result_mean, path=path, sort=["final_fundamental_rank", True], asset=assets)
+    DB.to_excel_with_static_data(df_result_mean, path=path, sort=["final_fundamental_rank", True], a_assets=assets)
 
 
 # measures the volatility aspect
@@ -326,26 +326,23 @@ def asset_volatility(start_date, end_date, assets, freq):
     df_result.sort_values(by=["final_volatility_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Backtest_Single/" + "volatility" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
-    DB.to_excel_with_static_data(df_result, path=path, sort=["final_volatility_rank", True], asset=assets)
+    DB.to_excel_with_static_data(df_result, path=path, sort=["final_volatility_rank", True], a_assets=assets)
 
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
 def asset_bullishness():
     from scipy.stats import gmean
-    df_ts_code_E = DB.get_ts_code(a_asset=["E"])[::1]
-    df_ts_code_I = DB.get_ts_code(a_asset=["I"])[::1]
-    df_ts_code=df_ts_code_E.append(df_ts_code_I)
+    df_ts_code = DB.get_ts_code(a_asset=["E","I","FD","F","G"])[::1]
+    df_ts_code.to_csv("check.csv",encoding="utf-8_sig")
     df_result = pd.DataFrame()
-    a_freqs = [10, 20, 60, 120, 240]
 
     df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I")
     df_sh_index["sh_close"] = df_sh_index["close"]
     df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I")
     df_cy_index["cy_close"] = df_cy_index["close"]
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
-        print("ts_code", ts_code)
+        print("ts_code", ts_code, asset)
         df_asset = DB.get_asset(ts_code=ts_code, asset=asset)
-
         df_result.at[ts_code, "period"] = len(df_asset)
         try:
             df_asset = df_asset[(df_asset["period"] > 240)]

@@ -239,7 +239,7 @@ def rsi_sim_no_bins_multiple():
             except:
                 pass
 
-    DB.to_excel_with_static_data(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], asset=["E"], group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], a_assets=["E"], group_result=True)
 
 
 def rsi_sim_bins():

@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import talib
 import xlsxwriter
+import threading
 import smtplib
 from email.message import EmailMessage
 import os
@@ -346,6 +347,7 @@ def handle_save_exception(e, path):
             time.sleep(1)
     elif type(e) == PermissionError:
         print(f"try to close {path}")
+        sound("close_excel")
         close_file(path)
         time.sleep(5)
     else:
@@ -370,12 +372,12 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
             handle_save_exception(e, a_path[1])
 
 
-def to_excel(path, d_df):
+def to_excel(path, d_df,index=True):
     for i in range(0, 10):
         try:
             portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
             for key, df in d_df.items():
-                df.to_excel(portfolio_writer, sheet_name=key, index=True, encoding='utf-8_sig')
+                df.to_excel(portfolio_writer, sheet_name=key, index=index, encoding='utf-8_sig')
             portfolio_writer.save()
             break
         except Exception as e:
@@ -572,24 +574,24 @@ def c_d_groups(assets=c_assets(), a_ignore=[]):
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
     asset = {"asset": c_assets()}
     if "E" in assets:
-        df_ts_code_E = DB.get_ts_code("E")
-        df_ts_code_concept=DB.get_ts_code("concept")
+        df_ts_code_E = DB.get_ts_code(["E"])
+        df_ts_code_concept=DB.get_ts_code(["concept"])
         d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
                "industry2": list(df_ts_code_E["industry2"].unique()),
                "industry3": list(df_ts_code_E["industry3"].unique()),
-               "concept": list(df_ts_code_concept["concept_name"].unique),
+               "concept": list(df_ts_code_concept["concept"].unique()),
                "area": list(df_ts_code_E["area"].unique()),
                "exchange": list(df_ts_code_E["exchange"].unique()),
                "is_hs": list(df_ts_code_E["is_hs"].unique()),
                "state_company": list(df_ts_code_E["state_company"].unique()),}
         asset = {**asset, **d_e}
     if "I" in assets:
-        df_ts_code_I = DB.get_ts_code("I")
+        df_ts_code_I = DB.get_ts_code(["I"])
         d_i = {"category": list(df_ts_code_I["category"].unique()),
                "publisher": list(df_ts_code_I["publisher"].unique()), }
         asset = {**asset, **d_i}
     if "FD" in assets:
-        df_ts_code_FD = DB.get_ts_code("FD")
+        df_ts_code_FD = DB.get_ts_code(["FD"])
         d_fd = {"fund_type": list(df_ts_code_FD["fund_type"].unique()),
                 "invest_type": list(df_ts_code_FD["invest_type"].unique()),
                 "type": list(df_ts_code_FD["type"].unique()),
@@ -744,6 +746,28 @@ def my_mean_std_diff(series):
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
 
+
+
+# inside functions
+class interrupt_class:  # static method inside class is required to break the loop because two threads
+    interrput = False
+
+def interrupt_user_input():
+    input('Press a key \n')  # no need to store input, any key will trigger break
+    interrupt_class.interrput = True
+
+def interrupt_start():
+    break_detector = threading.Thread(target=interrupt_user_input, daemon=True)
+    break_detector.start()
+
+def interrupt_confirmed():
+    if interrupt_class.interrput:
+        print("BREAK loop")
+        sound("break.mp3")
+        time.sleep(5)
+        return True
+    else:
+        return False
 
 if __name__ == '__main__':
     pass

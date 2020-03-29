@@ -11,6 +11,7 @@ import math
 from numba import njit
 import traceback
 import cProfile
+import threading
 from scipy.stats import gmean
 from tqdm import tqdm
 import ICreate
@@ -23,7 +24,7 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
-def update_general_trade_cal(start_date="19900101", end_date="20250101"):
+def update_trade_cal(start_date="19900101", end_date="20250101"):
     df = API_Tushare.my_trade_cal(start_date=start_date, end_date=end_date).set_index(keys="cal_date", inplace=False, drop=True)
     LB.to_csv_feather(df, LB.a_path("Market/CN/General/trade_cal_D"))
 
@@ -60,8 +61,8 @@ def update_date_seasonal_stats(group_instance="asset_E"):
     pdwriter.save()
 
 
-def update_general_trade_date(freq="D", market="CN"):
-    def update_general_trade_date_stockcount(df, market="CN"):
+def update_trade_date(freq="D", market="CN"):
+    def update_trade_date_stockcount(df, market="CN"):
         df.index = df["trade_date"].astype(int)
         for asset in c_assets():
             df_ts_codes = get_ts_code(a_asset=[asset])
@@ -73,7 +74,7 @@ def update_general_trade_date(freq="D", market="CN"):
             df[f"{asset}_count"] = df[f"{asset}_count"].fillna(0)
         return df
 
-    def update_general_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
+    def update_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
         """this requires the date_seasonal matrix to be updated first """
         # get all indicator for each day
         path_indicator = "Market/CN/Backtest_Single/seasonal/all_date_seasonal.xlsx"
@@ -115,12 +116,12 @@ def update_general_trade_date(freq="D", market="CN"):
         df = LB.df_reverse_reindex(df)
 
         df = df[["trade_date"]]
-        df = update_general_trade_date_stockcount(df)  # adds E,I,FD count
-        # df = update_general_trade_date_seasonal_score(df, freq, market)  # TODO adds seasonal score for each day
+        df = update_trade_date_stockcount(df)  # adds E,I,FD count
+        # df = update_trade_date_seasonal_score(df, freq, market)  # TODO adds seasonal score for each day
         LB.to_csv_feather(df, a_path, index_relevant=False)
 
 
-def update_general_ts_code(asset="E", market="CN", big_update=True):
+def update_ts_code(asset="E", market="CN", big_update=True):
     print("start update general ts_code ", asset)
     if (asset == "E"):
         df = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
@@ -134,11 +135,11 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
             df[f"industry{level}"] = df_industry_member[f"industry{level}"]
 
         # add concept
-        df_concept=get_ts_code(a_asset=["concept"])
-        df_grouped_concept=df_concept.groupby("ts_code").agg(lambda column: ", ".join(column))
-        df_grouped_concept.to_csv("grouped.csv",encoding='utf-8_sig')
-        df["concept_names"]=df_grouped_concept["concept_name"]
-        df["concept_codes"]=df_grouped_concept["code"]
+        df_concept = get_ts_code(a_asset=["concept"])
+        df_grouped_concept = df_concept.groupby("ts_code").agg(lambda column: ", ".join(column))
+        df_grouped_concept.to_csv("grouped.csv", encoding='utf-8_sig')
+        df["concept"] = df_grouped_concept["concept"]
+        df["concept_code"] = df_grouped_concept["code"]
 
         # add State Government for each stock
         df["state_company"] = False
@@ -206,22 +207,26 @@ def update_general_ts_code(asset="E", market="CN", big_update=True):
         return
     elif asset == "concept":
         df_member = API_Tushare.my_concept()
-        a_concepts=[]
+        a_concepts = []
         for code in df_member["code"]:
-            df_instance=API_Tushare.my_concept_detail(id=code)
+            df_instance = API_Tushare.my_concept_detail(id=code)
             a_concepts.append(df_instance)
         df = pd.concat(a_concepts, sort=False)
 
-        #remove column name it is in both df
-        df_member_col=[x for x in df_member if x not in df.columns]
+        # remove column name it is in both df
+        df_member_col = [x for x in df_member if x not in df.columns]
         df["code"] = df["id"]
         df = pd.merge(df, df_member[df_member_col], how="left", on=["code"], suffixes=[False, False], sort=False)
+
+        #change name with / to:
+        df.rename(columns={"concept_name": "concept"}, inplace=True)
+        df["concept"]=df["concept"].str.replace(pat="/",repl="_")
         df = df.set_index("ts_code", drop=True)
         LB.to_csv_feather(df, a_path=LB.a_path(f"Market/{market}/General/ts_code_concept"))
         return
     df["asset"] = asset
     if "list_date" not in df.columns:
-        df["list_date"]=np.nan
+        df["list_date"] = np.nan
     df["list_date"] = df["list_date"].fillna(method='ffill') if asset not in ["G", "F"] else np.nan
     a_path = LB.a_path(f"Market/{market}/General/ts_code_{asset}")
     LB.to_csv_feather(df, a_path)
@@ -636,20 +641,67 @@ def update_assets_E_D_Fun(start_date="0000000", end_date=LB.today(), market="CN"
                 LB.to_csv_feather(df, a_path)
                 print(counter, ts_code, f"{ts_code} {fina_name} UPDATED")
 
+def update_assets_G_D(assets=["E"], big_update=True, step=1):
+    """
+    add all assets together and then save them as date
+    """
+    df_ts_code=get_ts_code(a_asset=["E"])
+    d_preload=preload(asset="E")
+    example_column=get_example_column(asset="E",freq="D", numeric_only=True)
 
-def update_assets_G_D(assets=["E"], big_update=True):
-    """there are 2 approach to do this
+    for group, a_instance in c_d_groups(assets=["E"]).items():
+        for instance in a_instance:
+
+            #get member of that instance
+            if group=="concept":
+                #TODO check in and out concept date
+                df_members=df_ts_code[df_ts_code["concept"].str.contains(instance)==True]
+            else:
+                df_members=df_ts_code[df_ts_code[group]==instance]
+
+            #loop over all members
+            df_instance=pd.DataFrame()
+            for counter, ts_code in enumerate(df_members.index):
+                try:
+                    df_asset=d_preload[ts_code]
+                except Exception as e:
+                    pass # in df_ts_code but not in preload. maybe not met condition of preload like period > 240
+
+                if df_asset.empty:
+                    continue
+
+                print(f"creating group: {group,instance}: {counter} - {ts_code} - len {len(df_asset)}")
+                df_asset=LB.get_numeric_df(df_asset)
+                df_asset["divide_helper"]=1#counts how many assets are there at one day
+                df_instance=df_instance.add(df_asset,fill_value=0)
+
+            #save df_instance as asset
+            if not df_instance.empty:
+                df_instance=df_instance.div(df_instance["divide_helper"],axis=0)
+                df_instance=df_instance[example_column] #align columns
+                df_instance.insert(0, "ts_code", f"{group}_{instance}")
+            LB.to_csv_feather(df_instance, LB.a_path(f"Market/CN/Asset/G/D/{group}_{instance}"))
+            print(f"{group}_{instance} UPDATED")
+
+
+def update_assets_G_D2(assets=["E"], big_update=True,step=1):
+    """
+    DEPRECATED!
+
+    there are 2 approach to do this
     1. Asset to industry group and then create date
-    2. Asset to date and then filter only stocks that belongs to one industry
 
     This approach is using procedure 2. But both approach should produce same result
-    Requiement: df_date
+    Requirement: df_date
     """
+
+    LB.interrupt_start()
 
     # initialize all group as dict
     d_group_instance_update = {}  # dict of array
     d_group_instance_saved = {}  # dict of array
     for group, a_instance in c_d_groups(assets=assets).items():
+        print(group, a_instance)
         for instance in a_instance:
             d_group_instance_update[f"{group}_{instance}"] = []
             d_group_instance_saved[f"{group}_{instance}"] = get_asset(f"{group}_{instance}", asset="G")
@@ -671,23 +723,57 @@ def update_assets_G_D(assets=["E"], big_update=True):
     df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
     print("START UPDATE GROUP since", last_saved_date)
 
+    # create a dict for concept in advance
+    d_concept = {}
+    df_grouped_concept = get_ts_code(a_asset=["concept"]).groupby("concept")
+    for concept, row in df_grouped_concept:
+        d_concept[concept] = row.index
+
     # loop over date and get mean
     for trade_date in df_trade_date.index:  # for each day
+
+        if LB.interrupt_confirmed():
+            break
+
         print(trade_date, "Updating GROUP")
         df_date = get_date(trade_date=trade_date, a_assets=assets, freq="D")
         for group, a_instance in c_d_groups(assets=assets).items():  # for each group
-            df_date_grouped = df_date.groupby(by=group, ).mean()  # calculate mean
-            for instance, row in df_date_grouped.iterrows():  # append to dict
-                d_group_instance_update[f"{group}_{instance}"].append(row)
+
+            # one stock can have many concept groups. 1:N Relation
+            if group == "concept":
+                for instance in a_instance:
+                    try:
+                        df_date_grouped = df_date.loc[d_concept[instance]]
+                    except Exception as e:
+                        print(f"{trade_date} {group} {instance}: {e}")
+                        continue
+
+                    if df_date_grouped.empty:
+                        continue
+                    else:
+                        row = df_date_grouped.mean()
+                        d_group_instance_update[f"{group}_{instance}"].append(row)
+
+            # one stock can only be in one group. 1:1 Relation
+            else:
+                df_date_grouped = df_date.groupby(by=group).mean()
+                for instance, row in df_date_grouped.iterrows():
+                    d_group_instance_update[f"{group}_{instance}"].append(row)
 
     # save all to df
     for (key, a_update_instance), (key_saved, df_saved) in zip(d_group_instance_update.items(), d_group_instance_saved.items()):
         df_update = pd.DataFrame(a_update_instance)
+        if df_update.empty:
+            print(key, "EMPTY. CONTINUE")
+            continue
+        else:
+            df_update.set_index(keys="trade_date", drop=True, inplace=True)  # reset index after group
+
         if not df_saved.empty:
             df_update = pd.concat(objs=[df_saved, df_update], sort=False, ignore_index=True)
-        if not df_update.empty:
-            df_update.set_index(keys="trade_date", drop=True, inplace=True)  # reset index after group
-        df_update.insert(0, "ts_code", key)
+
+        if "ts_code" not in df_update:
+            df_update.insert(0, "ts_code", key)
         LB.to_csv_feather(df_update, LB.a_path(f"Market/CN/Asset/G/D/{key}"))
         print(key, "UPDATED")
 
@@ -700,30 +786,15 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
     if step not in [1, -1]:
         return print("STEP only 1 or -1 !!!!")
 
-    # get the latest column of the asset file
-    if asset == "E":
-        code = "000001.SZ"
-        naive = False
-    elif asset == "I":
-        code = "000001.SH"
-        naive = False
-    elif asset == "FD":
-        code = "150008.SZ"
-        naive = False
-    elif asset == "F":
-        code = "AUDCAD.FXCM"
-        naive = True
-    elif asset == "G":
-        code = "area_安徽"
-        naive = False
-    else:
-        code = "000001.SZ"
-        naive = True
-    example_column = list(get_asset(code, asset, freq).columns)
+    #latest example column
+    naive = True if asset == "F" else False
+    example_column = get_example_column(asset=asset,freq=freq)
 
+    #init df
     df_static_data = get_ts_code(a_asset=[asset])
     df_trade_dates = get_trade_date("00000000", LB.today(), freq, market=market)
 
+    #init dict
     d_list_date = {ts_code: row["list_date"] for ts_code, row in get_ts_code(a_asset=[asset]).iterrows()}
     d_queries_ts_code = c_G_queries() if asset == "G" else {}
     d_preload = preload(asset=asset, step=1, period_abv=240, d_queries_ts_code=d_queries_ts_code)
@@ -1067,26 +1138,56 @@ def get_date(trade_date, a_assets=["E"], freq="D", market="CN"):  # might need g
 def get_date_E_oth(trade_date, oth_name, market="CN"):
     return get(LB.a_path(f"Market/{market}/Date/E/{oth_name}/{trade_date}"), set_index="")  # nothing to set
 
+def get_example_column(asset="E",freq="D", numeric_only=False):
+    # get the latest column of the asset file
+    if asset == "E":
+        ts_code = "000001.SZ"
+    elif asset == "I":
+        ts_code = "000001.SH"
+    elif asset == "FD":
+        ts_code = "150008.SZ"
+    elif asset == "F":
+        ts_code = "AUDCAD.FXCM"
+    elif asset == "G":
+        ts_code = "area_安徽"
+    else:
+        ts_code = "000001.SZ"
+
+    if numeric_only:
+        return list(get_numeric_df(get_asset(ts_code, asset, freq)).columns)
+    else:
+        return list(get_asset(ts_code, asset, freq).columns)
+
+
 
 # path =["column_name", True]
-def to_excel_with_static_data(df_ts_code, path, sort: list = [], asset=["I", "E", "FD"], group_result=True):
-    df_ts_code = add_static_data(df_ts_code, assets=asset)
+def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_assets=["I", "E", "FD", "F", "G"], group_result=True):
+    df_ts_code = add_static_data(df_ts_code, assets=a_assets)
     d_df = {"Overview": df_ts_code}
 
     # tab group
     if group_result:
-        for group_column in LB.c_d_groups(asset).keys():
-            try:
-                df_groupbyhelper = df_ts_code.groupby(group_column)
+        for group, a_instance in LB.c_d_groups(a_assets).items():
+            if group=="concept":
+                df_group=pd.DataFrame()
+                for instance in a_instance:
+                    df_instance=df_ts_code[df_ts_code["concept"].str.contains(instance)==True]
+                    s=df_instance.mean()
+                    s["count"]=len(df_instance)
+                    s.name=instance
+                    df_group=df_group.append(s,sort=False)
+                df_group.index.name="concept"
+                df_group=df_group[["count"]+list(LB.get_numeric_df(df_ts_code).columns)]
+            else:
+                df_groupbyhelper = df_ts_code.groupby(group)
                 df_group = df_groupbyhelper.mean()
-                df_group["count"] = df_groupbyhelper.size()
-                print("not bug until here")
-                if sort:
-                    df_group.sort_values(by=sort[0], ascending=sort[1], inplace=True)
-                d_df[group_column] = df_group
-            except Exception as e:
-                print("error in group results", e)
-    LB.to_excel(path=path, d_df=d_df)
+                if not df_group.empty:
+                    df_group["count"] = df_groupbyhelper.size()
+
+            if sort and sort[0] in df_group.columns:
+                df_group=df_group.sort_values(by=sort[0], ascending=sort[1])
+            d_df[group] = df_group
+    LB.to_excel(path=path, d_df=d_df,index=True)
 
 
 # needs to be optimized for speed and efficiency
@@ -1178,21 +1279,18 @@ def update_all_in_one(big_update=False):
 
     # 1.0. GENERAL - CAL_DATE
     # update_general_trade_cal()  # always update
-    #
-    # # 1.1. GENERAL - INDUSTRY
-    # for level in c_industry_level():
-    #    update_general_industry(level, big_update=True)  # ONLY ON BIG UPDATE
+
+    # # 1.5. GENERAL - TRADE_DATE
+    # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
+    #     update_trade_date(freq)  # ALWAYS UPDATE
 
     # 1.2. GENERAL - TOP HOLDER
     # multi_process(func=update_assets_E_top_holder, a_kwargs={"big_update": False}, a_steps=small_steps)  # SMART
     #
     # # 1.3. GENERAL - TS_CODE
-    # for asset in c_assets() + ["G","F"]:
+    # for asset in ["industry", "concept"] + c_assets() + ["G","F"]:
     #     update_general_ts_code(asset)  # ALWAYS UPDATE
     #
-    # # 1.5. GENERAL - TRADE_DATE
-    # for freq in ["D", "W"]:  # Currently only update D and W, because W is needed for pledge stats
-    #     update_general_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.1. ASSET - FUNDAMENTALS
     # multi_process(func=update_assets_E_D_Fun, a_kwargs={"start_date": "00000000", "end_date": today(), "big_update": False}, a_steps=big_steps)  # SMART
@@ -1204,6 +1302,7 @@ def update_all_in_one(big_update=False):
     # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
     multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
 
+
     # 3.1. DATE - OTH
     # multi_process(func=update_date_E_Oth, a_kwargs={"asset": "E", "freq": "D", "big_update": big_update}, a_steps=[1, -1])  # big: smart decide - small: smart decide
 
@@ -1213,16 +1312,14 @@ def update_all_in_one(big_update=False):
     # multi_process(func=update_date, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
     # multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=date_step)  # SMART
 
+    # # 4.1. CUSTOM - INDEX
+    # update concept is very very slow. = Night shift
+    # update_assets_G_D(big_update=big_update)
+
     # # 3.3. DATE - BASE
     # update_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
     #
-    # # 3.4. DATE - TREND
-    # df = get_stock_market_all()  # ALWAS
-    # ICreate.trend(df=df, ibase="close", market_suffix="market.")  # big: override - small: override
-    # LB.to_csv_feather(df, a_path=LB.a_path("Market/CN/Btest/Setup/Stock_Market/all_stock_market"))
-    #
-    # # 4.1. CUSTOM - INDEX
-    # update_assets_G_D(big_update=big_update)
+
 
 
 # speed order=remove apply and loc, use vectorize where possible
@@ -1236,19 +1333,15 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
-        df_asset = get_asset()
         big_update = False
-        # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-        # update_general_ts_code(asset="F")
-
-        update_general_ts_code("E")
 
 
-        # for asset in ["F"]:
-        #     multi_process(func=update_date, a_kwargs={"asset": asset, "freq": "D", "market": "CN", "big_update": False, "naive": False}, a_steps=[1])  # SMART
 
-        # update_general_ts_code(asset="B")
-        # update_all_in_one(big_update=big_update)
+        update_ts_code(asset="G")
+        #update_ts_code(asset="E")
+        #update_assets_G_D()
+
+
 
 
     except Exception as e:

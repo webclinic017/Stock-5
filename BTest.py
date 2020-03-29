@@ -19,13 +19,14 @@ import matplotlib
 from numba import njit
 from numba import jit
 from sympy.utilities.iterables import multiset_permutations
+
 pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_start_time, setting_count):
-    #init
+    # init
     a_freqs = LB.c_bfreq()
     beta_against = "_000001.SH"
     a_time = []
@@ -66,14 +67,14 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     # merge with all dates (in case some days did not trade)
     df_trade_h = pd.merge(df_merge_helper, df_trade_h, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
 
-    #check if all index are valid
+    # check if all index are valid
     if np.nan in df_trade_h["ts_code"] or float("nan") in df_trade_h:
         print("file has nan ts_codes")
         raise ValueError
 
-    #create chart
+    # create chart
     df_port_c = df_trade_h.groupby("trade_date").agg("mean")  # TODO remove inefficient apply and groupby and loc
-    df_port_c=df_port_c.iloc[:-1]#exclude last row because last row predicts future
+    df_port_c = df_port_c.iloc[:-1]  # exclude last row because last row predicts future
     df_port_c["port_pearson"] = df_trade_h.groupby("trade_date").apply(lambda x: x["rank_final"].corr(x["pct_chg"]))
     df_port_c["port_size"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").size()
     df_port_c["port_cash"] = df_trade_h.groupby("trade_date").apply(lambda x: x.at[x.last_valid_index(), "port_cash"])
@@ -114,11 +115,11 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     df_port_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
     df_port_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] > 1]) / len(df_port_c)
 
-    df_port_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()) #everytime you sell a stock
-    df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna()) #everyday
+    df_port_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna())  # everytime you sell a stock
+    df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna())  # everyday
 
-    df_port_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean() #everytime you sell a stock
-    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean() #everyday
+    df_port_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()  # everytime you sell a stock
+    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()  # everyday
 
     df_port_overview.at[0, "asset_sell_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
     df_port_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
@@ -186,8 +187,8 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = [f"close.market.trend{x}" for x in a_freqs if x != 1]
-    a_trend_label = [] #TODO trend is excluded, add it back or remove it
-    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]] ]
+    a_trend_label = []  # TODO trend is excluded, add it back or remove it
+    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]]]
 
     # write portfolio
     portfolio_path = f"Market/CN/Btest/Result/Portfolio_{setting['id']}"
@@ -206,13 +207,6 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
 
 def btest_once(settings=[{}]):
     # inside functions
-    class btest_break:  # static method inside class is required to break the loop because two threads
-        btest_break = False
-
-    def get_input():
-        input('Press a key \n')  # no need to store input, any key will trigger break
-        btest_break.btest_break = True
-
     @LB.deco_try_ignore
     def try_select(select_from_df, select_size, select_by):
         return select_from_df.nsmallest(int(select_size), [select_by])
@@ -223,7 +217,6 @@ def btest_once(settings=[{}]):
         a_time.append('{0: <25}'.format(phase) + f": {now - prev_time}")
         return now
 
-
     # READ FIRST:
     # Assume that all Analysis of stockmarket today happens at evening after stock market closed 15:00
     # Assume that all trades happen at the START of the tomorrow 9:30
@@ -233,8 +226,7 @@ def btest_once(settings=[{}]):
     # 0 PREPARATION
     # 0.1 PREPARATION- META
     backtest_start_time = datetime.now()
-    break_detector = threading.Thread(target=get_input, daemon=True)
-    break_detector.start()
+    LB.interrupt_start()
 
     # 0.2 PREPARATION- SETTING = static values that NEVER CHANGE during the loop
     start_date = settings[0]["start_date"]
@@ -259,11 +251,7 @@ def btest_once(settings=[{}]):
     # Main Loop
     for today, tomorrow in zip(df_trade_dates.index, df_trade_dates["tomorrow"]):
 
-        if btest_break.btest_break:
-            print("BREAK loop")
-            LB.sound("break.mp3")
-            time.sleep(5)
-            # adjust date if loop was break
+        if LB.interrupt_confirmed():
             for setting in settings:
                 setting["end_date"] = today
             break
@@ -283,7 +271,7 @@ def btest_once(settings=[{}]):
 
         # FOR EACH DAY LOOP OVER SETTING N
         for setting_count, (setting, d_trade_h) in enumerate(zip(settings, a_d_trade_h)):
-            #0.0 INIT
+            # 0.0 INIT
             print("\n" * 3)
             a_time = []
             now = mytime.time()
@@ -296,7 +284,6 @@ def btest_once(settings=[{}]):
             print('{0: <26}'.format("TOMORROW MORNING TRADE") + f"{tomorrow} stocks {len(df_tomorrow)}")
             now = print_and_time(setting_count=setting_count, phase=f"INIT", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
-
             # 1.1 FILTER
             final_filter = True
             for eval_string in setting["f_query_asset"]:  # very slow and expensive for small operation because parsing the string takes long
@@ -306,14 +293,9 @@ def btest_once(settings=[{}]):
             print("today after filter", len(df_today_mod))
             now = print_and_time(setting_count=setting_count, phase=f"FILTER", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
-
-
-
-
             # 2 ECONOMY
             # 3 FINANCIAL MARKET
             # 6 PORTFOLIO = ASSET BALANCING, EFFICIENT FRONTIER, LEAST BETA #TODO
-
 
             # 6.2 PORTFOLIO SELL SELECT
             p_winner_abv = setting["p_winner_abv"]
@@ -387,14 +369,17 @@ def btest_once(settings=[{}]):
 
             # PORTFOLIO BUY SELECT BEGIN #Rank Final as the final rank name
             buyable_size = p_maxsize - len(d_trade_h[tomorrow]["hold"])
-            if buyable_size > 0 and len(df_today_mod)>0:
+            if buyable_size > 0 and len(df_today_mod) > 0:
 
                 # 6.4 PORTFOLIO BUY SCORE/RANK
-                #if selet final rank by a defined criteria
+                # if selet final rank by a defined criteria
                 if setting["s_weight1"]:
+
                     d_group_instance_weight = LB.c_group_score_weight()
+
                     for column, a_weight in setting["s_weight1"].items():
                         print("select column", column)
+
                         # column use group rank
                         if a_weight[2] != 1:
 
@@ -404,7 +389,7 @@ def btest_once(settings=[{}]):
                                 df_today_mod = d_weight_accelerator[column]
                             else:
                                 # 1. iterate to see replace value
-                                print("NOT accelerated")
+                                print("NOT accelerated")  # TODO add groups for all assets
                                 for group, instance_array in LB.c_d_groups(assets=["E"], a_ignore=["asset", "industry3"]).items():
                                     d_replace = {}
                                     df_today_mod[f"rank_{column}_{group}"] = df_today_mod[group]  # to be replaced later by int value
@@ -420,18 +405,18 @@ def btest_once(settings=[{}]):
                                 d_weight_accelerator[column] = df_today_mod.copy()
 
                             # 2. calculate group score
-                            df_today_mod[f"rank_{column}_{group}"] = 0.0
+                            df_today_mod[f"rank_{column}_group"] = 0.0
                             for group in LB.c_d_groups(assets=["E"], a_ignore=["asset", "industry3"]):
                                 try:
-                                    df_today_mod[f"rank_{column}_{group}"] += df_today_mod[f"rank_{column}_{group}"] * d_group_instance_weight[group]
+                                    df_today_mod[f"rank_{column}_group"] += df_today_mod[f"rank_{column}_{group}"] * d_group_instance_weight[group]
                                 except Exception as e:
                                     print(e)
 
                         else:  # column does not use group rank
-                            df_today_mod[f"rank_{column}_{group}"] = 0.0
+                            df_today_mod[f"rank_{column}_group"] = 0.0
 
                         # 3. Create Indicator Rank= indicator_asset+indicator_group
-                        df_today_mod[f"{column}_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod[f"rank_{column}_{group}"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
+                        df_today_mod[f"{column}_rank"] = (df_today_mod[column] * a_weight[2] + df_today_mod[f"rank_{column}_group"] * (1 - a_weight[2])).rank(ascending=a_weight[0])
 
                     # 4. Create Rank Final = indicator1+indicator2+indicator3
                     df_today_mod["rank_final"] = sum([df_today_mod[f"{column}_rank"] * a_weight[1]
@@ -440,15 +425,13 @@ def btest_once(settings=[{}]):
                 # sweight does not exist. using random values
                 else:
                     print("select using random criteria")
-                    df_today_mod["rank_final"] = np.random.randint(low=0,high=len(df_today_mod), size=len(df_today_mod))
+                    df_today_mod["rank_final"] = np.random.randint(low=0, high=len(df_today_mod), size=len(df_today_mod))
 
                 now = print_and_time(setting_count=setting_count, phase=f"BUY FINAL RANK", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time,
                                      prev_time=now)
 
-
-
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 1
-                for select_size in [buyable_size * 3 , len(df_today_mod)]:
+                for select_size in [buyable_size * 3, len(df_today_mod)]:
                     df_select = try_select(select_from_df=df_today_mod, select_size=select_size, select_by="rank_final")
 
                     # 6.6 PORTFOLIO BUY ADD_POSITION: FALSE
@@ -457,17 +440,17 @@ def btest_once(settings=[{}]):
                     # 6.7 PORTFOLIO BUY SELECT TOMORROW: select Stocks that really TRADES
                     df_select_tomorrow = df_tomorrow[df_tomorrow.index.isin(df_select.index)]
 
-                    #if count stocks that trade tomorrow
+                    # if count stocks that trade tomorrow
                     if len(df_select_tomorrow) >= buyable_size:
                         break
                     else:
                         print(f"selection failed, reselect {select_size}")
 
-                #if have not found enough stocks that trade tomorrow
+                # if have not found enough stocks that trade tomorrow
                 else:
-                    #this probably means less of the stocks meats the criteria: buyable stock < p_maxsize
-                    #for none of the selected stocks trade tomorrow
-                    #current solution: if max port size is 10 but only 5 stocks met that criteria: carry and buy 5
+                    # this probably means less of the stocks meats the criteria: buyable stock < p_maxsize
+                    # for none of the selected stocks trade tomorrow
+                    # current solution: if max port size is 10 but only 5 stocks met that criteria: carry and buy 5
                     pass
 
                 # carry final rank, otherwise the second select will not be able to select
@@ -476,8 +459,6 @@ def btest_once(settings=[{}]):
                 # 6.8 PORTFOLIO BUY FILTER: SELECT PERCENTILE 2
                 df_select_tomorrow = try_select(select_from_df=df_select_tomorrow, select_size=buyable_size, select_by="rank_final")
                 now = print_and_time(setting_count=setting_count, phase=f"BUY SELECT", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
-
-
 
                 # 6.11 BUY EXECUTE:
                 p_fee = setting["p_fee"]
@@ -511,7 +492,7 @@ def btest_once(settings=[{}]):
                 now = print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             else:  # to not buy today
-                if len(df_today_mod)==0:
+                if len(df_today_mod) == 0:
                     print("no stock meets criteria after basic filtering (like IPO)")
                 else:
                     print("not buying today because no space")
@@ -559,7 +540,7 @@ def btest_multiple(loop_indicator=1):
         "end_date": "20200101",
         "freq": "D",
         "market": "CN",
-        "assets": ["I"],  # E,I,FD,G,F
+        "assets": ["E"],  # E,I,FD,G,F
 
         # meta
         "id": "",  # datetime.now().strftime('%Y%m%d%H%M%S'), but done in backtest_once_loop
@@ -572,8 +553,8 @@ def btest_multiple(loop_indicator=1):
 
         # selection weight
         # bool: ascending True= small, False is big
-        # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
-        # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2, 0.0]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
+        # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
+        # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
         "s_weight1": {  # ascending True= small, False is big
             # "pct_chg": [False, 0.2, 1],  # very important
             # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
@@ -603,11 +584,11 @@ def btest_multiple(loop_indicator=1):
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # settings creation
+    # settings creation  #
     for asset in ["E","I","FD","F","G"]:
         a_settings = []
 
-        #is_max is_min
+        # is_max is_min
         # for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
         #     setting_copy = copy.deepcopy(setting_base)
         #     setting_copy["assets"] = [asset]
@@ -617,17 +598,37 @@ def btest_multiple(loop_indicator=1):
         #     a_settings.append(setting_copy)
         #
 
-        #macd
-        for macd in ["zlmacd_close.(1, 5, 10)","zlmacd_close.(1, 10, 20)","zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 300, 500)"]:
-            for macd_bool in [10,-10]:
-                setting_copy = copy.deepcopy(setting_base)
-                setting_copy["assets"]=[asset]
+        # Fresh stock by final rank
+        # for period1 in [250,500,750,1000]:
+        #     for period2 in [750,1500,7000]:  # "zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
+        #         if period1<period2:
+        #             setting_copy = copy.deepcopy(setting_base)
+        #             setting_copy["assets"] = [asset]
+        #             setting_copy["f_query_asset"] = [
+        #                 f"df_today['period'].between({period1},{period2})",
+        #                 f"(df_today['e_min']/df_today['close']).between(0.7,1)"
+        #             ]
+        #             setting_copy["s_weight1"] = {"bull": [True, 1, 1], }
+        #             a_settings.append(setting_copy)
 
-                setting_copy["f_query_asset"] = [f"df_today['period']>240",
-                                                 f"(df_today['{macd}']=={macd_bool})"]
+        # macd
+        # for macd in ["zlmacd_close.(1, 5, 10)","zlmacd_close.(1, 10, 20)","zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 300, 500)"]:
+        #     for macd_bool in [10,-10]:
+        #         setting_copy = copy.deepcopy(setting_base)
+        #         setting_copy["assets"]=[asset]
+        #
+        #         setting_copy["f_query_asset"] = [f"df_today['period']>240",
+        #                                          f"(df_today['{macd}']=={macd_bool})"]
+        #
+        #         setting_copy["s_weight1"] ={}
+        #         a_settings.append(setting_copy)
 
-                setting_copy["s_weight1"] ={}
-                a_settings.append(setting_copy)
+        #random choose from any asset type
+        setting_copy = copy.deepcopy(setting_base)
+        setting_copy["assets"] = [asset]
+        setting_copy["f_query_asset"] = [f"df_today['period']>240"]
+        setting_copy["s_weight1"] = {}
+        a_settings.append(setting_copy)
 
         print("Total Settings:", len(a_settings))
         btest_once(settings=a_settings)
