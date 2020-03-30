@@ -12,7 +12,7 @@ import talib
 import LB
 import DB
 from scipy.stats.mstats import gmean
-import Sandbox
+import Atest
 
 
 def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past=10, q_step=5, df=DB.get_stock_market_all()):
@@ -24,7 +24,7 @@ def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past
     #     df[f"tomorrow{future}"] = df["close"].shift(-future) / df["close"]
     #     df[f"past{future}"] = df["close"] / df["close"].shift(future)
 
-    for key, df_filtered in  LB.custom_quantile(df=df, column=f"past{past}", p_setting=range(0, 101, q_step)).items():
+    for key, df_filtered in  LB.custom_quantile_d(df=df, column=f"past{past}", p_setting=range(0, 101, q_step)).items():
         df_result.at[key, "count"] = len(df_filtered)
         df_result.at[key, "q1"] ,df_result.at[key, "q2"] ,df_result.at[key, "q1_val"] ,df_result.at[key, "q2_val"]= [float(x) for x in key.split(",")]
         for future in a_freq:
@@ -32,7 +32,7 @@ def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past
             # df_result.at[f"{from_price,to_price}", f"tomorrow{future}_std"] = (df_filtered[f"tomorrow{future}"].std())
             df_result.at[key, f"tomorrow{future}gmean"] = gmean(df_filtered[f"tomorrow{future}"].dropna())
 
-        # a_path=LB.a_path(f"Market/CN/Backtest_Single/seasonal/all_date_price_statistic_past_{past}")
+        # a_path=LB.a_path(f"Market/CN/Atest/seasonal/all_date_price_statistic_past_{past}")
         # LB.to_csv_feather(df_result,a_path,skip_feather=True)
     return df_result
 
@@ -253,7 +253,7 @@ def asset_fundamental(start_date, end_date, freq, assets=["E"]):
     df_result_mean = DB.add_asset_final_analysis_rank(df_result_mean, assets, freq, "volatility")
     df_result_mean.sort_values(by=["final_fundamental_rank"], ascending=True, inplace=True)
 
-    path = "Market/" + "CN" + "/Backtest_Single/" + "fundamental" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
+    path = "Market/" + "CN" + "/Atest/" + "fundamental" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
     DB.to_excel_with_static_data(df_result_mean, path=path, sort=["final_fundamental_rank", True], a_assets=assets)
 
 
@@ -325,7 +325,7 @@ def asset_volatility(start_date, end_date, assets, freq):
     df_result = DB.add_asset_final_analysis_rank(df_result, assets, freq, "bullishness")
     df_result.sort_values(by=["final_volatility_rank"], ascending=True, inplace=True)
 
-    path = "Market/" + "CN" + "/Backtest_Single/" + "volatility" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
+    path = "Market/" + "CN" + "/Atest/" + "volatility" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
     DB.to_excel_with_static_data(df_result, path=path, sort=["final_volatility_rank", True], a_assets=assets)
 
 
@@ -363,7 +363,7 @@ def asset_bullishness():
             # times above ma, bigger better
             df_asset["abv_ma"] = 0
             for freq in [240]:
-                df_asset[f"highpass{freq}"] = Sandbox.highpass(df_asset["close"], freq)
+                df_asset[f"highpass{freq}"] = Atest.highpass(df_asset["close"], freq)
                 # df_asset[f"ma{freq}"] = df_asset["close"] - df_asset[f"highpass{freq}"]
                 df_asset[f"ma{freq}"] = df_asset["close"].rolling(freq).mean()
                 df_asset[f"abv_ma{freq}"] = (df_asset["close"] > df_asset[f"ma{freq}"]).astype(int)
@@ -401,7 +401,7 @@ def asset_bullishness():
                               + df_result["abv_ma"].rank(ascending=False) * 0.02 \
                               + df_result["rapid_down"].rank(ascending=True) * 0.02
 
-    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Backtest_single/bullishness/bullishness.xlsx", group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Atest/bullishness/bullishness.xlsx", group_result=True)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -451,19 +451,19 @@ def asset_candlestick_analysis_multiple():
             a_result.append(asset_candlestick_analysis_once(ts_code=ts_code, pattern=key, func=function))
 
             df_result = pd.DataFrame(data=a_result)
-            path = "Market/CN/Backtest_Single/candlestick/" + key + ".csv"
+            path = "Market/CN/Atest/candlestick/" + key + ".csv"
             df_result.to_csv(path, index=False)
             print("SAVED candlestick", key, ts_code)
 
     a_all_results = []
     for key, array in d_pattern.items():
-        path = "Market/CN/Backtest_Single/candlestick/" + key + ".csv"
+        path = "Market/CN/Atest/candlestick/" + key + ".csv"
         df_pattern = pd.read_csv(path)
         df_pattern = df_pattern.mean()
         df_pattern["candle"] = key
         a_all_results.append(df_pattern)
     df_all_result = pd.DataFrame(data=a_all_results)
-    path = "Market/CN/Backtest_Single/candlestick/summary.csv"
+    path = "Market/CN/Atest/candlestick/summary.csv"
     df_all_result.to_csv(path, index=True)
 
 

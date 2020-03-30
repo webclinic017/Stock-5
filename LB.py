@@ -695,13 +695,21 @@ def timeseries_to_month(df):
     return df_copy.loc[a_index]
 
 
-def custom_quantile(df, column, p_setting=[0, 18, 50, 82, 100]):
+def custom_quantile_d(df, column, p_setting=[0, 18, 50, 82, 100]):
     d_df = {}
     p_setting = [x / 100 for x in p_setting]
     for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
         d_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
     return d_df
+
+def custom_quantile_a(df, column, p_setting=[0, 18, 50, 82, 100]):
+    a_val = []
+    p_setting = [x / 100 for x in p_setting]
+    for low_quant, high_quant in custom_pairwise_overlap(p_setting):
+        low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
+        a_val.append((low_val,high_val))
+    return a_val
 
 
 def custom_expand(df, min_freq):

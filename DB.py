@@ -15,7 +15,7 @@ import threading
 from scipy.stats import gmean
 from tqdm import tqdm
 import ICreate
-import Sandbox
+import Atest
 
 from LB import *
 
@@ -32,7 +32,7 @@ def update_trade_cal(start_date="19900101", end_date="20250101"):
 # measures which day of week/month performs generally better
 def update_date_seasonal_stats(group_instance="asset_E"):
     """this needs to be performed first before using the seasonal matrix"""
-    path = f"Market/CN/Backtest_Single/seasonal/all_date_seasonal_{group_instance}.xlsx"
+    path = f"Market/CN/Atest/seasonal/all_date_seasonal_{group_instance}.xlsx"
     pdwriter = pd.ExcelWriter(path, engine='xlsxwriter')
 
     # perform seasonal stats for all stock market or for some groups only
@@ -77,7 +77,7 @@ def update_trade_date(freq="D", market="CN"):
     def update_trade_date_seasonal_score(df_trade_date, freq="D", market="CN"):
         """this requires the date_seasonal matrix to be updated first """
         # get all indicator for each day
-        path_indicator = "Market/CN/Backtest_Single/seasonal/all_date_seasonal.xlsx"
+        path_indicator = "Market/CN/Atest/seasonal/all_date_seasonal.xlsx"
         xls = pd.ExcelFile(path_indicator)
 
         # get all different groups
@@ -424,7 +424,7 @@ def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
     for sfreq, bfreq in [(5, 10), (10, 20), (240, 300), (300, 500)]:
         # for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 120, 180, 240, 300, 500], 2):
         if sfreq < bfreq:
-            Sandbox.my_macd(df=df, ibase="close", sfreq=sfreq, bfreq=bfreq, type=1, score=10)
+            Atest.my_macd(df=df, ibase="close", sfreq=sfreq, bfreq=bfreq, type=1, score=10)
 
 
 def update_assets_EIFD_D_expanding(df, ts_code):
@@ -449,7 +449,7 @@ def update_assets_EIFD_D_expanding(df, ts_code):
     # 2. times above ma, bigger better
     for freq in a_freqs:
         # one time calculation
-        df[f"hp{freq}"] = Sandbox.highpass(df["close"], freq)
+        df[f"hp{freq}"] = Atest.highpass(df["close"], freq)
         df[f"lp{freq}"] = df["close"] - df[f"hp{freq}"]
         df[f"ma{freq}"] = df["close"].rolling(freq).mean()
         df[f"abv_ma{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
@@ -701,35 +701,36 @@ def update_assets_G_D2(assets=["E"], big_update=True,step=1):
     d_group_instance_update = {}  # dict of array
     d_group_instance_saved = {}  # dict of array
     for group, a_instance in c_d_groups(assets=assets).items():
-        print(group, a_instance)
+        print("what",group, a_instance)
         for instance in a_instance:
             d_group_instance_update[f"{group}_{instance}"] = []
             d_group_instance_saved[f"{group}_{instance}"] = get_asset(f"{group}_{instance}", asset="G")
 
-    # get last saved trade_date on df_saved
-    last_trade_date = get_last_trade_date("D")
-    example_df = d_group_instance_saved["asset_E"]
-    try:
-        last_saved_date = example_df.index[-1]
-    except:
-        last_saved_date = "19990101"
-
-    # if small update and saved_date==last trade_date
-    if last_trade_date == last_saved_date and (not big_update):
-        return print("ALL GROUP Up-to-date")
-
-    # initialize trade_date
+    # # get last saved trade_date on df_saved
+    # last_trade_date = get_last_trade_date("D")
+    # example_df = d_group_instance_saved["asset_E"]
+    # try:
+    #     last_saved_date = example_df.index[-1]
+    # except:
+    #     last_saved_date = "19990101"
+    #
+    #
+    # # if small update and saved_date==last trade_date
+    # if last_trade_date == last_saved_date and (not big_update):
+    #     return print("ALL GROUP Up-to-date")
+    #
+    # #     # initialize trade_date
     df_trade_date = get_trade_date(end_date=today(), freq="D")
-    df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
-    print("START UPDATE GROUP since", last_saved_date)
-
-    # create a dict for concept in advance
-    d_concept = {}
-    df_grouped_concept = get_ts_code(a_asset=["concept"]).groupby("concept")
-    for concept, row in df_grouped_concept:
-        d_concept[concept] = row.index
-
-    # loop over date and get mean
+    # df_trade_date = df_trade_date[df_trade_date.index > int(last_saved_date)]
+    # print("START UPDATE GROUP since", last_saved_date)
+    #
+    #     # create a dict for concept in advance
+    #     d_concept = {}
+    #     df_grouped_concept = get_ts_code(a_asset=["concept"]).groupby("concept")
+    #     for concept, row in df_grouped_concept:
+    #         d_concept[concept] = row.index
+    #
+    #     # loop over date and get mean
     for trade_date in df_trade_date.index:  # for each day
 
         if LB.interrupt_confirmed():
@@ -741,6 +742,7 @@ def update_assets_G_D2(assets=["E"], big_update=True,step=1):
 
             # one stock can have many concept groups. 1:N Relation
             if group == "concept":
+                continue
                 for instance in a_instance:
                     try:
                         df_date_grouped = df_date.loc[d_concept[instance]]
@@ -758,7 +760,9 @@ def update_assets_G_D2(assets=["E"], big_update=True,step=1):
             else:
                 df_date_grouped = df_date.groupby(by=group).mean()
                 for instance, row in df_date_grouped.iterrows():
-                    d_group_instance_update[f"{group}_{instance}"].append(row)
+                    if f"{group}_{instance}" != "asset_G":
+                        d_group_instance_update[f"{group}_{instance}"].append(row)
+
 
     # save all to df
     for (key, a_update_instance), (key_saved, df_saved) in zip(d_group_instance_update.items(), d_group_instance_saved.items()):
@@ -1211,7 +1215,7 @@ def add_asset_comparison(df, freq, asset, ts_code, a_compare_label=["open", "hig
 
 
 def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", market="CN"):
-    path = f"Market/CN/Backtest_Single/{analysis}/EIFD_D_final.xlsx"
+    path = f"Market/CN/Atest/{analysis}/EIFD_D_final.xlsx"
     df_analysis = pd.read_excel(path, sheet_name="Overview")
     final_score_label = ["ts_code"] + [s for s in df_analysis.columns if f"final_{analysis}_rank" in s]
     df_analysis = df_analysis[final_score_label]
@@ -1337,7 +1341,7 @@ if __name__ == '__main__':
 
 
 
-        update_ts_code(asset="G")
+        update_date(asset="G")
         #update_ts_code(asset="E")
         #update_assets_G_D()
 

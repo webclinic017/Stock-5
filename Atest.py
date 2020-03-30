@@ -19,6 +19,20 @@ sys.setrecursionlimit(1000000)
 array = [2, 5, 10, 20, 40, 60, 120, 240]
 
 
+
+
+"""
+Atest (Assettest): 
+= Test strategy on individual asset and then mean them 
+= COMPARE past time to now (relative to past)
+= NOT COMPARE what other stocks do (NOT relative to time/market)
+
+Btest (Backtest):
+= COMPARE past time to now (relative to past)
+= COMPARE assets with other (relative to other)
+"""
+
+
 def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
     a_all = [1] + array
     a_small = [str(x) for x in a_all][:-1]
@@ -2272,7 +2286,7 @@ def hypothesis_test():
             df_date_expanding = DB.get_date_expanding(trade_date=trade_date)
             df_date["final_rank"] = df_date_expanding["final_rank"]
 
-            for key, df_quant in custom_quantile(df_date, "final_rank", p_setting=[0, 1]).items():
+            for key, df_quant in custom_quantile_d(df_date, "final_rank", p_setting=[0, 1]).items():
                 # for key, df_quant in get_quantile(df_date, "final_rank",p_setting=[(0, 0.05),(0.05, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 0.95),(0.95, 1)]).items():
                 for freq in [2]:
                     df_result.at[trade_date, f"q_{key}.open.fgain{freq}_gmean"] = gmean(df_quant[f"open.fgain{freq}"])
@@ -2297,7 +2311,7 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
 
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Backtest_Single/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        path = f"Market/CN/Atest/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
         if os.path.exists(path):
             print(f"path exists: {path}")
             continue
@@ -2312,18 +2326,19 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
                 print("exception at func execute", e)
                 continue
 
+            """could also add pearson, but since outcome is binary, no need for pearson"""
             df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
             df_result.at[ts_code, "period"] = len(df_asset)
-            df_result.at[ts_code, "gmean"] = gmean(df_asset["tomorrow1"].dropna())
+            df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset["tomorrow1"].dropna())
             df_result.at[ts_code, "general_daily_winrate"] = ((df_asset["tomorrow1"] > 1).astype(int)).mean()
 
             df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
-            df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna())
+            df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna()) / asset_gmean
             df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
             df_result.at[ts_code, "uptrend_occ"] = len(df_macd_buy)/len(df_asset)
 
             df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
-            df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna())
+            df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna()) / asset_gmean
             df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
             df_result.at[ts_code, "downtrend_occ"] = len(df_macd_sell) / len(df_asset)
 
@@ -2341,7 +2356,7 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
     df_down_better_mean = pd.DataFrame()
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Backtest_Single/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        path = f"Market/CN/Atest/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
         print(f"summarizing {path}")
 
         df_macd = pd.read_excel(path)
@@ -2370,7 +2385,7 @@ def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fn
     d_summary["downtrend_gmean"] = df_downtrend_gmean
     d_summary["up_better_mean"] = df_up_better_mean
     d_summary["down_better_mean"] = df_down_better_mean
-    LB.to_excel(path=f"Market/CN/Backtest_Single/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
+    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
 
 
 def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):

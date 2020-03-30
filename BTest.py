@@ -24,6 +24,16 @@ pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
+"""
+Atest (Assettest): 
+= Test strategy on individual asset and then mean them 
+= COMPARE past time to now (relative to past)
+= NOT COMPARE what other stocks do (NOT relative to time/market)
+
+Btest (Backtest):
+= COMPARE past time to now (relative to past)
+= COMPARE assets with other (relative to other)
+"""
 
 def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_start_time, setting_count):
     # init
@@ -287,8 +297,9 @@ def btest_once(settings=[{}]):
             # 1.1 FILTER
             final_filter = True
             for eval_string in setting["f_query_asset"]:  # very slow and expensive for small operation because parsing the string takes long
-                final_filter &= eval(eval_string)
                 print(f"eval string: {eval_string}")
+                final_filter &= eval(eval_string)
+
             df_today_mod = df_today[final_filter]
             print("today after filter", len(df_today_mod))
             now = print_and_time(setting_count=setting_count, phase=f"FILTER", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
@@ -574,7 +585,7 @@ def btest_multiple(loop_indicator=1):
         # portfolio
         "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 10,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
+        "p_maxsize": 20,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_proportion": False,  # choices: False(evenly), prop(proportional to rank), fibo(fibonacci)
@@ -584,8 +595,8 @@ def btest_multiple(loop_indicator=1):
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # settings creation  #
-    for asset in ["E","I","FD","F","G"]:
+    # settings creation  #,"I","FD","F","G"
+    for asset in ["E"]:
         a_settings = []
 
         # is_max is_min
@@ -623,15 +634,28 @@ def btest_multiple(loop_indicator=1):
         #         setting_copy["s_weight1"] ={}
         #         a_settings.append(setting_copy)
 
-        #random choose from any asset type
-        setting_copy = copy.deepcopy(setting_base)
-        setting_copy["assets"] = [asset]
-        setting_copy["f_query_asset"] = [f"df_today['period']>240"]
-        setting_copy["s_weight1"] = {}
-        a_settings.append(setting_copy)
+        #general: quantile,  ivola,pb, turnover_rate,ps_ttm,total_share,netprofit_yoy	or_yoy	grossprofit_margin	netprofit_margin
+
+        for column in ["close","open.pgain5","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
+            for low_quant,high_quant in LB.custom_pairwise_overlap([x/100 for x in range(0,105,10)]):
+                setting_copy = copy.deepcopy(setting_base)
+                setting_copy["assets"] = [asset]
+                if asset=="G":
+                    setting_copy["f_query_asset"] = [f"df_today['period']>240",
+                                                 f"df_today['group'].isin({['concept','industry1','industry2']})"]
+
+                else:
+                    setting_copy["f_query_asset"] = [f"df_today['period']>240",
+                                                     f"df_today['{column}'].between(df_today['{column}'].quantile({low_quant}), df_today['{column}'].quantile({high_quant}))"]
+
+                print(setting_copy["f_query_asset"] )
+                setting_copy["s_weight1"] = {}
+                a_settings.append(setting_copy)
 
         print("Total Settings:", len(a_settings))
+        time.sleep(30)
         btest_once(settings=a_settings)
+
 
 
 if __name__ == '__main__':
