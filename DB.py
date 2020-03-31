@@ -1032,7 +1032,7 @@ def update_date_stock_market_all(start_date="00000000", end_date=today(), assets
 
 @LB.deco_except_empty_df
 def get_file(path):
-    return pd.read_csv(path)
+    return pd.read_excel(path)
 
 
 def get(a_path=[], set_index=""):  # read feather first
@@ -1191,7 +1191,7 @@ def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_assets=["I", 
             if sort and sort[0] in df_group.columns:
                 df_group=df_group.sort_values(by=sort[0], ascending=sort[1])
             d_df[group] = df_group
-    LB.to_excel(path=path, d_df=d_df,index=True)
+    LB.to_excel(path=path, d_df=d_df, index=True)
 
 
 # needs to be optimized for speed and efficiency

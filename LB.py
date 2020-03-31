@@ -347,9 +347,9 @@ def handle_save_exception(e, path):
             time.sleep(1)
     elif type(e) == PermissionError:
         print(f"try to close {path}")
-        sound("close_excel")
+        sound("close_excel.mp3")
         close_file(path)
-        time.sleep(5)
+        time.sleep(10)
     else:
         traceback.print_exc()
 
@@ -372,17 +372,18 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
             handle_save_exception(e, a_path[1])
 
 
-def to_excel(path, d_df,index=True):
+def to_excel(path, d_df, index=True):
     for i in range(0, 10):
         try:
-            portfolio_writer = pd.ExcelWriter(path, engine='xlsxwriter')
+            writer = pd.ExcelWriter(path,engine="xlsxwriter")
             for key, df in d_df.items():
-                df.to_excel(portfolio_writer, sheet_name=key, index=index, encoding='utf-8_sig')
-            portfolio_writer.save()
+                df.to_excel(writer, sheet_name=key, index=index, encoding='utf-8_sig')
+            writer.save()
             break
         except Exception as e:
             print("excel save exception type", type(e))
             handle_save_exception(e, path)
+
 
 
 def send_mail(trade_string="what to buy and sell"):

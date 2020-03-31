@@ -215,7 +215,7 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     return [df_trade_h, df_port_overview, df_setting]
 
 
-def btest_once(settings=[{}]):
+def btest(settings=[{}]):
     # inside functions
     @LB.deco_try_ignore
     def try_select(select_from_df, select_size, select_by):
@@ -537,15 +537,15 @@ def btest_once(settings=[{}]):
             print("summarizing ERROR:", e)
             traceback.print_exc()
 
-    path = LB.a_path(f"Market/CN/Btest/Backtest_Summary")
+    path = f"Market/CN/Btest/Btest_sum.xlsx"
     df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
-    df_backtest_summ = df_backtest_summ.append(DB.get_file(path[0]), sort=False)
-    LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
+    df_backtest_summ = df_backtest_summ.append(DB.get_file(path), sort=False)
+    #LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
+    LB.to_excel(path=path, d_df={"Overview":df_backtest_summ}, index=False)
 
-
-def btest_multiple(loop_indicator=1):
+def btest_settings(loop_indicator=1):
     # Initialize settings
-    setting_base = {
+    setting_master = {
         # general = Non changeable through one run
         "start_date": "20000101",
         "end_date": "20200101",
@@ -595,67 +595,80 @@ def btest_multiple(loop_indicator=1):
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-    # settings creation  #,"I","FD","F","G"
-    for asset in ["E"]:
-        a_settings = []
+
+    # settings creation  #,"G"
+    for asset in ["I","FD","F"]:
+        a_settings_asset = []
+        setting_asset = copy.deepcopy(setting_master)
+        if asset == "G":
+            setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"]
+        setting_asset["assets"] = [asset]
 
         # is_max is_min
         # for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
-        #     setting_copy = copy.deepcopy(setting_base)
-        #     setting_copy["assets"] = [asset]
-        #     setting_copy["f_query_asset"] =[f"df_today['period']>240",
-        #                                       f"(df_today['e_min']/df_today['close']).between({thresh},{thresh+0.05})"]
-        #     setting_copy["s_weight1"] ={}
-        #     a_settings.append(setting_copy)
+        #     setting_instance = copy.deepcopy(setting_asset)
+        #     setting_instance["f_query_asset"] +=[f"(df_today['e_min']/df_today['close']).between({thresh},{thresh+0.05})"]
+        #     setting_instance["s_weight1"] ={}
+
+        #     print(setting_instance["f_query_asset"])
+        #     a_settings_asset.append(setting_instance)
         #
 
         # Fresh stock by final rank
         # for period1 in [250,500,750,1000]:
         #     for period2 in [750,1500,7000]:  # "zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
         #         if period1<period2:
-        #             setting_copy = copy.deepcopy(setting_base)
-        #             setting_copy["assets"] = [asset]
-        #             setting_copy["f_query_asset"] = [
+        #             setting_instance = copy.deepcopy(setting_asset)
+        #             setting_instance["f_query_asset"] += [
         #                 f"df_today['period'].between({period1},{period2})",
         #                 f"(df_today['e_min']/df_today['close']).between(0.7,1)"
         #             ]
-        #             setting_copy["s_weight1"] = {"bull": [True, 1, 1], }
-        #             a_settings.append(setting_copy)
+        #             setting_instance["s_weight1"] = {"bull": [True, 1, 1], }
+        #
+        #             print(setting_instance["f_query_asset"])
+        #             a_settings_asset.append(setting_instance)
 
         # macd
         # for macd in ["zlmacd_close.(1, 5, 10)","zlmacd_close.(1, 10, 20)","zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 300, 500)"]:
         #     for macd_bool in [10,-10]:
-        #         setting_copy = copy.deepcopy(setting_base)
-        #         setting_copy["assets"]=[asset]
-        #
-        #         setting_copy["f_query_asset"] = [f"df_today['period']>240",
-        #                                          f"(df_today['{macd}']=={macd_bool})"]
-        #
-        #         setting_copy["s_weight1"] ={}
-        #         a_settings.append(setting_copy)
+        #         setting_instance = copy.deepcopy(setting_asset)        #
+        #         setting_instance["f_query_asset"] += [f"(df_today['{macd}']=={macd_bool})"]
+        #         setting_instance["s_weight1"] ={}
 
-        #general: quantile,  ivola,pb, turnover_rate,ps_ttm,total_share,netprofit_yoy	or_yoy	grossprofit_margin	netprofit_margin
+        #         print(setting_instance["f_query_asset"])
+        #         a_settings_asset.append(setting_instance)
 
-        for column in ["close","open.pgain5","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
-            for low_quant,high_quant in LB.custom_pairwise_overlap([x/100 for x in range(0,105,10)]):
-                setting_copy = copy.deepcopy(setting_base)
-                setting_copy["assets"] = [asset]
-                if asset=="G":
-                    setting_copy["f_query_asset"] = [f"df_today['period']>240",
-                                                 f"df_today['group'].isin({['concept','industry1','industry2']})"]
 
-                else:
-                    setting_copy["f_query_asset"] = [f"df_today['period']>240",
-                                                     f"df_today['{column}'].between(df_today['{column}'].quantile({low_quant}), df_today['{column}'].quantile({high_quant}))"]
+        #general: quantile, ,"turnover_rate","total_mv","pe_ttm","ps_ttm","total_share","pb","vol"
+        for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
+            for low_quant,high_quant in LB.custom_pairwise_overlap([x/100 for x in range(0,105,20)]):
+                setting_instance = copy.deepcopy(setting_asset)
+                setting_instance["f_query_asset"] += [f"df_today['{column}'].between(df_today['{column}'].quantile({low_quant}), df_today['{column}'].quantile({high_quant}))"]
+                setting_instance["s_weight1"] = {}
 
-                print(setting_copy["f_query_asset"] )
-                setting_copy["s_weight1"] = {}
-                a_settings.append(setting_copy)
+                print(setting_instance["f_query_asset"])
+                a_settings_asset.append(setting_instance)
 
-        print("Total Settings:", len(a_settings))
-        time.sleep(30)
-        btest_once(settings=a_settings)
+        #general: binary
+        # for column in ["exchange"]:
+        #     for column_val in ["创业板","中小板","主板"]:
+        #         setting_instance = copy.deepcopy(setting_master)
+        #         setting_instance["f_query_asset"] += [f"df_today['{column}']== '{column_val}'"]
+        #         setting_instance["s_weight1"] = {}
 
+        #         print(setting_instance["f_query_asset"])
+        #         a_settings_asset.append(setting_instance)
+
+        print("Total Settings:", len(a_settings_asset))
+        time.sleep(10)
+
+        try:
+            btest(settings=a_settings_asset)
+        except Exception as e:
+            print(e)#to catch uncatched error
+            traceback.print_stack()
+            LB.sound("error.mp3")
+            time.sleep(60)
 
 
 if __name__ == '__main__':
@@ -663,7 +676,8 @@ if __name__ == '__main__':
         pr = cProfile.Profile()
         pr.enable()
 
-        btest_multiple(5)
+
+        btest_settings(5)
 
         pr.disable()
         # pr.print_stats(sort='file')

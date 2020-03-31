@@ -278,7 +278,7 @@ def ivola(df: pd.DataFrame, ibase: str = "ivola"):
     return add_to
 
 
-# past n days until today
+# past n days until today. including today
 def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
     add_to = f"{ibase}.pgain{freq}"
     add_column(df, add_to, f"close", 1)

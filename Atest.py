@@ -24,12 +24,12 @@ array = [2, 5, 10, 20, 40, 60, 120, 240]
 """
 Atest (Assettest): 
 = Test strategy on individual asset and then mean them 
-= COMPARE past time to now (relative to past)
-= NOT COMPARE what other stocks do (NOT relative to time/market)
+= COMPARE past time to now (relative to past)(quantile to past)
+= NOT COMPARE what other stocks do (NOT relative to time/market)(quantile to others)
 
 Btest (Backtest):
-= COMPARE past time to now (relative to past)
-= COMPARE assets with other (relative to other)
+= COMPARE past time to now (relative to past)(quantile to past)
+= COMPARE assets with other (relative to other)(quantile to others)
 """
 
 
@@ -558,6 +558,10 @@ def macd_tor(df, ibase, sfreq):
     return [f"macd_tor_{name}", f"macd_tor_diff{name}", f"macd_tor_dea_{name}"]
 
 
+
+#TODO
+""" basically all these should be called Isignal:
+they map a indicator to buy/sell """
 def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
     """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
         on daily chart, useable freqs are 12*60, 24*60 ,5*60
@@ -624,7 +628,7 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
 
 
 def my_ismax(df, ibase, thresh=0.95, score=10):
-    name = f"{ibase}.{type}"
+    name = f"{ibase}"
     # the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
     df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(thresh, thresh + 0.05).astype(int) * score
     df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
@@ -632,11 +636,34 @@ def my_ismax(df, ibase, thresh=0.95, score=10):
 
 
 def my_ismin(df, ibase, thresh=0.95, score=10):
-    name = f"{ibase}.{type}"
+    name = f"{ibase}"
     # the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
     df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(thresh, thresh + 0.05).astype(int) * score
     df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
     return [f"ismin_{name}", ]
+
+
+def my_generic_quantile(df, ibase, a_q=[0,0.2,0.4,0.6,0.8,1], cg_freq=240, score=10):
+    """can be used on any indicator
+    0. create an oscilator of that indicator
+    1. create expanding mean of that indicator
+    2. create percent=today_indicator/e_indicator
+    3. assign rolling quantile quantile of percent
+    """
+
+    name = f"{ibase}.cg{cg_freq}"
+    df[f"cg_{name}"]=cg_Oscillator(df[ibase], cg_freq)
+
+    #create expanding quantile
+    for q in a_q:
+        df[f"q{q}_cg_{name}"] = df[f"cg_{name}"].expanding(240).quantile(q)
+
+    #assign todays value to a quantile
+    a_q_labels = []
+    for low_q,high_q in LB.custom_pairwise_overlap(a_q):
+        df[f"in_q{low_q,high_q}_cg_{name}"]=( (df[f"q{low_q}_cg_{name}"]<=df[f"cg_{name}"]) & (df[f"cg_{name}"]<df[f"q{high_q}_cg_{name}"])).astype(int)
+        a_q_labels.append(f"in_q{low_q,high_q}_cg_{name}")
+    return a_q_labels
 
 
 def slopecross(df, ibase, sfreq, bfreq, smfreq):
@@ -1736,7 +1763,7 @@ def cg_Oscillator(s, n):
     """http://www.mesasoftware.com/papers/TheCGOscillator.pdf
     Center of gravity
 
-    The CG oscilator is the only one that is FUCKING RELATIVE to the prise
+    The CG oscilator is the only one that is FUCKING RELATIVE to the price
     THIS MEANS you can apply FT and IF while others are not suitable for FT and IFT
 
 
@@ -2300,7 +2327,7 @@ def hypothesis_test():
 
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
-def statistic_eval(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
+def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
     """
     This is a general statistic test creator
     1. provide all cases
@@ -2397,7 +2424,7 @@ def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
     # df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
 
 
-def statistic_initiator(fname="macd", lazy=1):
+def atest_settings(fname="macd", lazy=1):
     # macd iterator generation
     a_kwargs = []
     if fname == "macd":
@@ -2417,17 +2444,29 @@ def statistic_initiator(fname="macd", lazy=1):
         for thresh in [x / 100 for x in range(0, 100, 5)]:
             a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
 
+
+    elif fname == "close.pgain":
+        func = my_generic_quantile
+        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+        for thresh in [x / 100 for x in range(0, 100, 5)]:
+            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
+
     print(a_kwargs)
-    statistic_eval(asset="F", step=d_steps["F"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="FD", step=d_steps["FD"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="G", step=d_steps["G"], d_queries=LB.c_G_queries(), kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="I", step=d_steps["I"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    statistic_eval(asset="E", step=d_steps["E"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    atest(asset="F", step=d_steps["F"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    atest(asset="FD", step=d_steps["FD"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    atest(asset="G", step=d_steps["G"], d_queries=LB.c_G_queries(), kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    atest(asset="I", step=d_steps["I"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+    atest(asset="E", step=d_steps["E"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
 
 
 if __name__ == '__main__':
-    for lazy in [1,4]:
-        statistic_initiator(fname="macd", lazy=lazy)
+
+    df=DB.get_asset()
+    a_labels=my_generic_quantile(df,"close",cg_freq=240)
+    #df.to_csv("test.csv")
+    Plot.plot_chart(df,["close"]+a_labels)
+    # for lazy in [1,4]:
+    #     atest_settings(fname="macd", lazy=lazy)
 
 """
 useful techniqes
