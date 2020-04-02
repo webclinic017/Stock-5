@@ -20,8 +20,12 @@ from LB import *
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
+class AutoName(enum.Enum):
+    def _generate_next_value_(name,start,count,last_values):
+        return name
+
 # BOTTLE NECK modify here
-class IBase(enum.Enum):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
+class IBase(AutoName):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
     # pri
     open = auto()
     high = auto()
@@ -65,7 +69,8 @@ class IBase(enum.Enum):  # every Indicator base should take no argument in creat
     turnover_rate = auto()
 
 
-class IDeri(enum.Enum):  # first level Ideri = IDeri that only uses ibase and no other IDeri
+
+class IDeri(AutoName):  # first level Ideri = IDeri that only uses ibase and no other IDeri
     # statistic
     create = auto()
     count = auto()
@@ -129,7 +134,7 @@ class Trend2Weight(enum.Enum):
     t128 = 1.28
 
 
-class RE(enum.Enum):
+class RE(AutoName):
     r = auto()
     e = auto()
 
@@ -280,10 +285,10 @@ def ivola(df: pd.DataFrame, ibase: str = "ivola"):
 
 # past n days until today. including today
 def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
-    add_to = f"{ibase}.pgain{freq}"
+    add_to = f"{ibase}.pgain{freq.value}"
     add_column(df, add_to, f"close", 1)
     try:
-        df[add_to] = df[ibase].pct_change(periods=freq)
+        df[add_to] = df[ibase].pct_change(periods=freq.value)
     except Exception as e:
         print("error", e)
         df[add_to] = np.nan
@@ -294,9 +299,9 @@ def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
 # CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
 # day1: Signal tells you to buy. day2: BUY. day3. SELL
 def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
-    add_to = f"{ibase}.fgain{freq}"
+    add_to = f"{ibase}.fgain{freq.value}"
     add_column(df, add_to, f"close", 1)
-    df[add_to] = df[f"{ibase}.pgain{freq}"].shift(-int(freq))
+    df[add_to] = df[f"{ibase}.pgain{freq.value}"].shift(-int(freq.value))
     return add_to
 
 
@@ -799,8 +804,8 @@ def max(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
     return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.max)
 
 
-def corr(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.corr)
+def corr(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE, corr_with, corr_series):
+    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.corr, corr_with=corr_with, corr_series=corr_series)
 
 
 def cov(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
@@ -816,17 +821,24 @@ def kurt(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
 
 
 # this funciton should not exist. One should be able to pass function, but apply on rolling is slow and pandas.core.window.rolling is private. So Only if else case here is possible
-def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
+def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE, corr_with, corr_series):
     # enum to value
     freq = freq.value
     ideri = ideri.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = LB.indi_name(ibase=ibase, deri=ideri, d_variables={"freq": freq, "re": re.value})
+    add_to = LB.indi_name(ibase=ibase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name":corr_with} if corr_with else {"freq": freq, "re": re.value})
     add_column(df, add_to, ibase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
-    if ideri == "count":
+
+    #pairwise rolling
+    if ideri == "corr":
+        df[add_to] = reFunc(df[ibase], freq, min_periods=2).corr(corr_series)
+
+
+    #single rolling
+    elif ideri == "count":
         df[add_to] = reFunc(df[ibase], freq).count()
     elif ideri == "sum":
         df[add_to] = reFunc(df[ibase], freq).sum()
@@ -842,10 +854,6 @@ def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE):
         df[add_to] = reFunc(df[ibase], freq).min()
     elif ideri == "max":
         df[add_to] = reFunc(df[ibase], freq).max()
-    elif ideri == "corr":
-        from DB import get_asset
-        df_sh = get_asset(ts_code="000001.SH", asset="I")
-        df[add_to] = reFunc(df[ibase], freq).corr(df_sh["close"])
     elif ideri == "cov":
         df[add_to] = reFunc(df[ibase], freq).cov()
     elif ideri == "skew":

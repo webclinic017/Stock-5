@@ -420,6 +420,10 @@ def multi_process(func, a_kwargs, a_steps=[]):
     [process.join() for process in a_process]
 
 
+
+def c_root():
+    return "D:\Stock/"
+
 def c_assets():
     return [e.value for e in Assets]
 
@@ -439,7 +443,7 @@ def c_bfreq():
 
 
 def c_G_queries():
-    return {"G": ["on_asset == 'E'", "group != 'industry3'"]}
+    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','exchange'] "]}
 
 
 class BFreq(enum.Enum):
@@ -451,7 +455,7 @@ class BFreq(enum.Enum):
     f60 = 60
     f120 = 120
     f240 = 240
-    f500 = 500
+    #f500 = 500
 
 
 def c_sfreq():
@@ -696,21 +700,15 @@ def timeseries_to_month(df):
     return df_copy.loc[a_index]
 
 
-def custom_quantile_d(df, column, p_setting=[0, 18, 50, 82, 100]):
+def custom_quantile(df, column, p_setting=[0,0.2,0.4,0.6,0.8,1], key_val=True):
     d_df = {}
-    p_setting = [x / 100 for x in p_setting]
     for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
-        d_df[f"{int(low_quant * 100)},{int(high_quant * 100)},{low_val},{high_val}"] = df[df[column].between(low_val, high_val)]
+
+        key=f"{low_quant},{high_quant},{low_val},{high_val}" if key_val else f"{low_quant},{high_quant}"
+        d_df[key] = df[df[column].between(low_val, high_val)]
     return d_df
 
-def custom_quantile_a(df, column, p_setting=[0, 18, 50, 82, 100]):
-    a_val = []
-    p_setting = [x / 100 for x in p_setting]
-    for low_quant, high_quant in custom_pairwise_overlap(p_setting):
-        low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
-        a_val.append((low_val,high_val))
-    return a_val
 
 
 def custom_expand(df, min_freq):
@@ -731,6 +729,9 @@ def custom_pairwise_noverlap(iterables):
 def custom_pairwise_combination(a_array, n):
     return list(itertools.combinations(a_array, n))
 
+
+def drange(start,end,step):
+    return [x/100 for x in range(start,end,step)]
 
 def my_gmean(series):
     return gmean((series / 100) + 1)
@@ -754,6 +755,17 @@ def my_mean_std_diff(series):
 # for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
+
+
+
+def print_iterables(d):
+    if type(d)==dict:
+        for key,value in d.items():
+            print(key,value)
+    else:
+        for x in d:
+            print(x)
+
 
 
 

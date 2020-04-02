@@ -91,6 +91,12 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     df_port_c["buy"] = df_trade_h[df_trade_h["trade_type"].isin(["buy"])].groupby("trade_date").size()
     df_port_c["hold"] = df_trade_h[df_trade_h["trade_type"].isin(["hold"])].groupby("trade_date").size()
     df_port_c["sell"] = df_trade_h[df_trade_h["trade_type"].isin(["sell"])].groupby("trade_date").size()
+
+    #chart based on stocks sold today
+    df_port_c["port_sell_pct_chg"] = df_trade_h[df_trade_h["trade_type"].isin(["sell"])].groupby("trade_date").mean()["comp_chg"]
+    df_port_c["port_sell_comp_chg"] = df_port_c["port_sell_pct_chg"].cumprod()
+
+    # chart based on stocks hold overnight
     df_port_c["port_close"] = df_trade_h[df_trade_h["trade_type"].isin(["hold", "buy"])].groupby("trade_date").sum()["value_close"]
     df_port_c["all_close"] = df_port_c["port_close"] + df_port_c["port_cash"]
     df_port_c["all_pct_chg"] = df_port_c["all_close"].pct_change().fillna(0) + 1
@@ -102,55 +108,55 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
         df_port_c[f"comp_chg_{competitor[1]}"] = ICreate.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
 
     # tab_overview
-    df_port_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
+    df_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
     end_time_date = datetime.now()
     day = end_time_date.strftime('%Y/%m/%d')
     time = end_time_date.strftime('%H:%M:%S')
     duration = (end_time_date - backtest_start_time).seconds
     duration, Duration_rest = divmod(duration, 60)
-    df_port_overview["SDate"] = day
-    df_port_overview["STime"] = time
-    df_port_overview["SDuration"] = f"{duration}:{Duration_rest}"
-    df_port_overview["strategy"] = setting["id"] = f"{setting_original['id']}__{setting_count}"
-    df_port_overview["start_date"] = setting["start_date"]
-    df_port_overview["end_date"] = setting["end_date"]
+    df_overview["SDate"] = day
+    df_overview["STime"] = time
+    df_overview["SDuration"] = f"{duration}:{Duration_rest}"
+    df_overview["strategy"] = setting["id"] = f"{setting_original['id']}__{setting_count}"
+    df_overview["start_date"] = setting["start_date"]
+    df_overview["end_date"] = setting["end_date"]
 
     # portfolio strategy specific overview
     df_port_c["tomorrow_pct_chg"] = df_port_c["all_pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
     period = len(df_trade_h.groupby("trade_date"))
-    df_port_overview.at[0, "period"] = period
-    df_port_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
+    df_overview.at[0, "period"] = period
+    df_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
 
-    df_port_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
-    df_port_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
-    df_port_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] > 1]) / len(df_port_c)
+    df_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
+    df_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
+    df_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] > 1]) / len(df_port_c)
 
-    df_port_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna())  # everytime you sell a stock
-    df_port_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna())  # everyday
+    df_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna())  # everytime you sell a stock
+    df_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna())  # everyday
 
-    df_port_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()  # everytime you sell a stock
-    df_port_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()  # everyday
+    df_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()  # everytime you sell a stock
+    df_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()  # everyday
 
-    df_port_overview.at[0, "asset_sell_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
-    df_port_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
+    df_overview.at[0, "asset_sell_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
+    df_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
 
     try:
-        df_port_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
+        df_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
     except:
-        df_port_overview.at[0, "all_comp_chg"] = float("nan")
+        df_overview.at[0, "all_comp_chg"] = float("nan")
 
-    df_port_overview.at[0, "port_beta"] = LB.calculate_beta(df_port_c["all_pct_chg"], df_port_c[f"pct_chg{beta_against}"])
-    df_port_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
-    df_port_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
+    df_overview.at[0, "port_beta"] = LB.calculate_beta(df_port_c["all_pct_chg"], df_port_c[f"pct_chg{beta_against}"])
+    df_overview.at[0, "buy_imp"] = len(df_trade_h.loc[(df_trade_h["buy_imp"] == 1) & (df_trade_h["trade_type"] == "buy")]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "buy")])
+    df_overview.at[0, "port_pearson"] = df_port_c["port_pearson"].mean()
 
     for trade_type in ["buy", "sell", "hold"]:
         try:
-            df_port_overview.at[0, f"{trade_type}_count"] = df_trade_h["trade_type"].value_counts()[trade_type]
+            df_overview.at[0, f"{trade_type}_count"] = df_trade_h["trade_type"].value_counts()[trade_type]
         except:
-            df_port_overview.at[0, f"{trade_type}_count"] = float("nan")
+            df_overview.at[0, f"{trade_type}_count"] = float("nan")
 
     for lower_year, upper_year in [(20000101, 20050101), (20050101, 20100101), (20100101, 20150101), (20150101, 20200101)]:
-        df_port_overview.at[0, f"all_pct_chg{upper_year}"] = df_port_c.loc[(df_port_c.index > lower_year) & (df_port_c.index < upper_year), "all_pct_chg"].mean()
+        df_overview.at[0, f"all_pct_chg{upper_year}"] = df_port_c.loc[(df_port_c.index > lower_year) & (df_port_c.index < upper_year), "all_pct_chg"].mean()
 
     # overview win rate and pct_chg mean
     condition_trade = df_port_c["tomorrow_pct_chg"].notna()
@@ -158,29 +164,29 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     for one_zero in [1, 0]:
         for rolling_freq in a_freqs:
             try:  # calculate the pct_chg of all stocks 1 day after the trend shows buy signal
-                df_port_overview.at[0, f"market_trend{rolling_freq}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{rolling_freq}"] == one_zero, "tomorrow_pct_chg"].mean()
+                df_overview.at[0, f"market_trend{rolling_freq}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{rolling_freq}"] == one_zero, "tomorrow_pct_chg"].mean()
                 # condition_one_zero=df_port_c["market_trend" + str(rolling_freq)] == one_zero
-                # df_port_overview.at[0, "market_trend" + str(rolling_freq) +"_"+ str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
+                # df_overview.at[0, "market_trend" + str(rolling_freq) +"_"+ str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
             except Exception as e:
                 pass
 
     # overview indicator combination
     for column, a_weight in s_weight1.items():
-        df_port_overview[f"{column}_ascending"] = a_weight[0]
-        df_port_overview[f"{column}_indicator_weight"] = a_weight[1]
-        df_port_overview[f"{column}_asset_weight"] = a_weight[2]
+        df_overview[f"{column}_ascending"] = a_weight[0]
+        df_overview[f"{column}_indicator_weight"] = a_weight[1]
+        df_overview[f"{column}_asset_weight"] = a_weight[2]
 
     # add overview for compare asset
     for i in range(len(p_compare), len(p_compare)):
         competitor_ts_code = p_compare[i][1]
-        df_port_overview.at[i + 1, "strategy"] = competitor_ts_code
-        df_port_overview.at[i + 1, "pct_chg_mean"] = df_port_c[f"pct_chg_{competitor_ts_code}"].mean()
-        df_port_overview.at[i + 1, "pct_chg_std"] = df_port_c[f"pct_chg_{competitor_ts_code}"].std()
-        df_port_overview.at[i + 1, "winrate"] = len(df_port_c[(df_port_c[f"pct_chg_{competitor_ts_code}"] >= 0) & (df_port_c[f"pct_chg_{competitor_ts_code}"].notna())]) / len(df_port_c[f"pct_chg_{competitor_ts_code}"].notna())
-        df_port_overview.at[i + 1, "period"] = len(df_port_c) - df_port_c[f"pct_chg_{competitor_ts_code}"].isna().sum()
-        df_port_overview.at[i + 1, "pct_days_involved"] = 1
-        df_port_overview.at[i + 1, "comp_chg"] = df_port_c.at[df_port_c[f"comp_chg_{competitor_ts_code}"].last_valid_index(), f"comp_chg_{competitor_ts_code}"]
-        df_port_overview.at[i + 1, "beta"] = LB.calculate_beta(df_port_c[f"pct_chg_{competitor_ts_code}"], df_port_c[f"pct_chg{beta_against}"])
+        df_overview.at[i + 1, "strategy"] = competitor_ts_code
+        df_overview.at[i + 1, "pct_chg_mean"] = df_port_c[f"pct_chg_{competitor_ts_code}"].mean()
+        df_overview.at[i + 1, "pct_chg_std"] = df_port_c[f"pct_chg_{competitor_ts_code}"].std()
+        df_overview.at[i + 1, "winrate"] = len(df_port_c[(df_port_c[f"pct_chg_{competitor_ts_code}"] >= 0) & (df_port_c[f"pct_chg_{competitor_ts_code}"].notna())]) / len(df_port_c[f"pct_chg_{competitor_ts_code}"].notna())
+        df_overview.at[i + 1, "period"] = len(df_port_c) - df_port_c[f"pct_chg_{competitor_ts_code}"].isna().sum()
+        df_overview.at[i + 1, "pct_days_involved"] = 1
+        df_overview.at[i + 1, "comp_chg"] = df_port_c.at[df_port_c[f"comp_chg_{competitor_ts_code}"].last_valid_index(), f"comp_chg_{competitor_ts_code}"]
+        df_overview.at[i + 1, "beta"] = LB.calculate_beta(df_port_c[f"pct_chg_{competitor_ts_code}"], df_port_c[f"pct_chg{beta_against}"])
         df_port_c[f"tomorrow_pct_chg_{competitor_ts_code}"] = df_port_c[f"pct_chg_{competitor_ts_code}"].shift(-1)  # add a future pct_chg 1 for easier target
 
         # calculate percent change and winrate
@@ -189,30 +195,38 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
         for one_zero in [1, 0]:
             for y in a_freqs:
                 try:
-                    df_port_overview.at[i + 1, f"market_trend{y}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{y}"] == one_zero, f"tomorrow_pct_chg_{competitor_ts_code}"].mean()
+                    df_overview.at[i + 1, f"market_trend{y}_{one_zero}_pct_chg_mean"] = df_port_c.loc[df_port_c[f"market_trend{y}"] == one_zero, f"tomorrow_pct_chg_{competitor_ts_code}"].mean()
                     # condition_one_zero = df_port_c["market_trend" + str(y)] == one_zero
-                    # df_port_overview.at[i + 1, "market_trend" + str(y) +"_"+str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
+                    # df_overview.at[i + 1, "market_trend" + str(y) +"_"+str(one_zero)+"_winrate"] = len(df_port_c[condition_trade & condition_win & condition_one_zero]) / len(df_port_c[condition_trade & condition_one_zero])
                 except Exception as e:
                     pass
 
     # split chart into pct_chg and comp_chg for easier reading
     a_trend_label = [f"close.market.trend{x}" for x in a_freqs if x != 1]
     a_trend_label = []  # TODO trend is excluded, add it back or remove it
-    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]]]
+    df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg" ,"port_sell_pct_chg","port_sell_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]]]
 
     # write portfolio
-    portfolio_path = f"Market/CN/Btest/Result/Portfolio_{setting['id']}"
-    LB.to_csv_feather(df=df_port_overview, a_path=LB.a_path(f"{portfolio_path}/overview"), skip_feather=True)
-    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h"), skip_feather=True)
-    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart"), index_relevant=True, skip_feather=True)
+    portfolio_path = f"Market/CN/Btest/Result/{setting['id']}"
+
+    #add link to port overview
+    a_links_label=["overview","trade_h","chart","setting"]
+    for label in a_links_label:
+        df_overview.insert(0, label,value=np.nan, allow_duplicates=False)
+        df_overview[label]=f'=HYPERLINK("{LB.c_root()+portfolio_path}/{label}_{setting["id"]}.csv")'
+
+    #save to drive
+    LB.to_csv_feather(df=df_overview, a_path=LB.a_path(f"{portfolio_path}/overview_{setting['id']}"), skip_feather=True)
+    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h_{setting['id']}"), skip_feather=True)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart_{setting['id']}"), index_relevant=True, skip_feather=True)
     df_setting = pd.DataFrame(setting, index=[0])
-    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting"), index_relevant=False, skip_feather=True)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting_{setting['id']}"), index_relevant=False, skip_feather=True)
 
     print("setting is", setting["s_weight1"])
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
-    return [df_trade_h, df_port_overview, df_setting]
+    return [df_trade_h, df_overview, df_setting]
 
 
 def btest(settings=[{}]):
@@ -250,8 +264,8 @@ def btest(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates.index.values
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
-    df_group_instance_all = DB.preload(asset="G", d_queries_ts_code={"G": ["on_asset == 'E'", "group != 'industry3'"]})
-    last_simulated_date = df_stock_market_all.index[-1]
+    #d_G_df = DB.preload(asset="G", d_queries_ts_code=LB.c_G_queries())
+    d_G_df = {}
     df_today_accelerator = pd.DataFrame()
 
     # 0.4 PREPARATION- INITIALIZE Changeables for the loop
@@ -406,7 +420,7 @@ def btest(settings=[{}]):
                                     df_today_mod[f"rank_{column}_{group}"] = df_today_mod[group]  # to be replaced later by int value
                                     for instance in instance_array:
                                         try:
-                                            d_replace[instance] = df_group_instance_all[f"{group}_{instance}"].at[int(today), column]
+                                            d_replace[instance] = d_G_df[f"{group}_{instance}"].at[int(today), column]
                                         except Exception as e:
                                             print("(Could be normal if none of these group are trading on that day) ERROR on", today, group, instance)
                                             print(e)
@@ -473,14 +487,15 @@ def btest(settings=[{}]):
 
                 # 6.11 BUY EXECUTE:
                 p_fee = setting["p_fee"]
-                current_capital = d_capital[setting_count]["cash"]
+                cash_available = d_capital[setting_count]["cash"]
                 if setting["p_proportion"] == "prop":
                     df_select_tomorrow["reserved_capital"] = (df_select_tomorrow["rank_final"].sum() / df_select_tomorrow["rank_final"])
-                    df_select_tomorrow["reserved_capital"] = current_capital * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
+                    df_select_tomorrow["reserved_capital"] = cash_available * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
                 elif setting["p_proportion"] == "fibo":
-                    df_select_tomorrow["reserved_capital"] = current_capital * pd.Series(data=LB.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
+                    df_select_tomorrow["reserved_capital"] = cash_available * pd.Series(data=LB.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
                 else:
-                    df_select_tomorrow["reserved_capital"] = current_capital / buyable_size
+                    #former bug here. not divide reserved capital by p_maxsize, rather divide it by available stocks to buy.
+                    df_select_tomorrow["reserved_capital"] = cash_available / len(df_select_tomorrow)
 
                 for hold_count, (ts_code, row) in enumerate(df_select_tomorrow.iterrows(), start=1):
                     buy_open = row["open"]
@@ -491,13 +506,12 @@ def btest(settings=[{}]):
                     value_open = shares * buy_open
                     value_close = shares * buy_close
                     fee = p_fee * value_open
-                    d_capital[setting_count]["cash"] = d_capital[setting_count]["cash"] - value_open - fee
+                    d_capital[setting_count]["cash"] -= value_open - fee
 
                     d_trade_h[tomorrow]["buy"].append(
                         {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "T+": 0, "ts_code": ts_code, "name": row["name"], "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
                          "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
                          "value_close": value_close, "port_cash": d_capital[setting_count]["cash"]})
-
                     print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
 
                 now = print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
@@ -507,6 +521,9 @@ def btest(settings=[{}]):
                     print("no stock meets criteria after basic filtering (like IPO)")
                 else:
                     print("not buying today because no space")
+
+            cash_available=d_capital[setting_count]["cash"]
+            print(f"cash at end of day {cash_available}")
 
             # 7 PRINT TIME
             if setting["print_log"]:
@@ -527,9 +544,9 @@ def btest(settings=[{}]):
 
             # sendmail
             if setting["send_mail"]:
-                df_last_simulated_trade = df_trade_h.loc[df_trade_h["trade_date"] == last_simulated_date, ["trade_type", "name"]]
+                df_last_simulated_trade = df_trade_h.loc[df_trade_h["trade_date"] == str_last_simulated_trade, ["trade_type", "name"]]
                 str_last_simulated_trade = df_last_simulated_trade.to_string(header=False, index=True)
-                str_last_simulated_trade = str(last_simulated_date) + ": \n" + setting["name"] + "\n" + str_last_simulated_trade
+                str_last_simulated_trade = str(str_last_simulated_trade) + ": \n" + setting["name"] + "\n" + str_last_simulated_trade
                 LB.send_mail(str_last_simulated_trade)
 
         except Exception as e:
@@ -543,7 +560,7 @@ def btest(settings=[{}]):
     #LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
     LB.to_excel(path=path, d_df={"Overview":df_backtest_summ}, index=False)
 
-def btest_settings(loop_indicator=1):
+def btest_settings():
     # Initialize settings
     setting_master = {
         # general = Non changeable through one run
@@ -585,7 +602,7 @@ def btest_settings(loop_indicator=1):
         # portfolio
         "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 20,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
+        "p_maxsize": 3700,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_proportion": False,  # choices: False(evenly), prop(proportional to rank), fibo(fibonacci)
@@ -597,8 +614,8 @@ def btest_settings(loop_indicator=1):
 
 
     # settings creation  #,"G"
-    for asset in ["I","FD","F"]:
-        a_settings_asset = []
+    for asset in ["E"]:
+        a_setting_instance = []
         setting_asset = copy.deepcopy(setting_master)
         if asset == "G":
             setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"]
@@ -610,8 +627,7 @@ def btest_settings(loop_indicator=1):
         #     setting_instance["f_query_asset"] +=[f"(df_today['e_min']/df_today['close']).between({thresh},{thresh+0.05})"]
         #     setting_instance["s_weight1"] ={}
 
-        #     print(setting_instance["f_query_asset"])
-        #     a_settings_asset.append(setting_instance)
+        #     a_setting_instance.append(setting_instance)
         #
 
         # Fresh stock by final rank
@@ -625,8 +641,7 @@ def btest_settings(loop_indicator=1):
         #             ]
         #             setting_instance["s_weight1"] = {"bull": [True, 1, 1], }
         #
-        #             print(setting_instance["f_query_asset"])
-        #             a_settings_asset.append(setting_instance)
+        #             a_setting_instance.append(setting_instance)
 
         # macd
         # for macd in ["zlmacd_close.(1, 5, 10)","zlmacd_close.(1, 10, 20)","zlmacd_close.(1, 240, 300)","zlmacd_close.(1, 300, 500)"]:
@@ -635,19 +650,18 @@ def btest_settings(loop_indicator=1):
         #         setting_instance["f_query_asset"] += [f"(df_today['{macd}']=={macd_bool})"]
         #         setting_instance["s_weight1"] ={}
 
-        #         print(setting_instance["f_query_asset"])
-        #         a_settings_asset.append(setting_instance)
+        #         a_setting_instance.append(setting_instance)
 
 
         #general: quantile, ,"turnover_rate","total_mv","pe_ttm","ps_ttm","total_share","pb","vol"
-        for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
-            for low_quant,high_quant in LB.custom_pairwise_overlap([x/100 for x in range(0,105,20)]):
+        #for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
+        for column in ["total_mv"]:
+            for low_quant,high_quant in LB.custom_pairwise_overlap(LB.drange(0,101,20)):
                 setting_instance = copy.deepcopy(setting_asset)
                 setting_instance["f_query_asset"] += [f"df_today['{column}'].between(df_today['{column}'].quantile({low_quant}), df_today['{column}'].quantile({high_quant}))"]
                 setting_instance["s_weight1"] = {}
 
-                print(setting_instance["f_query_asset"])
-                a_settings_asset.append(setting_instance)
+                a_setting_instance.append(setting_instance)
 
         #general: binary
         # for column in ["exchange"]:
@@ -656,33 +670,79 @@ def btest_settings(loop_indicator=1):
         #         setting_instance["f_query_asset"] += [f"df_today['{column}']== '{column_val}'"]
         #         setting_instance["s_weight1"] = {}
 
-        #         print(setting_instance["f_query_asset"])
-        #         a_settings_asset.append(setting_instance)
+        #         a_setting_instance.append(setting_instance)
 
-        print("Total Settings:", len(a_settings_asset))
+
+        LB.print_iterables([x["f_query_asset"] for x in  a_setting_instance])
+        print("Total Settings:", len(a_setting_instance))
         time.sleep(10)
 
-        try:
-            btest(settings=a_settings_asset)
-        except Exception as e:
-            print(e)#to catch uncatched error
-            traceback.print_stack()
-            LB.sound("error.mp3")
-            time.sleep(60)
+        # try:
+        btest(settings=a_setting_instance)
+        # except Exception as e:
+        #     print(e)#to catch uncatched error
+        #     traceback.print_stack()
+        #     LB.sound("error.mp3")
+        #     time.sleep(60)
+
+
+def btest_validation(column="total_mv"):
+    """
+    by logic:
+    1. Btest is just looping over all date_df.
+    2. Looping manually over date_df should be the same for easy operation
+
+    Checks if buy and trade instances are the same (they are)
+    Checks if buy and sell price are the same (they are not)
+    """
+    q_setting = LB.drange(0,101,20)
+    d_preload = DB.preload(asset="trade_date",step=1)
+    d_trade_h = {}
+    df_result = pd.DataFrame()
+
+    for today,tomorrow in LB.custom_pairwise_overlap([x for x in d_preload.keys()]):
+        df_today=d_preload[today]
+
+
+        df_tomorrow=d_preload[tomorrow]
+
+        for counter,(key, df_q) in enumerate(LB.custom_quantile(df=df_today, column=column, key_val=False,p_setting=q_setting).items()):
+
+            selected_index=df_q.index
+
+            df_future = df_tomorrow.loc[selected_index]
+            df_future.dropna(how="all",inplace=True)
+
+            print(tomorrow,key)
+            #add instance of today q
+            if counter==0:
+                print("add index for ",key)
+                d_trade_h[tomorrow]=pd.Series(list(selected_index))
+
+            #calculate instance mean
+            df_result.at[tomorrow, f"close_" + key] = df_future["close"].mean()
+            df_result.at[tomorrow, f"open.fgain1_" + key] = df_future["open.fgain1"].mean()
+
+
+    a_path=LB.a_path(f"Market/CN/Btest/Validation/quantile_{column}")
+    LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
+
+    df_trade_h=pd.DataFrame(d_trade_h)
+    LB.to_csv_feather(df=df_trade_h,a_path=LB.a_path(f"Market/CN/Btest/Validation/{column}.trade_h"),skip_feather=True)
 
 
 if __name__ == '__main__':
-    try:
+    # try:
         pr = cProfile.Profile()
         pr.enable()
 
-
-        btest_settings(5)
+        btest_validation(column="close")
+        #btest_settings()
 
         pr.disable()
         # pr.print_stats(sort='file')
 
-        pass
-    except Exception as e:
-        traceback.print_exc()
-        LB.sound("error.mp3")
+
+    # except Exception as e:
+    #     traceback.print_exc()
+    #     LB.sound("error.mp3")

@@ -577,7 +577,7 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
         Works good on high volatile time, works bad on flat times.
         TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
         """
-    name = f"{ibase}.{type, sfreq, bfreq}"
+    name = f"{ibase}.{type, sfreq, bfreq,type}"
     df[f"zldif_{name}"] = 0
     df[f"zldea_{name}"] = 0
     if type == 0:  # standard macd with ma. conventional ma is very slow
@@ -627,43 +627,50 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
     return [f"zlmacd_{name}", f"ema1_{name}", f"ema2_{name}", f"zldif_{name}", f"zldea_{name}"]
 
 
-def my_ismax(df, ibase, thresh=0.95, score=10):
+def my_ismax(df, ibase, q=0.95, score=10):
+    """
+    the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
+    """
     name = f"{ibase}"
-    # the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
-    df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(thresh, thresh + 0.05).astype(int) * score
+    df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(q, q + 0.05).astype(int) * score
     df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
     return [f"ismax_{name}", ]
 
 
-def my_ismin(df, ibase, thresh=0.95, score=10):
+def my_ismin(df, ibase, q=0.95, score=10):
+    """
+    the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
+    """
     name = f"{ibase}"
-    # the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
-    df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(thresh, thresh + 0.05).astype(int) * score
+    df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(q, q + 0.05).astype(int) * score
     df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
     return [f"ismin_{name}", ]
 
 
-def my_generic_quantile(df, ibase, a_q=[0,0.2,0.4,0.6,0.8,1], cg_freq=240, score=10):
+def my_gq(df, ibase, q_low=0.2, q_high=0.4, cg_freq=240, score=10):
     """can be used on any indicator
+    gq=Generic quantile
     0. create an oscilator of that indicator
     1. create expanding mean of that indicator
     2. create percent=today_indicator/e_indicator
     3. assign rolling quantile quantile of percent
     """
-
-    name = f"{ibase}.cg{cg_freq}"
-    df[f"cg_{name}"]=cg_Oscillator(df[ibase], cg_freq)
+    #init
+    name = f"gq{cg_freq}.{ibase}"
+    if f"cg_{name}" not in df.columns:
+        df[f"cg_{name}"]=cg_Oscillator(df[ibase], cg_freq)
 
     #create expanding quantile
-    for q in a_q:
-        df[f"q{q}_cg_{name}"] = df[f"cg_{name}"].expanding(240).quantile(q)
+    for q in [q_low, q_high]:
+        if f"q{q}_{name}" not in df.columns:
+            df[f"q{q}_{name}"] = df[f"cg_{name}"].expanding(240).quantile(q)
 
     #assign todays value to a quantile
-    a_q_labels = []
-    for low_q,high_q in LB.custom_pairwise_overlap(a_q):
-        df[f"in_q{low_q,high_q}_cg_{name}"]=( (df[f"q{low_q}_cg_{name}"]<=df[f"cg_{name}"]) & (df[f"cg_{name}"]<df[f"q{high_q}_cg_{name}"])).astype(int)
-        a_q_labels.append(f"in_q{low_q,high_q}_cg_{name}")
-    return a_q_labels
+    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"cg_{name}"]) & (df[f"cg_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
+    df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
+    return [f"in_q{q_low, q_high}_{name}", ]
+
+
 
 
 def slopecross(df, ibase, sfreq, bfreq, smfreq):
@@ -2293,36 +2300,7 @@ def find_flat(df, ibase):
     plt.show()
 
 
-# test if stocks that are currently at their best, will last for the next freq. If I remember correctly the hypo test failed. This strategy dont work
-def hypothesis_test():
-    """
-    1. go through all date
-    2. find the highest ranking stocks for that date
-    3. check their future gain
-    """
 
-    df_trade_date = DB.get_trade_date()
-    df_result = pd.DataFrame()
-    for trade_date in df_trade_date.index:
-        try:
-            print("trade_date", trade_date)
-            if trade_date < 20000101:
-                continue
-
-            df_date = DB.get_date(trade_date=trade_date)
-            df_date_expanding = DB.get_date_expanding(trade_date=trade_date)
-            df_date["final_rank"] = df_date_expanding["final_rank"]
-
-            for key, df_quant in custom_quantile_d(df_date, "final_rank", p_setting=[0, 1]).items():
-                # for key, df_quant in get_quantile(df_date, "final_rank",p_setting=[(0, 0.05),(0.05, 0.18), (0.18, 0.5), (0.5, 0.82), (0.82, 0.95),(0.95, 1)]).items():
-                for freq in [2]:
-                    df_result.at[trade_date, f"q_{key}.open.fgain{freq}_gmean"] = gmean(df_quant[f"open.fgain{freq}"])
-                    df_result.at[trade_date, f"q_{key}.member"] = ",".join(list(df_quant.index))
-
-        except Exception as e:
-            print("exception lol", e)
-
-    df_result.to_csv("hypo_test.csv")
 
 
 # generate test for all fund stock index and for all strategy and variables.
@@ -2334,11 +2312,11 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
     2. The little difference between this and brute force: bruteforce only creates indicator, but not assign buy/sell signals with 10 or -10
     Variables on how to loop over are in the function. apply function variables are in the dict kwargs
     """
-    d_preload = DB.preload(asset=asset, step=step, period_abv=1000, d_queries_ts_code=d_queries)
+    d_preload = DB.preload(asset=asset, step=step, period_abv=240, d_queries_ts_code=d_queries)
 
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Atest/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        path = f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['ibase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
         if os.path.exists(path):
             print(f"path exists: {path}")
             continue
@@ -2381,9 +2359,12 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
     df_downtrend_gmean = pd.DataFrame()
     df_up_better_mean = pd.DataFrame()
     df_down_better_mean = pd.DataFrame()
+    ibase=one_kwarg['ibase'] #ibase should not change during iteration.otherwise unstable
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Atest/{kwargs['fname']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        path = f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['ibase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+
+
         print(f"summarizing {path}")
 
         df_macd = pd.read_excel(path)
@@ -2406,13 +2387,19 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
             df_downtrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = downtrend_gmean
             df_up_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = up_better_mean
             df_down_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = down_better_mean
+        elif kwargs['fname']== "gq":
+            df_uptrend_gmean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
+            df_downtrend_gmean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
+            df_up_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
+            df_down_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
+
 
     d_summary = {"Overview": df_summary}
     d_summary["uptrend_gmean"] = df_uptrend_gmean
     d_summary["downtrend_gmean"] = df_downtrend_gmean
     d_summary["up_better_mean"] = df_up_better_mean
     d_summary["down_better_mean"] = df_down_better_mean
-    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
+    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/{ibase}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
 
 
 def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
@@ -2424,49 +2411,49 @@ def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
     # df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
 
 
-def atest_settings(fname="macd", lazy=1):
-    # macd iterator generation
-    a_kwargs = []
-    if fname == "macd":
-        func = my_macd
-        d_steps = {"F": 1, "FD": 2, "G": 1, "I": 2, "E": 6}
-        for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
-            if sfreq < bfreq:
-                a_kwargs.append({"ibase": "close", "sfreq": sfreq, "bfreq": bfreq, "type": lazy, "score": 1})
-    elif fname == "is_max":
-        func = my_ismax
-        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-        for thresh in [x / 100 for x in range(0, 100, 5)]:
-            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
-    elif fname == "is_min":
-        func = my_ismin
-        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-        for thresh in [x / 100 for x in range(0, 100, 5)]:
-            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
+def atest_settings(fname="macd", a_ibase=["close"]):
 
+    for ibase in a_ibase:
 
-    elif fname == "close.pgain":
-        func = my_generic_quantile
-        d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-        for thresh in [x / 100 for x in range(0, 100, 5)]:
-            a_kwargs.append({"ibase": "close", "thresh": thresh, "score": 1})
+        #setting generation
+        a_kwargs = []
+        if fname == "macd":
+            func = my_macd
+            d_steps = {"F": 1, "FD": 2, "G": 1, "I": 2, "E": 6}
+            for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
+                if sfreq < bfreq:
+                    a_kwargs.append({"ibase": ibase, "sfreq": sfreq, "bfreq": bfreq, "type": 1, "score": 1})
+        elif fname == "is_max":
+            func = my_ismax
+            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+            for q in np.linspace(0, 1,11):
+                a_kwargs.append({"ibase": ibase, "q": q, "score": 1})
+        elif fname == "is_min":
+            func = my_ismin
+            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+            for q in np.linspace(0, 1,11):
+                a_kwargs.append({"ibase": ibase, "q": q, "score": 1})
+        elif fname == "gq":
+            func = my_gq
+            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+            for cg_freq in [5,10,20,40,60]:
+                for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
+                    a_kwargs.append({"ibase": ibase, "q_low": q_low, "q_high":q_high,"cg_freq":cg_freq,"score": 1})
 
-    print(a_kwargs)
-    atest(asset="F", step=d_steps["F"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    atest(asset="FD", step=d_steps["FD"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    atest(asset="G", step=d_steps["G"], d_queries=LB.c_G_queries(), kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    atest(asset="I", step=d_steps["I"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
-    atest(asset="E", step=d_steps["E"], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs})
+        #run atest
+        LB.print_iterables(a_kwargs)
+        for asset in ["F","FD","G","I","E"]:
+            atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
 
 
 if __name__ == '__main__':
+    #total_mv
+    for column in ["ivola","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
+        atest_settings(fname="gq", a_ibase=[column])
 
-    df=DB.get_asset()
-    a_labels=my_generic_quantile(df,"close",cg_freq=240)
-    #df.to_csv("test.csv")
-    Plot.plot_chart(df,["close"]+a_labels)
-    # for lazy in [1,4]:
-    #     atest_settings(fname="macd", lazy=lazy)
+    #atest_settings(fname="gq", a_ibase=[f"close"])
+
+
 
 """
 useful techniqes

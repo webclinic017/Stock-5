@@ -13,6 +13,8 @@ import LB
 import DB
 from scipy.stats.mstats import gmean
 import Atest
+import Plot
+import pandas_montecarlo
 
 
 def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past=10, q_step=5, df=DB.get_stock_market_all()):
@@ -24,7 +26,7 @@ def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past
     #     df[f"tomorrow{future}"] = df["close"].shift(-future) / df["close"]
     #     df[f"past{future}"] = df["close"] / df["close"].shift(future)
 
-    for key, df_filtered in  LB.custom_quantile_d(df=df, column=f"past{past}", p_setting=range(0, 101, q_step)).items():
+    for key, df_filtered in  LB.custom_quantile(df=df, column=f"past{past}", p_setting=[x/100 for x in range(0, 101, q_step)]).items():
         df_result.at[key, "count"] = len(df_filtered)
         df_result.at[key, "q1"] ,df_result.at[key, "q2"] ,df_result.at[key, "q1_val"] ,df_result.at[key, "q2_val"]= [float(x) for x in key.split(",")]
         for future in a_freq:
@@ -498,6 +500,38 @@ def daily_stocks_abve():
             df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
             df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
     df_result.to_csv("test.csv")
+
+
+def my_monte_carlo(s_close,n,m):
+    """
+    s_close=close series
+    n= n days forcast into the future
+    m= amount of simulations
+    Basically useless simulation!
+    """
+    from scipy.stats import norm
+    log_returns = np.log(1 + s_close.pct_change())
+    u=log_returns.mean()
+    var=log_returns.var()
+    drift=u-(0.5*var)
+    stdev=log_returns.std()
+
+    daily_returns=np.exp(drift + stdev*norm.ppf(np.random.rand(n,m)))
+
+    #takes last day as starting point
+    s0=s_close.iat[-1]
+    price_list=np.zeros_like(daily_returns)
+    price_list[0]=s0
+
+    #apply monte carlo
+    for t in range(1, n):
+        price_list[t]=price_list[t-1]*daily_returns[t]
+
+
+    plt.plot(price_list)
+    plt.show()
+
+
 
 if __name__ == '__main__':
     asset_bullishness()

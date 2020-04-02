@@ -393,28 +393,34 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
 
 # For all Pri indices and derivates. ordered after FILO
-def update_assets_EIFD_D_technical(df, asset="E", bfreq=c_bfreq()):
-    for rolling_freq in bfreq[::-1]:
+def update_assets_EIFD_D_technical(df, asset,bfreq=c_bfreq()):
+    # close pgain fgain
+    for rolling_freq in [x for x in LB.BFreq][::-1]:
         ICreate.pgain(df=df, ibase="close", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
-    for rolling_freq in bfreq[::-1]:
+    for rolling_freq in [x for x in LB.BFreq][::-1]:
         ICreate.fgain(df=df, ibase="close", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
-    for rolling_freq in [1, 2, 5][::-1]:
+    # open pgain fgain
+    for rolling_freq in [LB.BFreq.f1, LB.BFreq.f2, LB.BFreq.f5][::-1]:
         ICreate.pgain(df=df, ibase="open", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
-    for rolling_freq in [1, 2, 5][::-1]:
+    for rolling_freq in [LB.BFreq.f1, LB.BFreq.f2, LB.BFreq.f5][::-1]:
         ICreate.fgain(df=df, ibase="open", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
+    # beta
+    if asset in ["I","E","FD"]:
+        for ts_code,df_index in Global.d_index.items():
+            for freq in [LB.BFreq.f20,LB.BFreq.f60,LB.BFreq.f240][::-1]:
+                ICreate.corr(df=df, ibase="close", freq=freq, re=ICreate.RE.r, corr_with=ts_code, corr_series=df_index["close"])
+
+    # other
     ICreate.ivola(df=df)  # 0.890578031539917 for 300 loop
     ICreate.period(df=df)  # 0.2 for 300 loop
     ICreate.pjup(df=df)  # 1.0798187255859375 for 300 loop
     ICreate.pjdown(df=df)  # 1.05 independend for 300 loop
     ICreate.co_pct_chg(df=df)
 
-    # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
-    # if asset == "E":  # else sh_index will try to get corr wit himself during update
-    #     ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f5, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
-    #     ICreate.deri_sta(df=df, ibase="close", freq=BFreq.f10, ideri=ICreate.IDeri.corr, re=ICreate.RE.r)
 
+    # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
     # trend support and resistance
     # add trend for individual stocks
     # ICreate.trend(df=df, ibase="close")
@@ -1064,6 +1070,7 @@ def get_ts_code(a_asset=["E"], market="CN", d_queries={}):
         if d_queries:
             a_queries = d_queries[asset]
             for query in a_queries:
+                #when query index use name or "index"? A: both are working
                 df = df.query(query)
         a_result.append(df)
     return pd.concat(a_result, sort=False)
@@ -1252,20 +1259,41 @@ def preload(asset="E", step=1, query_df="", period_abv=240, d_queries_ts_code={}
     return d_result
 
 
-"""shuld be fully replaced by preload by now"""
+def update_date_beta_table(a_asset=["E"], freq="D", a_freqs=[240]):
+
+    """
+
+    This calculates pairwise beta between all stocks for all days
+    for all trade_dates
+        for all assets
+            for all past beta frequencies
+    """
+
+    #for now just consider E, I, FD
+    allowed_assets=["E","I","FD"]
+
+    for asset in a_asset:
+        if asset not in allowed_assets:
+            continue
+
+        #get the index
+        d_preload=preload(asset=asset,step=1)
+
+        for freq in a_freqs:
+
+            """compare each asset with each other asset"""
+            for asset_counter1, (ts_code1,df_asset1) in enumerate(d_preload.items()):
+
+                df_result = df_asset1[["ts_code", "open", "high", "low", "close"]]
+                for asset_counter2, (ts_code2,df_asset2) in enumerate(d_preload.items()):
+                    print(f"freq: {freq}. beta: {ts_code1} - {ts_code2}")
+                    df_result[ts_code2]=df_result["close"].rolling(freq,min_periods=2).corr(df_asset2["close"])
 
 
-# def preload_groups(assets=["E"]):
-#     d_result = {}
-#     d_group_label_pair = c_groups_dict(assets=assets, a_ignore=["asset", "industry3"])
-#
-#     bar = tqdm(range(len(d_group_label_pair)))
-#     bar.set_description(f"loading groups...")
-#     for (group, instance_array),i in zip(d_group_label_pair.items(), bar):
-#         for instance in instance_array:
-#             d_result[group + "_" + str(instance)] = get_asset(ts_code=group + "_" + str(instance), asset="G")
-#     bar.close()
-#     return d_result
+                a_path=LB.a_path(f"Market/CN/Asset/Beta/{freq}/{ts_code1}")
+                LB.to_csv_feather(df=df_result,a_path=a_path)
+
+
 
 
 def update_all_in_one(big_update=False):
@@ -1325,6 +1353,10 @@ def update_all_in_one(big_update=False):
     #
 
 
+class Global:
+    df_asset=get_asset()
+    d_index = preload(asset="I", d_queries_ts_code={"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]})
+
 
 # speed order=remove apply and loc, use vectorize where possible
 # 1. vectorized
@@ -1340,13 +1372,7 @@ if __name__ == '__main__':
         big_update = False
 
 
-
-        update_date(asset="G")
-        #update_ts_code(asset="E")
-        #update_assets_G_D()
-
-
-
+        update_date_beta_table()
 
     except Exception as e:
         traceback.print_exc()
