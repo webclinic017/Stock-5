@@ -16,7 +16,7 @@ import itertools
 from enum import auto
 from win32com.client import Dispatch
 import traceback
-import API_Tushare
+import _API_Tushare
 
 import matplotlib.pyplot as plt
 import atexit
@@ -296,10 +296,12 @@ def close_file(filepath):
     filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
     xl = Dispatch('Excel.Application')
     wb = xl.Workbooks.Open(filepath)
-    xl.Quit()
+
     wb.Close(True)
+
     # new
     xl.DisplayAlerts = False
+    xl.Quit()
 
 
 # maybe create a rekursive version
@@ -424,6 +426,9 @@ def multi_process(func, a_kwargs, a_steps=[]):
 def c_root():
     return "D:\Stock/"
 
+def c_root_beta():
+    return "E:\Beta/"
+
 def c_assets():
     return [e.value for e in Assets]
 
@@ -479,17 +484,17 @@ def c_group_score_weight():
 
 
 def c_date_oth():
-    return {"block_trade": API_Tushare.my_block_trade,
-            "holdertrade": API_Tushare.my_holdertrade,
-            "repurchase": API_Tushare.my_repurchase,
-            "share_float": API_Tushare.my_share_float}
+    return {"block_trade": _API_Tushare.my_block_trade,
+            "holdertrade": _API_Tushare.my_holdertrade,
+            "repurchase": _API_Tushare.my_repurchase,
+            "share_float": _API_Tushare.my_share_float}
 
 
 def c_assets_fina_function_dict():
-    return {"fina_indicator": API_Tushare.my_fina_indicator,
-            "income": API_Tushare.my_income,
-            "balancesheet": API_Tushare.my_balancesheet,
-            "cashflow": API_Tushare.my_cashflow}
+    return {"fina_indicator": _API_Tushare.my_fina_indicator,
+            "income": _API_Tushare.my_income,
+            "balancesheet": _API_Tushare.my_balancesheet,
+            "cashflow": _API_Tushare.my_cashflow}
 
 
 def c_industry_level():
@@ -727,11 +732,24 @@ def custom_pairwise_noverlap(iterables):
 
 
 def custom_pairwise_combination(a_array, n):
+    """care about order: e.g. (0,1),(0,2)"""
     return list(itertools.combinations(a_array, n))
+
+def custom_pairwise_permutation(a_array, n):
+    """dont care about order:  e.g. (1,0),(0,1)"""
+    return list(itertools.permutations(a_array, n))
+
+def custom_pairwise_cartesian(a_array,n):
+    """product with itself"""
+    return list(itertools.product(a_array,repeat=n))
 
 
 def drange(start,end,step):
     return [x/100 for x in range(start,end,step)]
+
+
+def my_sharp(series):
+    return series.mean()/series.std()
 
 def my_gmean(series):
     return gmean((series / 100) + 1)
@@ -766,6 +784,12 @@ def print_iterables(d):
         for x in d:
             print(x)
 
+
+def btest_quantile(series):
+    """this function should not exist. it helps in btest to eval quantil str in one line"""
+    array=list(series)
+    d_result={"left":array[0],"right":array[1]}
+    return d_result
 
 
 

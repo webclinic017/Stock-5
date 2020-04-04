@@ -5,7 +5,7 @@ import time
 import threading
 import DB
 # set global variable flag
-from ICreate import *
+from Alpha import *
 import builtins as bi
 import Plot
 from scipy.stats import gmean
@@ -43,7 +43,7 @@ def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, m
     rsi_abv = indi_name(ibase=ibase, deri=f"{market_suffix}rsi_abv")
     turnpoint_name = indi_name(ibase=ibase, deri=f"{market_suffix}turnpoint")
     under_name = indi_name(ibase=ibase, deri=f"{market_suffix}under")
-    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
+    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{ADeri.trend.value}")
 
     func = talib.RSI
     # RSI and CMO are the best. CMO is a modified RSI
@@ -667,6 +667,25 @@ def my_gq(df, ibase, q_low=0.2, q_high=0.4, cg_freq=240, score=10):
 
     #assign todays value to a quantile
     df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"cg_{name}"]) & (df[f"cg_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
+    df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
+    return [f"in_q{q_low, q_high}_{name}", ]
+
+
+def my_gq_rsi(df, ibase, q_low=0.2, q_high=0.4, rsi_freq=240, score=10):
+    """Exactly the same as my_gq but using rsi instead
+    """
+    #init
+    name = f"gq{rsi_freq}.{ibase}"
+    if f"rsi_{name}" not in df.columns:
+        df[f"rsi_{name}"]=talib.RSI(df[ibase], rsi_freq)
+
+    #create expanding quantile
+    for q in [q_low, q_high]:
+        if f"q{q}_{name}" not in df.columns:
+            df[f"q{q}_{name}"] = df[f"rsi_{name}"].expanding(240).quantile(q)
+
+    #assign todays value to a quantile
+    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"rsi_{name}"]) & (df[f"rsi_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
     df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
     return [f"in_q{q_low, q_high}_{name}", ]
 
@@ -2392,6 +2411,11 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
             df_downtrend_gmean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
             df_up_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
             df_down_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
+        elif kwargs['fname']== "gq_rsi":
+            df_uptrend_gmean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
+            df_downtrend_gmean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
+            df_up_better_mean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
+            df_down_better_mean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
 
 
     d_summary = {"Overview": df_summary}
@@ -2408,10 +2432,9 @@ def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
     macd_labels = my_macd(df=df_asset, ibase="close", sfreq=sfreq, bfreq=bfreq, type=type, score=score)
     df_asset = df_asset[macd_labels + ["close"]]
     Plot.plot_chart(df_asset, df_asset.columns)
-    # df_asset.to_csv(f"macd_for_one_{ts_code}.csv")
 
 
-def atest_settings(fname="macd", a_ibase=["close"]):
+def atest_manu(fname="macd", a_ibase=["close"]):
 
     for ibase in a_ibase:
 
@@ -2433,12 +2456,6 @@ def atest_settings(fname="macd", a_ibase=["close"]):
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
             for q in np.linspace(0, 1,11):
                 a_kwargs.append({"ibase": ibase, "q": q, "score": 1})
-        elif fname == "gq":
-            func = my_gq
-            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-            for cg_freq in [5,10,20,40,60]:
-                for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
-                    a_kwargs.append({"ibase": ibase, "q_low": q_low, "q_high":q_high,"cg_freq":cg_freq,"score": 1})
 
         #run atest
         LB.print_iterables(a_kwargs)
@@ -2446,12 +2463,46 @@ def atest_settings(fname="macd", a_ibase=["close"]):
             atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
 
 
-if __name__ == '__main__':
-    #total_mv
-    for column in ["ivola","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
-        atest_settings(fname="gq", a_ibase=[column])
+def atest_auto(fname):
 
-    #atest_settings(fname="gq", a_ibase=[f"close"])
+    for asset in ["F","FD","G","I","E"]:
+        #get example column of this asset
+        a_example_column = DB.get_example_column(asset=asset, numeric_only=True)
+
+        # remove unessesary columns:
+        a_columns = []
+        for column in a_example_column:
+            for exclude_column in ["fgain"]:
+                if exclude_column not in column:
+                    a_columns.append(column)
+
+        for col in a_columns:
+            #setting generation
+            a_kwargs = []
+            if fname == "gq":
+                func = my_gq
+                d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+                for cg_freq in [5,10,20,40,60]:
+                    for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
+                        a_kwargs.append({"ibase": col, "q_low": q_low, "q_high":q_high,"cg_freq":cg_freq,"score": 1})
+            elif fname == "gq_rsi":
+                func = my_gq_rsi
+                d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
+                for cg_freq in [5,10,20,40,60]:
+                    for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
+                        a_kwargs.append({"ibase": col, "q_low": q_low, "q_high":q_high,"rsi_freq":cg_freq,"score": 1})
+
+            #run atest
+            LB.print_iterables(a_kwargs)
+            atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
+
+
+
+if __name__ == '__main__':
+    for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
+        atest_manu(fname="gq_rsi", a_ibase=[column])
+
+    atest_auto(fname="gq_rsi")
 
 
 

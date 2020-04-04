@@ -11,7 +11,7 @@ import datetime
 import imageio
 import glob
 from pandas.plotting import autocorrelation_plot
-import ICreate
+import Alpha
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -98,11 +98,11 @@ def plot_polynomials():
         df = df_asset[i:i + window]
         trade_date = df_asset.at[i, "trade_date"]
 
-        df["poly1"] = ICreate.polynomial_series(df=df, degree=1, column="close")
-        df["poly2"] = ICreate.polynomial_series(df=df, degree=2, column="close")
-        df["poly3"] = ICreate.polynomial_series(df=df, degree=3, column="close")
-        df["poly4"] = ICreate.polynomial_series(df=df, degree=4, column="close")
-        df["poly5"] = ICreate.polynomial_series(df=df, degree=5, column="close")
+        df["poly1"] = Alpha.polynomial_series(df=df, degree=1, column="close")
+        df["poly2"] = Alpha.polynomial_series(df=df, degree=2, column="close")
+        df["poly3"] = Alpha.polynomial_series(df=df, degree=3, column="close")
+        df["poly4"] = Alpha.polynomial_series(df=df, degree=4, column="close")
+        df["poly5"] = Alpha.polynomial_series(df=df, degree=5, column="close")
         df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
         df.reset_index(inplace=True, drop=True)
         newpath = f"Media/Plot/stock/000938.SZ/"

@@ -10,7 +10,7 @@ import os
 from itertools import combinations
 from itertools import permutations
 
-import ICreate
+import Alpha
 import LB
 import operator
 from time import sleep
@@ -136,7 +136,7 @@ def auto_corr_multiple():
         #             dict_df[pgain].at[ts_code,f"{pgain}_{pgain_lower,pgain_upper}_fgain2_{fgain_lower,fgain_upper}"]=condition_count/total_counts
 
     for ma in LB.c_bfreq():
-        ICreate.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
+        Alpha.mean(df_stock_market, rolling_freq=ma, add_from="pct_chg", complete_new_update=True)
 
     df_mean = pd.DataFrame()
 
@@ -216,7 +216,7 @@ def cross_corr_multiple():
     df_trade_dates = DB.get_trade_date(start_date="20000000", end_date="20200101", freq="D")[::step]
 
     dict_df_ts_code = DB.preload("E", step=step)
-    dict_df_date = DB.preload("trade_date", step=step)
+    dict_df_date = DB.preload("E",on_asset=False, step=step)
 
     df_stock_market = DB.get_stock_market_all()
     df_stock_market = df_stock_market[["trend2", "trend5", "trend10", "trend20", "trend60", "trend240"]]

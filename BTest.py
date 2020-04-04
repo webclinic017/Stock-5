@@ -7,6 +7,8 @@ import DB
 from itertools import combinations
 from itertools import permutations
 import LB
+import glob
+import os
 from datetime import datetime
 import traceback
 from scipy.stats import gmean
@@ -14,7 +16,7 @@ import copy
 import cProfile
 import operator
 import threading
-import ICreate
+import Alpha
 import matplotlib
 from numba import njit
 from numba import jit
@@ -41,11 +43,14 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     beta_against = "_000001.SH"
     a_time = []
     now = mytime.time()
+    for key,items in setting_original.items():
+        print(f"{setting_count}: {key}: {items}")
 
-    # deep copy setting
+    # copy settin signals betfore converting to st
     setting = copy.deepcopy(setting_original)
     p_compare = setting["p_compare"]
     s_weight1 = setting["s_weight1"]
+    auto= setting["auto"] if setting["auto"] else []
 
     # convertes dict in dict to string
     for key, value in setting.items():
@@ -65,6 +70,8 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
         for trade_type, a_trade_context in info.items():
             for single_trade in a_trade_context:
                 trade_h_helper.append({"trade_date": day, "trade_type": trade_type, **single_trade})
+
+    #TODO handle this maybe better. if this produces error, it means the strategy has never traded once.
     df_trade_h = pd.DataFrame(data=trade_h_helper, columns=trade_h_helper[-1].keys())
 
     # use trade date on all stock market to see which day was not traded
@@ -105,7 +112,7 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     # chart add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
-        df_port_c[f"comp_chg_{competitor[1]}"] = ICreate.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
+        df_port_c[f"comp_chg_{competitor[1]}"] = Alpha.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
 
     # tab_overview
     df_overview = pd.DataFrame(float("nan"), index=range(len(p_compare) + 1), columns=[]).astype(object)
@@ -207,7 +214,11 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     df_port_c = df_port_c[["rank_final", "port_pearson", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg" ,"port_sell_pct_chg","port_sell_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]]]
 
     # write portfolio
-    portfolio_path = f"Market/CN/Btest/Result/{setting['id']}"
+    if setting["auto"]:
+        print("setting auto",auto)
+        portfolio_path = f"Market/CN/Btest/auto/comb_{len(auto)}/{'_'.join(auto)}/{setting['assets']}/result/{setting['id']}"
+    else:
+        portfolio_path = f"Market/CN/Btest/manu/result/{setting['id']}"
 
     #add link to port overview
     a_links_label=["overview","trade_h","chart","setting"]
@@ -216,13 +227,13 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
         df_overview[label]=f'=HYPERLINK("{LB.c_root()+portfolio_path}/{label}_{setting["id"]}.csv")'
 
     #save to drive
-    LB.to_csv_feather(df=df_overview, a_path=LB.a_path(f"{portfolio_path}/overview_{setting['id']}"), skip_feather=True)
-    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h_{setting['id']}"), skip_feather=True)
-    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart_{setting['id']}"), index_relevant=True, skip_feather=True)
-    df_setting = pd.DataFrame(setting, index=[0])
-    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting_{setting['id']}"), index_relevant=False, skip_feather=True)
+    LB.to_csv_feather(df=df_overview, a_path=LB.a_path(f"{portfolio_path}/overview_{setting['id']}"), skip_feather=True,index_relevant=False)
+    LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h_{setting['id']}"), skip_feather=True,index_relevant=False)
+    LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart_{setting['id']}"),  skip_feather=True,index_relevant=True)
 
-    print("setting is", setting["s_weight1"])
+    df_setting = pd.DataFrame(setting)
+    LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting_{setting['id']}"),  skip_feather=True,index_relevant=False)
+
     print("=" * 50)
     [print(string) for string in a_time]
     print("=" * 50)
@@ -303,7 +314,7 @@ def btest(settings=[{}]):
             p_maxsize = setting["p_maxsize"]
 
             d_trade_h[tomorrow] = {"sell": [], "hold": [], "buy": []}
-            print(f"Assets {setting['assets']}, Market {setting['market']}")
+            print(f"Auto {setting['auto']}, Assets {setting['assets']}, Market {setting['market']}")
             print('{0: <26}'.format("TODAY EVENING ANALYZE") + f"{today} stocks {len(df_today)}")
             print('{0: <26}'.format("TOMORROW MORNING TRADE") + f"{tomorrow} stocks {len(df_tomorrow)}")
             now = print_and_time(setting_count=setting_count, phase=f"INIT", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
@@ -486,35 +497,36 @@ def btest(settings=[{}]):
                 now = print_and_time(setting_count=setting_count, phase=f"BUY SELECT", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
                 # 6.11 BUY EXECUTE:
-                p_fee = setting["p_fee"]
-                cash_available = d_capital[setting_count]["cash"]
-                if setting["p_proportion"] == "prop":
-                    df_select_tomorrow["reserved_capital"] = (df_select_tomorrow["rank_final"].sum() / df_select_tomorrow["rank_final"])
-                    df_select_tomorrow["reserved_capital"] = cash_available * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
-                elif setting["p_proportion"] == "fibo":
-                    df_select_tomorrow["reserved_capital"] = cash_available * pd.Series(data=LB.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
-                else:
-                    #former bug here. not divide reserved capital by p_maxsize, rather divide it by available stocks to buy.
-                    df_select_tomorrow["reserved_capital"] = cash_available / len(df_select_tomorrow)
+                if len(df_select_tomorrow) !=0:
+                    p_fee = setting["p_fee"]
+                    cash_available = d_capital[setting_count]["cash"]
+                    if setting["p_proportion"] == "prop":
+                        df_select_tomorrow["reserved_capital"] = (df_select_tomorrow["rank_final"].sum() / df_select_tomorrow["rank_final"])
+                        df_select_tomorrow["reserved_capital"] = cash_available * (df_select_tomorrow["reserved_capital"] / df_select_tomorrow["reserved_capital"].sum())
+                    elif setting["p_proportion"] == "fibo":
+                        df_select_tomorrow["reserved_capital"] = cash_available * pd.Series(data=LB.fibonacci_weight(len(df_select_tomorrow))[::-1], index=df_select_tomorrow.index.to_numpy())
+                    else:
+                        #former bug here. not divide reserved capital by p_maxsize, rather divide it by available stocks to buy.
+                        df_select_tomorrow["reserved_capital"] = cash_available / len(df_select_tomorrow)
 
-                for hold_count, (ts_code, row) in enumerate(df_select_tomorrow.iterrows(), start=1):
-                    buy_open = row["open"]
-                    buy_close = row["close"]
-                    buy_pct_chg_comp_chg = buy_close / buy_open
-                    buy_imp = int((row["open"] == row["close"]))
-                    shares = row["reserved_capital"] // buy_open
-                    value_open = shares * buy_open
-                    value_close = shares * buy_close
-                    fee = p_fee * value_open
-                    d_capital[setting_count]["cash"] -= value_open - fee
+                    for hold_count, (ts_code, row) in enumerate(df_select_tomorrow.iterrows(), start=1):
+                        buy_open = row["open"]
+                        buy_close = row["close"]
+                        buy_pct_chg_comp_chg = buy_close / buy_open
+                        buy_imp = int((row["open"] == row["close"]))
+                        shares = row["reserved_capital"] // buy_open
+                        value_open = shares * buy_open
+                        value_close = shares * buy_close
+                        fee = p_fee * value_open
+                        d_capital[setting_count]["cash"] -= value_open - fee
 
-                    d_trade_h[tomorrow]["buy"].append(
-                        {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "T+": 0, "ts_code": ts_code, "name": row["name"], "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
-                         "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
-                         "value_close": value_close, "port_cash": d_capital[setting_count]["cash"]})
-                    print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
+                        d_trade_h[tomorrow]["buy"].append(
+                            {"reason": np.nan, "rank_final": row["rank_final"], "buy_imp": buy_imp, "T+": 0, "ts_code": ts_code, "name": row["name"], "buyout_price": buy_open, "today_open": buy_open, "today_close": buy_close, "sold_price": float("nan"), "pct_chg": buy_pct_chg_comp_chg,
+                             "comp_chg": buy_pct_chg_comp_chg, "shares": shares, "value_open": value_open,
+                             "value_close": value_close, "port_cash": d_capital[setting_count]["cash"]})
+                        print(setting_count, ": ", '{0: <9}'.format("") + f"buy {hold_count} {ts_code}")
 
-                now = print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
+                    now = print_and_time(setting_count=setting_count, phase=f"BUY EXECUTE", d_trade_h_hold=d_trade_h[tomorrow]["hold"], d_trade_h_buy=d_trade_h[tomorrow]["buy"], d_trade_h_sell=d_trade_h[tomorrow]["sell"], p_maxsize=p_maxsize, a_time=a_time, prev_time=now)
 
             else:  # to not buy today
                 if len(df_today_mod) == 0:
@@ -540,7 +552,6 @@ def btest(settings=[{}]):
             now = mytime.time()
             df_trade_h, df_portfolio_overview, df_setting = btest_portfolio(setting_original=setting, d_trade_h=d_trade_h, df_stock_market_all=df_stock_market_all, backtest_start_time=backtest_start_time, setting_count=setting_count)
             print("REPORT PORTFOLIO TIME:", mytime.time() - now)
-            a_summary_merge.append(pd.merge(left=df_portfolio_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False))
 
             # sendmail
             if setting["send_mail"]:
@@ -554,15 +565,11 @@ def btest(settings=[{}]):
             print("summarizing ERROR:", e)
             traceback.print_exc()
 
-    path = f"Market/CN/Btest/Btest_sum.xlsx"
-    df_backtest_summ = pd.concat(a_summary_merge[::-1], sort=False, ignore_index=True)
-    df_backtest_summ = df_backtest_summ.append(DB.get_file(path), sort=False)
-    #LB.to_csv_feather(df_backtest_summ, a_path=path, skip_feather=True, index_relevant=False)
-    LB.to_excel(path=path, d_df={"Overview":df_backtest_summ}, index=False)
 
-def btest_settings():
-    # Initialize settings
-    setting_master = {
+
+
+def get_setting_master():
+    return {
         # general = Non changeable through one run
         "start_date": "20000101",
         "end_date": "20200101",
@@ -574,35 +581,23 @@ def btest_settings():
         "id": "",  # datetime.now().strftime('%Y%m%d%H%M%S'), but done in backtest_once_loop
         "send_mail": False,
         "print_log": True,
+        "auto": (),
 
         # buy focus = Select.
         "f_query_asset": ["df_today['period']>240"],  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
         "f_query_date": [],  # filter days vs filter assets. restrict some days to only but or only sell
 
-        # selection weight
-        # bool: ascending True= small, False is big
-        # int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2
-        # int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
-        "s_weight1": {  # ascending True= small, False is big
-            # "pct_chg": [False, 0.2, 1],  # very important
-            # "total_mv": [True, 0.1, 1],  # not so useful for this strategy, not more than 10% weight
-            # "turnover_rate": [True, 0.1, 0.5],
-            # "ivola": [True, 0.4, 1],  # seems important
-            "trend5": [False, 100, 1],  # very important for this strategy
+        # selection weight  doc- bool: ascending True= small, False is big. 1st int: indicator_weight: how each indicator is weight against other indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.8 + df["trend"]*0.2. 2nd int: asset_weight: how each asset indicator is weighted against its group indicator. e.g. {"pct_chg": [False, 0.8, 0.2]}  =》 df["pct_chg"]*0.2+df["pct_chg_group"]*0.8. empty means no group weight
+        "s_weight1": {
             "pct_chg": [True, 5, 1],  # very important for this strategy
             "pgain2": [True, 3, 1],  # very important for this strategy
-            "pgain5": [True, 2, 1],  # very important for this strategy
-            # "pgain10": [True, 3, 1],  # very important for this strategy
-            # "pgain20": [True, 2, 1],  # very important for this strategy
-            # "pgain60": [True, 1, 1],  # very important for this strategy
-            # "pgain240": [True, 1, 1],  # very important for this strategy
-            # "candle_net_pos": [True, 0.1, 1],
+            "pgain5": [True, 2, 1],
         },
 
         # portfolio
         "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 3700,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
+        "p_maxsize": 20,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_proportion": False,  # choices: False(evenly), prop(proportional to rank), fibo(fibonacci)
@@ -612,14 +607,15 @@ def btest_settings():
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
+def btest_manu(setting_master = get_setting_master()):
 
     # settings creation  #,"G"
     for asset in ["E"]:
-        a_setting_instance = []
         setting_asset = copy.deepcopy(setting_master)
-        if asset == "G":
-            setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"]
+        setting_master["auto"] = ()
+        setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"] if asset == "G" else []
         setting_asset["assets"] = [asset]
+        a_setting_instance = []
 
         # is_max is_min
         # for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
@@ -655,13 +651,19 @@ def btest_settings():
 
         #general: quantile, ,"turnover_rate","total_mv","pe_ttm","ps_ttm","total_share","pb","vol"
         #for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
-        for column in ["total_mv"]:
-            for low_quant,high_quant in LB.custom_pairwise_overlap(LB.drange(0,101,20)):
-                setting_instance = copy.deepcopy(setting_asset)
-                setting_instance["f_query_asset"] += [f"df_today['{column}'].between(df_today['{column}'].quantile({low_quant}), df_today['{column}'].quantile({high_quant}))"]
-                setting_instance["s_weight1"] = {}
 
-                a_setting_instance.append(setting_instance)
+        for column1 in ["bull"]:
+            for low_quant1,high_quant1 in LB.custom_pairwise_overlap(LB.drange(0,101,20)):
+                for column2 in ["close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
+                    for low_quant2, high_quant2 in LB.custom_pairwise_overlap(LB.drange(0, 101, 20)):
+
+                        setting_instance = copy.deepcopy(setting_asset)
+                        setting_instance["f_query_asset"] += [
+                            f"df_today['{column1}'].between(  **LB.btest_quantile(df_today['{column1}'].quantile([{low_quant1},{high_quant1}])))",
+                            f"df_today['{column2}'].between(  **LB.btest_quantile(df_today['{column2}'].quantile([{low_quant2},{high_quant2}])))"]
+                        setting_instance["s_weight1"] = {}
+
+                        a_setting_instance.append(setting_instance)
 
         #general: binary
         # for column in ["exchange"]:
@@ -672,77 +674,183 @@ def btest_settings():
 
         #         a_setting_instance.append(setting_instance)
 
-
-        LB.print_iterables([x["f_query_asset"] for x in  a_setting_instance])
+        LB.print_iterables([(x["assets"], x["f_query_asset"]) for x in a_setting_instance])
         print("Total Settings:", len(a_setting_instance))
         time.sleep(10)
 
-        # try:
-        btest(settings=a_setting_instance)
-        # except Exception as e:
-        #     print(e)#to catch uncatched error
-        #     traceback.print_stack()
-        #     LB.sound("error.mp3")
-        #     time.sleep(60)
+        if a_setting_instance: btest(settings=a_setting_instance)
+    btest_overview_master(mode="manu")
 
 
-def btest_validation(column="total_mv"):
+def btest_auto(pair=1,setting_master = get_setting_master()):
+    """
+    this btest is to single test each indicator on each asset, and put them into organized category.
+
+    1. create combination pairs of columns. e.g. (period,),(period,close),(period,close,total_mv)
+    2. create master quantile combinations. e.g. [(0.0,0,2),(0.2,0.4),(0.4,0.6),(0.6,0.8),(0.8,1.0)]
+    3. create cartesian product of quantile combinations. e.g. [((0.0,0,2),(0.0,0.2)), ((0.0,0,2),(0.2,0.4)), ((0.0,0,2),(0.4,0.6)), ((0.0,0,2),(0.4,0.8)),]
+    4. create dict iterables e.g. [{col1: (0.0,0,2), col2: (0.0,0.2)}, {col1: (0.0,0,2), col2: (0.2,0.4)}]
+    5. iterate over the results
+    The result is same as many many for loops like this:
+    for x in array:
+        for y in array:
+            for z in array:
+                for...
+    This has been simplified using cartesian product and is generic adjustable with variable pair
+    """
+
+    for asset in ["E","G","FD","I","F"]:
+
+        #copy master setting
+        setting_asset = copy.deepcopy(setting_master)
+        setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"] if asset == "G" else []
+        setting_asset["assets"] = [asset]
+        setting_asset["p_min_T+"]= 1 # to faster calculate
+        setting_asset["p_max_T+"]= 1 # to faster calculate
+        setting_asset["p_maxsize"]= 10 # to faster calculate
+        a_setting_instance = []
+        a_example_column=DB.get_example_column(asset=asset,numeric_only=True)
+
+        #remove unessesary columns:
+        a_columns=[]
+        for column in a_example_column:
+            for exclude_column in ["fgain"]:
+                if exclude_column not in column:
+                    a_columns.append(column)
+
+        #step 1 TODO do with combination first. and if it is not enough, do with permutation = more combinations and calculation
+        for col_comb in LB.custom_pairwise_combination(a_array=a_columns,n=pair):
+
+            #skip if file already exists
+            portfolio_path = f"Market/CN/Btest/auto/comb_{len(col_comb)}/{'_'.join(col_comb)}/{asset}/result"
+            folders = 0
+            for _, dirnames, filenames in os.walk(portfolio_path):
+                folders += len(dirnames)
+            if folders > 0:
+                print( f"{col_comb} combination exists for {asset}")
+                continue
+
+            #step 2 and 3
+            q_master=LB.custom_pairwise_overlap(LB.drange(0, 101, 20))
+            q_cartesian = LB.custom_pairwise_cartesian(q_master, n=pair)
+
+            #step 4
+            d_iterables=[]
+            for q_comb in q_cartesian:
+                result={}
+                for counter,q in enumerate(q_comb):
+                    result[col_comb[counter]]=q_comb[counter]
+                d_iterables.append(result)
+
+            #step 5
+            for d_one_setting in d_iterables:
+                setting_instance = copy.deepcopy(setting_asset)
+                setting_instance["auto"] = tuple(col_comb)
+                for col, q_tuple in d_one_setting.items():
+                    setting_instance["f_query_asset"] += [f"df_today['{col}'].between(  **LB.btest_quantile(df_today['{col}'].quantile([{q_tuple[0]},{q_tuple[1]}])))"]
+                setting_instance["s_weight1"] = {}
+                a_setting_instance.append(setting_instance)
+
+        LB.print_iterables([((f"pair {pair}"),x["assets"],x["f_query_asset"]) for x in a_setting_instance])
+        print("Total Settings:", len(a_setting_instance))
+        time.sleep(10)
+
+        if a_setting_instance: btest(settings=a_setting_instance)
+    btest_overview_master(mode="auto",pair=pair)
+
+
+
+def btest_overview_master(mode="manu",pair=1):
+    """
+    1. Updates ALL overview for a mode after a complete run
+    2. Creates new file every time by loading directly from result
+    """
+
+    path = f"Market/CN/Btest/manu/" if mode == "manu" else f"Market/CN/Btest/auto/comb_{pair}"
+    a_df_overview=[]
+    for root, dirnames, filenames in os.walk(path):
+        overview_path = setting_path = ""
+        for file in filenames:
+            if "overview" in file:
+                overview_path=os.path.join(root,file)
+            if "setting" in file:
+                setting_path=os.path.join(root,file)
+
+        if overview_path and setting_path:
+            print(f"summarizing..{root}")
+            df_overview=pd.read_csv(overview_path)
+            df_setting=pd.read_csv(setting_path)
+            df_overview_setting =pd.merge(left=df_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False)
+            a_df_overview.append(df_overview_setting)
+
+    df_btest_ov = pd.concat(a_df_overview, sort=False, ignore_index=True)
+    path+= f"manu_summary" if mode == "manu" else f"/comb_{pair}_summary"
+    LB.to_csv_feather(df_btest_ov, a_path=LB.a_path(path), skip_feather=True, index_relevant=False)
+
+
+def btest_validation(column="total_mv",a_assets=["E","FD","I","G"]):
     """
     by logic:
     1. Btest is just looping over all date_df.
-    2. Looping manually over date_df should be the same for easy operation
+    2. Looping manuly over date_df should be the same for easy operation
 
     Checks if buy and trade instances are the same (they are)
     Checks if buy and sell price are the same (they are not)
     """
-    q_setting = LB.drange(0,101,20)
-    d_preload = DB.preload(asset="trade_date",step=1)
-    d_trade_h = {}
-    df_result = pd.DataFrame()
 
-    for today,tomorrow in LB.custom_pairwise_overlap([x for x in d_preload.keys()]):
-        df_today=d_preload[today]
+    for asset in a_assets:
+        q_setting = LB.drange(0,101,20)
+        d_preload = DB.preload(asset=asset,on_asset=False, step=1)
+        d_trade_h = {}
+        df_result = pd.DataFrame()
+
+        for today,tomorrow in LB.custom_pairwise_overlap([x for x in d_preload.keys()]):
+            df_today=d_preload[today]
+
+            df_tomorrow=d_preload[tomorrow]
+
+            for counter,(key, df_q) in enumerate(LB.custom_quantile(df=df_today, column=column, key_val=False,p_setting=q_setting).items()):
+
+                selected_index=df_q.index
+
+                df_future = df_tomorrow.loc[selected_index]
+                df_future.dropna(how="all",inplace=True)
+
+                print(asset,tomorrow,key)
+                #add instance of today q
+                # if counter==0:
+                #     print("add index for ",key)
+                #     d_trade_h[tomorrow]=pd.Series(list(selected_index))
+
+                #calculate instance mean
+                df_result.at[tomorrow, f"open.fgain1_{key}"] = 1+ df_future["open.fgain1"].mean()
 
 
-        df_tomorrow=d_preload[tomorrow]
+        for x,y in LB.custom_pairwise_overlap(LB.drange(0,101,20)):
+            key=f"{x},{y}"
+            df_result[ f"open.fgain1_{key}_cumprod"]=df_result[f"open.fgain1_{key}"].cumprod()
 
-        for counter,(key, df_q) in enumerate(LB.custom_quantile(df=df_today, column=column, key_val=False,p_setting=q_setting).items()):
-
-            selected_index=df_q.index
-
-            df_future = df_tomorrow.loc[selected_index]
-            df_future.dropna(how="all",inplace=True)
-
-            print(tomorrow,key)
-            #add instance of today q
-            if counter==0:
-                print("add index for ",key)
-                d_trade_h[tomorrow]=pd.Series(list(selected_index))
-
-            #calculate instance mean
-            df_result.at[tomorrow, f"close_" + key] = df_future["close"].mean()
-            df_result.at[tomorrow, f"open.fgain1_" + key] = df_future["open.fgain1"].mean()
+        a_path=LB.a_path(f"Market/CN/Btest/valid/{asset}/{column}_q")
+        LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
+        #
+        # df_trade_h=pd.DataFrame(d_trade_h)
+        # LB.to_csv_feather(df=df_trade_h,a_path=LB.a_path(f"Market/CN/Btest/Validation/{asset}/{column}_trade_h"),skip_feather=True)
 
 
-    a_path=LB.a_path(f"Market/CN/Btest/Validation/quantile_{column}")
-    LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
 
-    df_trade_h=pd.DataFrame(d_trade_h)
-    LB.to_csv_feather(df=df_trade_h,a_path=LB.a_path(f"Market/CN/Btest/Validation/{column}.trade_h"),skip_feather=True)
 
 
 if __name__ == '__main__':
-    # try:
         pr = cProfile.Profile()
         pr.enable()
 
-        btest_validation(column="close")
-        #btest_settings()
+        #btest_validation(column="bull")
+        #btest_manu()
+        for n in (1,):
+            #btest_overview_master(mode="auto",pair=n)
+            btest_auto(pair=n)
+
 
         pr.disable()
         # pr.print_stats(sort='file')
 
-
-    # except Exception as e:
-    #     traceback.print_exc()
-    #     LB.sound("error.mp3")

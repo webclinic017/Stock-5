@@ -25,7 +25,7 @@ class AutoName(enum.Enum):
         return name
 
 # BOTTLE NECK modify here
-class IBase(AutoName):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
+class ABase(AutoName):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
     # pri
     open = auto()
     high = auto()
@@ -70,7 +70,7 @@ class IBase(AutoName):  # every Indicator base should take no argument in create
 
 
 
-class IDeri(AutoName):  # first level Ideri = IDeri that only uses ibase and no other IDeri
+class ADeri(AutoName):  # first level Ideri = IDeri that only uses abase and no other IDeri
     # statistic
     create = auto()
     count = auto()
@@ -165,95 +165,95 @@ class Lose(enum.Enum):
     l10 = -10
 
 
-def open(df: pd.DataFrame, ibase: str): return ibase
+def open(df: pd.DataFrame, abase: str): return abase
 
 
-def high(df: pd.DataFrame, ibase: str): return ibase
+def high(df: pd.DataFrame, abase: str): return abase
 
 
-def close(df: pd.DataFrame, ibase: str): return ibase
+def close(df: pd.DataFrame, abase: str): return abase
 
 
-def low(df: pd.DataFrame, ibase: str): return ibase
+def low(df: pd.DataFrame, abase: str): return abase
 
 
-def pe_ttm(df: pd.DataFrame, ibase: str): return ibase
+def pe_ttm(df: pd.DataFrame, abase: str): return abase
 
 
-def pb(df: pd.DataFrame, ibase: str): return ibase
+def pb(df: pd.DataFrame, abase: str): return abase
 
 
-def ps_ttm(df: pd.DataFrame, ibase: str): return ibase
+def ps_ttm(df: pd.DataFrame, abase: str): return abase
 
 
-def dv_ttm(df: pd.DataFrame, ibase: str): return ibase
+def dv_ttm(df: pd.DataFrame, abase: str): return abase
 
 
-def n_cashflow_act(df: pd.DataFrame, ibase: str): return ibase
+def n_cashflow_act(df: pd.DataFrame, abase: str): return abase
 
 
-def n_cashflow_inv_act(df: pd.DataFrame, ibase: str): return ibase
+def n_cashflow_inv_act(df: pd.DataFrame, abase: str): return abase
 
 
-def n_cash_flows_fnc_act(df: pd.DataFrame, ibase: str): return ibase
+def n_cash_flows_fnc_act(df: pd.DataFrame, abase: str): return abase
 
 
-def profit_dedt(df: pd.DataFrame, ibase: str): return ibase
+def profit_dedt(df: pd.DataFrame, abase: str): return abase
 
 
-def netprofit_yoy(df: pd.DataFrame, ibase: str): return ibase
+def netprofit_yoy(df: pd.DataFrame, abase: str): return abase
 
 
-def or_yoy(df: pd.DataFrame, ibase: str): return ibase
+def or_yoy(df: pd.DataFrame, abase: str): return abase
 
 
-def grossprofit_margin(df: pd.DataFrame, ibase: str): return ibase
+def grossprofit_margin(df: pd.DataFrame, abase: str): return abase
 
 
-def netprofit_margin(df: pd.DataFrame, ibase: str): return ibase
+def netprofit_margin(df: pd.DataFrame, abase: str): return abase
 
 
-def debt_to_assets(df: pd.DataFrame, ibase: str): return ibase
+def debt_to_assets(df: pd.DataFrame, abase: str): return abase
 
 
-def total_cur_assets(df: pd.DataFrame, ibase: str): return ibase
+def total_cur_assets(df: pd.DataFrame, abase: str): return abase
 
 
-def total_assets(df: pd.DataFrame, ibase: str): return ibase
+def total_assets(df: pd.DataFrame, abase: str): return abase
 
 
-def total_cur_liab(df: pd.DataFrame, ibase: str): return ibase
+def total_cur_liab(df: pd.DataFrame, abase: str): return abase
 
 
-def total_liab(df: pd.DataFrame, ibase: str): return ibase
+def total_liab(df: pd.DataFrame, abase: str): return abase
 
 
-def turn_days(df: pd.DataFrame, ibase: str): return ibase
+def turn_days(df: pd.DataFrame, abase: str): return abase
 
 
-def total_share(df: pd.DataFrame, ibase: str): return ibase
+def total_share(df: pd.DataFrame, abase: str): return abase
 
 
-def total_mv(df: pd.DataFrame, ibase: str): return ibase
+def total_mv(df: pd.DataFrame, abase: str): return abase
 
 
-def vol(df: pd.DataFrame, ibase: str): return ibase
+def vol(df: pd.DataFrame, abase: str): return abase
 
 
-def turnover_rate(df: pd.DataFrame, ibase: str): return ibase
+def turnover_rate(df: pd.DataFrame, abase: str): return abase
 
 
-def pledge_ratio(df: pd.DataFrame, ibase: str): return ibase
+def pledge_ratio(df: pd.DataFrame, abase: str): return abase
 
 
-def co_pct_chg(df: pd.DataFrame, ibase: str = "co_pct_chg"):
+def co_pct_chg(df: pd.DataFrame, abase: str = "co_pct_chg"):
     add_to = "co_pct_chg"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = (df["open"] / df["close"].shift(1))
     return add_to
 
 
-def pjup(df: pd.DataFrame, ibase: str = "pjup", gain: Gain = Gain.g2):  # TODO test if 2 pct gap is better
+def pjup(df: pd.DataFrame, abase: str = "pjup", gain: Gain = Gain.g2):  # TODO test if 2 pct gap is better
     add_to = "pjup"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = 0
@@ -261,7 +261,7 @@ def pjup(df: pd.DataFrame, ibase: str = "pjup", gain: Gain = Gain.g2):  # TODO t
     return add_to
 
 
-def pjdown(df: pd.DataFrame, ibase: str = "pjdown", lose: Lose = Lose.l2):
+def pjdown(df: pd.DataFrame, abase: str = "pjdown", lose: Lose = Lose.l2):
     add_to = "pjdown"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = 0
@@ -269,26 +269,31 @@ def pjdown(df: pd.DataFrame, ibase: str = "pjdown", lose: Lose = Lose.l2):
     return add_to
 
 
-def period(df: pd.DataFrame, ibase: str = "period"):
+def period(df: pd.DataFrame, abase: str = "period"):
     add_to = "period"
     add_column(df, add_to, "ts_code", 1)
     df[add_to] = (range(1, len(df.index) + 1))
     return add_to
 
 
-def ivola(df: pd.DataFrame, ibase: str = "ivola"):
+def ivola(df: pd.DataFrame, abase: str = "ivola"):
     add_to = "ivola"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
     return add_to
 
+def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
+    add_to = f"{abase}.sharp{freq.value}"
+    add_column(df, add_to, abase, 1)
+    df[add_to] = df[abase].rolling(freq.value).apply(LB.my_sharp)
+    return add_to
 
 # past n days until today. including today
-def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
-    add_to = f"{ibase}.pgain{freq.value}"
+def pgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
+    add_to = f"{abase}.pgain{freq.value}"
     add_column(df, add_to, f"close", 1)
     try:
-        df[add_to] = df[ibase].pct_change(periods=freq.value)
+        df[add_to] = df[abase].pct_change(periods=freq.value)
     except Exception as e:
         print("error", e)
         df[add_to] = np.nan
@@ -298,28 +303,28 @@ def pgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
 # future n days from today on. e.g. open.fgain1 for 20080101 is 20080102/20080101
 # CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
 # day1: Signal tells you to buy. day2: BUY. day3. SELL
-def fgain(df: pd.DataFrame, freq: BFreq, ibase: str = "open"):
-    add_to = f"{ibase}.fgain{freq.value}"
+def fgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
+    add_to = f"{abase}.fgain{freq.value}"
     add_column(df, add_to, f"close", 1)
-    df[add_to] = df[f"{ibase}.pgain{freq.value}"].shift(-int(freq.value))
+    df[add_to] = df[f"{abase}.pgain{freq.value}"].shift(-int(freq.value))
     return add_to
 
 
-def pct_chg_close(df: pd.DataFrame, ibase: str = "pct_chg_close"):
+def pct_chg_close(df: pd.DataFrame, abase: str = "pct_chg_close"):
     add_to = f"pct_chg_close"
     add_column(df, add_to, "close", 1)
     df[add_to] = (1 + df["close"].pct_change())
     return add_to
 
 
-def pct_chg_open(df: pd.DataFrame, ibase: str = "pct_chg_open"):
+def pct_chg_open(df: pd.DataFrame, abase: str = "pct_chg_open"):
     add_to = f"pct_chg_open"
     add_column(df, add_to, "pct_chg", 1)
     df[add_to] = (1 + df["open"].pct_change())
     return add_to
 
 
-def cdl(df: pd.DataFrame, ibase: str):
+def cdl(df: pd.DataFrame, abase: str):
     a_positive_columns = []
     a_negative_columns = []
 
@@ -339,31 +344,31 @@ def cdl(df: pd.DataFrame, ibase: str):
                 if (array[2] == 100):  # talib still counts the pattern as positive: cast it negative
                     df[key].replace(100, -100, inplace=True)
 
-    df[ibase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
+    df[abase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
     # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
     columns_remove(df, a_positive_columns + a_negative_columns)
-    return ibase
+    return abase
 
 
-def crossma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(ibase=ibase, deri="crossma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, ibase, 1)
-    df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
+def crossma(df: pd.DataFrame, abase: str, Sfreq1: SFreq, Sfreq2: SFreq):
+    add_to = LB.indi_name(abase=abase, deri="crossma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_column(df, add_to, abase, 1)
+    df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
     df[add_to] = (df[add_to].diff()).fillna(0)
     return add_to
 
 
-def overma(df: pd.DataFrame, ibase: str, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(ibase=ibase, deri="overma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, ibase, 1)
-    df[add_to] = (df[ibase].rolling(Sfreq1.value).mean() > df[ibase].rolling(Sfreq2.value).mean()).astype(float)
+def overma(df: pd.DataFrame, abase: str, Sfreq1: SFreq, Sfreq2: SFreq):
+    add_to = LB.indi_name(abase=abase, deri="overma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
+    add_column(df, add_to, abase, 1)
+    df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
 
 
-def zlmacd(df, ibase, sfreq, bfreq, smfreq):
+def zlmacd(df, abase, sfreq, bfreq, smfreq):
     name = f"{sfreq, bfreq, smfreq}"
-    df[f"zlema1_{name}"] = my_best_ec((df[ibase]), sfreq)
-    df[f"zlema2_{name}"] = my_best_ec((df[ibase]), bfreq)
+    df[f"zlema1_{name}"] = my_best_ec((df[abase]), sfreq)
+    df[f"zlema2_{name}"] = my_best_ec((df[abase]), bfreq)
 
     df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
     # df[f"zldea_{name}"]= df[f"zldif_{name}"] -df[f"zldif_{name}"].rolling(smfreq).mean() # ma as smoother, but tradeoff is lag
@@ -420,28 +425,28 @@ def my_best_ec(s, n, gain_limit=50):
 # 4 Step calculate trend pct_chg
 # 5 Step Calculate Step comp_chg
 # variables:1. function, 2. threshhold 3. final weight 4. combination with other function
-def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
+def trend(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
     a_all = [1] + c_bfreq()
     a_low = [str(x) for x in a_all][:-1]
     a_high = [str(x) for x in a_all][1:]
 
-    rsi_name = indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
-    phase_name = indi_name(ibase=ibase, deri=f"{market_suffix}phase")
-    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{IDeri.trend.value}")
+    rsi_name = indi_name(abase=abase, deri=f"{market_suffix}rsi")
+    phase_name = indi_name(abase=abase, deri=f"{market_suffix}phase")
+    trend_name = indi_name(abase=abase, deri=f"{market_suffix}{ADeri.trend.value}")
 
     func = talib.RSI
     # RSI and CMO are the best. CMO is a modified RSI
     # RSI,CMO,MOM,ROC,ROCR100,TRIX
 
-    # df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
+    # df[f"detrend{abase}"] = signal.detrend(data=df[abase])
     for i in a_all:  # RSI 1
         try:
             if i == 1:
-                df[f"{rsi_name}{i}"] = (df[ibase].pct_change() > 0).astype(int)
+                df[f"{rsi_name}{i}"] = (df[abase].pct_change() > 0).astype(int)
                 # df[ rsi_name + "1"] = 0
                 # df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
             else:
-                df[f"{rsi_name}{i}"] = func(df[ibase], timeperiod=i) / 100
+                df[f"{rsi_name}{i}"] = func(df[abase], timeperiod=i) / 100
 
                 # normalization causes error
                 # df[f"{rsi_name}{i}"] = (df[f"{rsi_name}{i}"]-df[f"{rsi_name}{i}"].min())/ (df[f"{rsi_name}{i}"].max()-df[f"{rsi_name}{i}"].min())
@@ -697,10 +702,10 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 
 # TODO this article
 # https://mrjbq7.github.io/ta-lib/func_groups/momentum_indicators.html
-# def rsi(df: pd.DataFrame, ibase: str, freq: Freq, re: RE):
-#     add_to = LB.standard_indi_name(ibase=ibase, deri=IDeri.rsi.value, d_variables={"freq": freq, "re": re.value})
+# def rsi(df: pd.DataFrame, abase: str, freq: Freq, re: RE):
+#     add_to = LB.standard_indi_name(abase=abase, deri=IDeri.rsi.value, d_variables={"freq": freq, "re": re.value})
 #     try:
-#         df[add_to]=talib.RSI(df[ibase], timeperiod=freq.value)
+#         df[add_to]=talib.RSI(df[abase], timeperiod=freq.value)
 #     except:
 #         df[add_to]=np.nan
 #     return add_to
@@ -708,7 +713,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 
 # TODO EACH IDERI CAN EITHER RETURN NAME and modify inplace, or return series
 #  n*x**i +  (n-1)*(x-1)**(i-1)...
-def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreate
+def polynomial_series(df, degree=1, column="close"):
     s_index = df[column].index
     y = df[column]
     weights = np.polyfit(s_index, y, degree)
@@ -720,50 +725,50 @@ def polynomial_series(df, degree=1, column="close"):  # TODO move this to Icreat
 
 
 # IMPORTANT NORMALIZE DOES NOT ADD LABEL
-def norm(df: pd.DataFrame, ibase: str, min=0, max=1):
-    series_min = df[ibase].min()
-    series_max = df[ibase].max()
-    return (((max - min) * (df[ibase] - series_min)) / (series_max - series_min)) + min
+def norm(df: pd.DataFrame, abase: str, min=0, max=1):
+    series_min = df[abase].min()
+    series_max = df[abase].max()
+    return (((max - min) * (df[abase] - series_min)) / (series_max - series_min)) + min
 
 
-def cmo(df: pd.DataFrame, ibase: str, freq: BFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.cmo, func=talib.CMO, timeperiod=freq.value)
+def cmo(df: pd.DataFrame, abase: str, freq: BFreq):
+    return deri_tec(df=df, abase=abase, ideri=ADeri.cmo, func=talib.CMO, timeperiod=freq.value)
 
 
-def apo(df: pd.DataFrame, ibase: str, ffreq: SFreq, sfreq: SFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.apo, func=talib.APO, fastperiod=ffreq.value, slowperiod=sfreq.value)
+def apo(df: pd.DataFrame, abase: str, ffreq: SFreq, sfreq: SFreq):
+    return deri_tec(df=df, abase=abase, ideri=ADeri.apo, func=talib.APO, fastperiod=ffreq.value, slowperiod=sfreq.value)
 
 
 # ((slowMA-fastMA)*100)/fastMA
-# def ppo (df: pd.DataFrame, ibase: str, ffreq: Freq, sfreq: Freq):
-#     return deri_tec(df=df, ibase=ibase, ideri=IDeri.PPO , func=talib.PPO, fastperiod=ffreq.value,slowperiod=sfreq.value, matype=0)
+# def ppo (df: pd.DataFrame, abase: str, ffreq: Freq, sfreq: Freq):
+#     return deri_tec(df=df, abase=abase, ideri=IDeri.PPO , func=talib.PPO, fastperiod=ffreq.value,slowperiod=sfreq.value, matype=0)
 
 # ((close_today - close_ndays ago)/close_ndays_ago) * 100
-def rocr(df: pd.DataFrame, ibase: str, freq: BFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.rocr, func=talib.ROCR, timeperiod=freq.value)
+def rocr(df: pd.DataFrame, abase: str, freq: BFreq):
+    return deri_tec(df=df, abase=abase, ideri=ADeri.rocr, func=talib.ROCR, timeperiod=freq.value)
 
 
 # close_today - close_ndays_ago
-def mom(df: pd.DataFrame, ibase: str, freq: BFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.mom, func=talib.MOM, timeperiod=freq.value)
+def mom(df: pd.DataFrame, abase: str, freq: BFreq):
+    return deri_tec(df=df, abase=abase, ideri=ADeri.mom, func=talib.MOM, timeperiod=freq.value)
 
 
-def rsi(df: pd.DataFrame, ibase: str, freq: BFreq):
-    return deri_tec(df=df, ibase=ibase, ideri=IDeri.rsi, func=talib.RSI, timeperiod=freq.value)
+def rsi(df: pd.DataFrame, abase: str, freq: BFreq):
+    return deri_tec(df=df, abase=abase, ideri=ADeri.rsi, func=talib.RSI, timeperiod=freq.value)
 
 
 @deco_try_ignore  # try ignore because all talib function can not handle nan input values. so this wrapper ignores all nan input values and creates add_to_column at one point
-def deri_tec(df: pd.DataFrame, ibase: str, ideri: IDeri, func, **kwargs):
-    add_to = LB.indi_name(ibase=ibase, deri=ideri.value, d_variables=kwargs)
-    add_column(df, add_to, ibase, 1)
-    df[add_to] = func(df[ibase], **kwargs)
+def deri_tec(df: pd.DataFrame, abase: str, ideri: ADeri, func, **kwargs):
+    add_to = LB.indi_name(abase=abase, deri=ideri.value, d_variables=kwargs)
+    add_column(df, add_to, abase, 1)
+    df[add_to] = func(df[abase], **kwargs)
     return add_to
 
 
-def cumprod(df: pd.DataFrame, ibase: str):
+def cumprod(df: pd.DataFrame, abase: str):
     ideri = "cumprod"
-    add_to = LB.indi_name(ibase=ibase, deri=ideri)
-    df[add_to] = (1 + (df[ibase] / 100)).cumprod()
+    add_to = LB.indi_name(abase=abase, deri=ideri)
+    df[add_to] = (1 + (df[abase] / 100)).cumprod()
     return add_to
 
 
@@ -772,94 +777,94 @@ def column_add_comp_chg(pct_chg_series):  # TODO needs to be deleted
     return cun_pct_chg_series.cumprod()
 
 
-def count(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.count)
+def count(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.count)
 
 
-def sum(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.sum)
+def sum(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.sum)
 
 
-def mean(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.mean)
+def mean(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.mean)
 
 
-def median(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.median)
+def median(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.median)
 
 
-def var(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.var)
+def var(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.var)
 
 
-def std(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.std)
+def std(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.std)
 
 
-def min(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.min)
+def min(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.min)
 
 
-def max(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.max)
+def max(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.max)
 
 
-def corr(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE, corr_with, corr_series):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.corr, corr_with=corr_with, corr_series=corr_series)
+def corr(df: pd.DataFrame, abase: str, freq: BFreq, re: RE, corr_with, corr_series):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.corr, corr_with=corr_with, corr_series=corr_series)
 
 
-def cov(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.cov)
+def cov(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.cov)
 
 
-def skew(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.skew)
+def skew(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.skew)
 
 
-def kurt(df: pd.DataFrame, ibase: str, freq: BFreq, re: RE):
-    return deri_sta(df=df, freq=freq, ibase=ibase, re=re, ideri=IDeri.kurt)
+def kurt(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.kurt)
 
 
 # this funciton should not exist. One should be able to pass function, but apply on rolling is slow and pandas.core.window.rolling is private. So Only if else case here is possible
-def deri_sta(df: pd.DataFrame, ibase: str, ideri: IDeri, freq: BFreq, re: RE, corr_with, corr_series):
+def deri_sta(df: pd.DataFrame, abase: str, ideri: ADeri, freq: BFreq, re: RE, corr_with, corr_series):
     # enum to value
     freq = freq.value
     ideri = ideri.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = LB.indi_name(ibase=ibase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name":corr_with} if corr_with else {"freq": freq, "re": re.value})
-    add_column(df, add_to, ibase, 1)
+    add_to = LB.indi_name(abase=abase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name":corr_with} if corr_with else {"freq": freq, "re": re.value})
+    add_column(df, add_to, abase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
 
     #pairwise rolling
     if ideri == "corr":
-        df[add_to] = reFunc(df[ibase], freq, min_periods=2).corr(corr_series)
+        df[add_to] = reFunc(df[abase], freq, min_periods=2).corr(corr_series)
 
 
     #single rolling
     elif ideri == "count":
-        df[add_to] = reFunc(df[ibase], freq).count()
+        df[add_to] = reFunc(df[abase], freq).count()
     elif ideri == "sum":
-        df[add_to] = reFunc(df[ibase], freq).sum()
+        df[add_to] = reFunc(df[abase], freq).sum()
     elif ideri == "mean":
-        df[add_to] = reFunc(df[ibase], freq).mean()
+        df[add_to] = reFunc(df[abase], freq).mean()
     elif ideri == "median":
-        df[add_to] = reFunc(df[ibase], freq).median()
+        df[add_to] = reFunc(df[abase], freq).median()
     elif ideri == "var":
-        df[add_to] = reFunc(df[ibase], freq).var()
+        df[add_to] = reFunc(df[abase], freq).var()
     elif ideri == "std":
-        df[add_to] = reFunc(df[ibase], freq).std()
+        df[add_to] = reFunc(df[abase], freq).std()
     elif ideri == "min":
-        df[add_to] = reFunc(df[ibase], freq).min()
+        df[add_to] = reFunc(df[abase], freq).min()
     elif ideri == "max":
-        df[add_to] = reFunc(df[ibase], freq).max()
+        df[add_to] = reFunc(df[abase], freq).max()
     elif ideri == "cov":
-        df[add_to] = reFunc(df[ibase], freq).cov()
+        df[add_to] = reFunc(df[abase], freq).cov()
     elif ideri == "skew":
-        df[add_to] = reFunc(df[ibase], freq).skew()
+        df[add_to] = reFunc(df[abase], freq).skew()
     elif ideri == "kurt":
-        df[add_to] = reFunc(df[ibase], freq).kurt()
+        df[add_to] = reFunc(df[abase], freq).kurt()
     return add_to
 
 
@@ -897,7 +902,7 @@ def trendtest():
     df = df[["close"]]
     df_copy = df.copy()
 
-    trend(df=df, ibase="close")
+    trend(df=df, abase="close")
     df.to_csv("all in one calc.csv")
 
     startday = 19920508
@@ -906,7 +911,7 @@ def trendtest():
             continue
         df_loc = df_copy.loc[19910129:trade_day]
 
-        trend(df=df_loc, ibase="close")
+        trend(df=df_loc, abase="close")
 
         for i in LB.c_bfreq():
             # rsi
@@ -929,7 +934,7 @@ if __name__ == '__main__':
     # TODO stock pct_chg open higher or pct_chg close higher?
     # cross over brute force
     # define all main deri function. scale it if nessesary
-    # define second cross option: ibase:str, deri, variable
+    # define second cross option: abase:str, deri, variable
 
     # if crossover then buy / sell signal
 

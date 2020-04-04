@@ -1,7 +1,7 @@
 import pandas as pd
 import tushare as ts
 import numpy as np
-import API_Tushare
+import _API_Tushare
 import LB
 import os.path
 import inspect
@@ -14,7 +14,7 @@ import cProfile
 import threading
 from scipy.stats import gmean
 from tqdm import tqdm
-import ICreate
+import Alpha
 import Atest
 
 from LB import *
@@ -25,7 +25,7 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 def update_trade_cal(start_date="19900101", end_date="20250101"):
-    df = API_Tushare.my_trade_cal(start_date=start_date, end_date=end_date).set_index(keys="cal_date", inplace=False, drop=True)
+    df = _API_Tushare.my_trade_cal(start_date=start_date, end_date=end_date).set_index(keys="cal_date", inplace=False, drop=True)
     LB.to_csv_feather(df, LB.a_path("Market/CN/General/trade_cal_D"))
 
 
@@ -112,7 +112,7 @@ def update_trade_date(freq="D", market="CN"):
 
     if freq in ["D", "W"]:
         a_path = LB.a_path(f"Market/{market}/General/trade_date_{freq}")
-        df = API_Tushare.my_pro_bar(ts_code="000001.SH", start_date="00000000", end_date=today(), freq=freq, asset="I")
+        df = _API_Tushare.my_pro_bar(ts_code="000001.SH", start_date="00000000", end_date=today(), freq=freq, asset="I")
         df = LB.df_reverse_reindex(df)
 
         df = df[["trade_date"]]
@@ -124,7 +124,7 @@ def update_trade_date(freq="D", market="CN"):
 def update_ts_code(asset="E", market="CN", big_update=True):
     print("start update general ts_code ", asset)
     if (asset == "E"):
-        df = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
+        df = _API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
 
         # add exchange info for each stock
         df["exchange"] = ["创业板" if x[0:3] in ["300"] else "中小板" if x[0:3] in ["002"] else "主板" if x[0:2] in ["00", "60"] else float("nan") for x in df.index]
@@ -158,12 +158,12 @@ def update_ts_code(asset="E", market="CN", big_update=True):
             df.at[ts_code, "state_company"] = True if counter >= 1 else False
 
     elif (asset == "I"):
-        df_SSE = API_Tushare.my_index_basic(market='SSE')
-        df_SZSE = API_Tushare.my_index_basic(market='SZSE')
+        df_SSE = _API_Tushare.my_index_basic(market='SSE')
+        df_SZSE = _API_Tushare.my_index_basic(market='SZSE')
         df = df_SSE.append(df_SZSE, sort=False).set_index("ts_code")
     elif (asset == "FD"):
-        df_E = API_Tushare.my_fund_basic(market='E')
-        df_O = API_Tushare.my_fund_basic(market='O')
+        df_E = _API_Tushare.my_fund_basic(market='E')
+        df_O = _API_Tushare.my_fund_basic(market='O')
         df = df_E.append(df_O, sort=False).set_index("ts_code")
     elif (asset == "G"):
         df = pd.DataFrame()
@@ -176,7 +176,7 @@ def update_ts_code(asset="E", market="CN", big_update=True):
                     df.at[f"{group}_{instance}", "instance"] = str(instance)
         df.index.name = "ts_code"
     elif (asset == "F"):
-        df = API_Tushare.my_fx_daily(start_date=get_last_trade_date(freq="D"))
+        df = _API_Tushare.my_fx_daily(start_date=get_last_trade_date(freq="D"))
         df["name"] = df["ts_code"]
         print(df)
         df = df.set_index("ts_code")
@@ -184,20 +184,20 @@ def update_ts_code(asset="E", market="CN", big_update=True):
         df = df[["name"]]
     elif (asset == "B"):
         # 可转债，相当于股票。可以选择换成股票，也可以选择换成利率。网上信息很少，几乎没人玩
-        df = API_Tushare.my_cb_basic().set_index("ts_code")
+        df = _API_Tushare.my_cb_basic().set_index("ts_code")
 
         # 中债，国债
         # only yield curve, no daily data
     elif (asset == "industry"):
         for level in c_industry_level():
             # industry member list
-            df_member = API_Tushare.my_index_classify(f"L{level}")
+            df_member = _API_Tushare.my_index_classify(f"L{level}")
             df_member = df_member.rename(columns={"industry_name": f"industry{level}"}).set_index("index_code")
 
             # industry instance
             a_df_instances = []
             for index in df_member.index:
-                df_instance = API_Tushare.my_index_member(index)
+                df_instance = _API_Tushare.my_index_member(index)
                 df_instance.rename(columns={"con_code": "ts_code"}, inplace=True)
                 a_df_instances.append(df_instance)
             df = pd.concat(a_df_instances, sort=False)
@@ -206,10 +206,10 @@ def update_ts_code(asset="E", market="CN", big_update=True):
             LB.to_csv_feather(df, a_path=LB.a_path(f"Market/{market}/General/ts_code_industry{level}"))
         return
     elif asset == "concept":
-        df_member = API_Tushare.my_concept()
+        df_member = _API_Tushare.my_concept()
         a_concepts = []
         for code in df_member["code"]:
-            df_instance = API_Tushare.my_concept_detail(id=code)
+            df_instance = _API_Tushare.my_concept_detail(id=code)
             a_concepts.append(df_instance)
         df = pd.concat(a_concepts, sort=False)
 
@@ -302,7 +302,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
                 df = update_assets_EI_D_reindex_reverse(ts_code, freq, asset, asset_latest_trade_date, end_date, adj="hfq")
 
             # 1.2 get adj factor because tushare is too dump to calculate it on its own
-            df_adj = API_Tushare.my_query(api_name='adj_factor', ts_code=ts_code, start_date=start_date, end_date=end_date)
+            df_adj = _API_Tushare.my_query(api_name='adj_factor', ts_code=ts_code, start_date=start_date, end_date=end_date)
             if df_adj.empty:
                 print(asset, ts_code, freq, start_date, end_date, "has no adj_factor yet. skipp")
             else:
@@ -311,11 +311,11 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
             # 2.1 get daily basic
             if complete_new_update:
-                df_fun_1 = API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=start_date, end_date=middle_date)
-                df_fun_2 = API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=middle_date, end_date=end_date)
+                df_fun_1 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=start_date, end_date=middle_date)
+                df_fun_2 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=middle_date, end_date=end_date)
                 df_fun = df_fun_1.append(df_fun_2, ignore_index=True, sort=False)
             else:
-                df_fun = API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=asset_latest_trade_date, end_date=end_date)
+                df_fun = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=asset_latest_trade_date, end_date=end_date)
 
             try:  # new stock can cause error here
                 df_fun = df_fun[["trade_date", "turnover_rate", "pe_ttm", "pb", "ps_ttm", "dv_ttm", "total_share", "total_mv"]]
@@ -386,60 +386,72 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
         """the problem above is df(new) has trade date as column. df_saved has trade_date as index right?"""
         # 3. add my derivative indices and save it
         if not df.empty:
-            update_assets_EIFD_D_technical(df=df, asset=asset)
-            update_assets_EIFD_D_expanding(df=df, ts_code=ts_code)
+            update_assets_EIFD_D_rolling(df=df, asset=asset)
+            update_assets_EIFD_D_expanding(df=df, asset=asset, ts_code=ts_code)
+            update_assets_EIFD_D_custom(df=df, asset=asset)
         LB.to_csv_feather(df=df, a_path=a_path)
         print(asset, ts_code, freq, end_date, "UPDATED!", real_latest_trade_date)
 
 
 # For all Pri indices and derivates. ordered after FILO
-def update_assets_EIFD_D_technical(df, asset,bfreq=c_bfreq()):
+def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
     # close pgain fgain
     for rolling_freq in [x for x in LB.BFreq][::-1]:
-        ICreate.pgain(df=df, ibase="close", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
+        Alpha.pgain(df=df, abase="close", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
     for rolling_freq in [x for x in LB.BFreq][::-1]:
-        ICreate.fgain(df=df, ibase="close", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        Alpha.fgain(df=df, abase="close", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
     # open pgain fgain
     for rolling_freq in [LB.BFreq.f1, LB.BFreq.f2, LB.BFreq.f5][::-1]:
-        ICreate.pgain(df=df, ibase="open", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
+        Alpha.pgain(df=df, abase="open", freq=rolling_freq)  # past gain includes today = today +yesterday comp_gain
     for rolling_freq in [LB.BFreq.f1, LB.BFreq.f2, LB.BFreq.f5][::-1]:
-        ICreate.fgain(df=df, ibase="open", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        Alpha.fgain(df=df, abase="open", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
-    # beta
-    if asset in ["I","E","FD"]:
-        for ts_code,df_index in Global.d_index.items():
-            for freq in [LB.BFreq.f20,LB.BFreq.f60,LB.BFreq.f240][::-1]:
-                ICreate.corr(df=df, ibase="close", freq=freq, re=ICreate.RE.r, corr_with=ts_code, corr_series=df_index["close"])
+    # alpha and Beta, lower the better. too slow
+    if asset in ["I", "E", "FD"]:
+        for ts_code, df_index in Global.d_index.items():
+            for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
+                beta_corr = Alpha.corr(df=df, abase="close", freq=freq, re=Alpha.RE.r, corr_with=ts_code, corr_series=df_index["close"])
+                df[f"alpha_{ts_code}"] = df["pct_chg"] - df[beta_corr] * df_index["pct_chg"]
 
-    # other
-    ICreate.ivola(df=df)  # 0.890578031539917 for 300 loop
-    ICreate.period(df=df)  # 0.2 for 300 loop
-    ICreate.pjup(df=df)  # 1.0798187255859375 for 300 loop
-    ICreate.pjdown(df=df)  # 1.05 independend for 300 loop
-    ICreate.co_pct_chg(df=df)
+    # sharp ratio
+    for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
+        Alpha.sharp(df=df,abase="pct_chg",freq=freq)
+
+    # gmean
+    for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
+        df[f"gmean{freq}"] = 1 + (df["pct_chg"] / 100)
+        df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(my_sharp, raw=False)
 
 
-    # ICreate.cdl(df,ibase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
+def update_assets_EIFD_D_custom(df, asset, bfreq=c_bfreq()):
+
+    # other alpha indicators
+    Alpha.ivola(df=df)  # 0.890578031539917 for 300 loop
+    Alpha.period(df=df)  # 0.2 for 300 loop
+    Alpha.pjup(df=df)  # 1.0798187255859375 for 300 loop
+    Alpha.pjdown(df=df)  # 1.05 independend for 300 loop
+    Alpha.co_pct_chg(df=df)
+
+    # Alpha.cdl(df,abase="cdl")  # VERY SLOW. NO WAY AROUND. 120 sec for 300 loop
     # trend support and resistance
     # add trend for individual stocks
-    # ICreate.trend(df=df, ibase="close")
+    # Alpha.trend(df=df, abase="close")
     # df = support_resistance_horizontal(df_asset=df)
 
     # macd for strategy
     for sfreq, bfreq in [(5, 10), (10, 20), (240, 300), (300, 500)]:
         # for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 120, 180, 240, 300, 500], 2):
         if sfreq < bfreq:
-            Atest.my_macd(df=df, ibase="close", sfreq=sfreq, bfreq=bfreq, type=1, score=10)
+            Atest.my_macd(df=df, abase="close", sfreq=sfreq, bfreq=bfreq, type=1, score=10)
 
 
-def update_assets_EIFD_D_expanding(df, ts_code):
+def update_assets_EIFD_D_expanding(df, asset):
     """
     for each asset, calculate expanding information. Standalone from actual information to prevent repeated calculation
         EXPANDING
         1. GMEAN
-        2. BETA
-        3. ENTROPY
+        3. ENTROPY (todo)
         4. VOLATILITY
         5. days above ma5
         """
@@ -450,7 +462,9 @@ def update_assets_EIFD_D_expanding(df, ts_code):
     # one time calculation
     df["e_gmean"] = 1 + (df["pct_chg"] / 100)
     df["e_gmean"] = df["e_gmean"].expanding(240).apply(gmean, raw=False)
-    print(f"{ts_code} gmean finished")
+
+    #sharp ratio
+    df["e_sharp"] = df["pct_chg"].expanding(240).apply(LB.my_sharp, raw=False)
 
     # 2. times above ma, bigger better
     for freq in a_freqs:
@@ -463,7 +477,6 @@ def update_assets_EIFD_D_expanding(df, ts_code):
 
         # expanding
         df[f"e_abv_ma{freq}"] = df[f"abv_ma{freq}"].expanding(freq).mean()
-    print(f"{ts_code} abv_ma finished")
 
     # 3. trend swap. how long a trend average lasts too slow
     # for freq in a_freqs:
@@ -476,25 +489,10 @@ def update_assets_EIFD_D_expanding(df, ts_code):
     for freq in a_freqs:
         df[f"e_hp_mean{freq}"] = df[f"hp{freq}"].expanding(freq).mean()
         df[f"e_hp_std{freq}"] = df[f"hp{freq}"].expanding(freq).std()
-    print(f"{ts_code} highpass_mean finished")
 
     # volatility pct_ chg, less than better
     df["rapid_down"] = (df["pct_chg"] < -5).astype(int)
     df["e_rapid_down"] = df["rapid_down"].expanding(240).mean()
-    print(f"{ts_code} rapid_down finished")
-
-    # beta, lower the better too slow
-    # df_sh_index = get_asset(ts_code="000001.SH", asset="I")
-    # df_sh_index["sh_close"] = df_sh_index["close"]
-    # df_cy_index = get_asset(ts_code="399006.SZ", asset="I")
-    # df_cy_index["cy_close"] = df_cy_index["close"]
-    # for until_index, df_expand in custom_expand(df, 240).items():
-    #     beta_sh=LB.calculate_beta(df_expand["close"], df_sh_index["sh_close"])
-    #     beta_cy=LB.calculate_beta(df_expand["close"], df_cy_index["cy_close"])
-    #     df.at[until_index, "e_beta_sh"] = beta_sh
-    #     df.at[until_index, "e_beta_cy"] = beta_cy
-    #     df.at[until_index, "e_beta"] = abs(beta_sh) * abs(beta_cy)
-    # print(f"{ts_code} beta finished")
 
     # is_max. How long the current price is around the all time high. higher better
     df["e_max"] = df["close"].expanding(240).max()
@@ -505,22 +503,6 @@ def update_assets_EIFD_D_expanding(df, ts_code):
     df["e_min"] = df["close"].expanding(240).min()
     df["e_min_pct"] = (df["close"] / df["e_min"]).between(0.9, 1.1).astype(int)
     df["e_min_pct"] = df["e_min_pct"].expanding(240).mean()
-    print(f"{ts_code} max finished")
-
-
-# def update_ts_code_expanding(step=1):
-#     d_all_df=preload(load="asset", step=step, query="")
-#     for counter, (ts_code, df) in enumerate(d_all_df.items()):
-#         a_path = LB.a_path(f"Market\CN\Asset\E\D_Expanding/{ts_code}")
-#
-#         #skip if file exists:
-#         if os.path.isfile(a_path[1]):
-#             print(counter,ts_code, "expanding up-to-date")
-#             continue
-#         else:
-#             df_expanding=update_assets_EIFD_D_expanding(df, ts_code)
-#             LB.to_csv_feather(df_expanding,a_path=a_path)
-#             print(counter, ts_code, "expanding updated")
 
 
 def break_tushare_limit_helper(func, kwargs, limit=1000):
@@ -541,7 +523,7 @@ def break_tushare_limit_helper(func, kwargs, limit=1000):
 
 # For E,I,FD
 def update_assets_EI_D_reindex_reverse(ts_code, freq, asset, start_date, end_date, adj="qfq", market="CN"):
-    df = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
+    df = _API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
     df = LB.df_reverse_reindex(df)
     LB.columns_remove(df, ["pre_close", "amount", "change"])
     return df
@@ -549,7 +531,7 @@ def update_assets_EI_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
 
 # For F Tested and works
 def update_assets_F_D_reindex_reverse(ts_code, start_date, end_date):
-    df = break_tushare_limit_helper(func=API_Tushare.my_fx_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
+    df = break_tushare_limit_helper(func=_API_Tushare.my_fx_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
     df = LB.df_reverse_reindex(df)
     for column in ["open", "high", "low", "close"]:
         df[column] = (df[f"bid_{column}"] + df[f"ask_{column}"]) / 2
@@ -559,7 +541,7 @@ def update_assets_F_D_reindex_reverse(ts_code, start_date, end_date):
 
 # For FD D
 def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_date, adj=None, market="CN"):
-    df = break_tushare_limit_helper(func=API_Tushare.my_pro_bar, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}", "adj": adj, "freq": freq, "asset": asset}, limit=1000)
+    df = break_tushare_limit_helper(func=_API_Tushare.my_pro_bar, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}", "adj": adj, "freq": freq, "asset": asset}, limit=1000)
 
     # TODO to be deletet if breaker works
     # df = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
@@ -585,7 +567,7 @@ def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
     """
     if not df.empty:
         df.index = df["trade_date"]
-        df_adj_factor = API_Tushare.my_query(api_name='fund_adj', ts_code=ts_code, start_date=start_date, end_date=end_date)
+        df_adj_factor = _API_Tushare.my_query(api_name='fund_adj', ts_code=ts_code, start_date=start_date, end_date=end_date)
         if df_adj_factor.empty:
             print(asset, ts_code, freq, "has no adj_factor, skip")
         else:
@@ -614,21 +596,21 @@ def update_assets_E_W_pledge_stat(start_date="00000000", market="CN", step=1, bi
             print(counter, ts_code, "pledge_stat Up-to-date")
             continue
         else:  # always update completely new
-            df = API_Tushare.my_pledge_stat(ts_code=ts_code)
+            df = _API_Tushare.my_pledge_stat(ts_code=ts_code)
             df = LB.df_reverse_reindex(df).set_index("end_date")
             LB.to_csv_feather(df, a_path)
             print(counter, ts_code, "pledge_stat UPDATED")
 
 
 def update_assets_E_D_top_holder(big_update=True, market="CN", step=1):
-    df_ts_codes = API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
+    df_ts_codes = _API_Tushare.my_stockbasic(is_hs="", list_status="L", exchange="").set_index("ts_code")
     for counter, ts_code in enumerate(df_ts_codes.index[::step]):
         a_path = LB.a_path(f"Market/{market}/Asset/E/D_top_holder/{ts_code}")
         if os.path.isfile(a_path[1]) and (not big_update):  # skipp if small update or file exist
             print(counter, ts_code, "top_holder Up-to-date")
             continue
         else:  # always update completely new
-            df = API_Tushare.my_query(api_name='top10_holders', ts_code=ts_code, start_date='20190101', end_date=today())  # NO INDEX SET HERE
+            df = _API_Tushare.my_query(api_name='top10_holders', ts_code=ts_code, start_date='20190101', end_date=today())  # NO INDEX SET HERE
             df = LB.df_reverse_reindex(df)  # .set_index()
             LB.to_csv_feather(df, a_path, index_relevant=False)
             print(counter, ts_code, "top_holder UPDATED")
@@ -878,8 +860,8 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
             df_date = pd.merge(df_date[no_duplicate_cols], df_static_data, how='left', on=["ts_code"], suffixes=["", ""], sort=False).set_index("ts_code")  # add static data
             df_date.insert(loc=0, column='trade_date', value=int(trade_date))
 
-            # create final rank
-            df_date["bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
+            # create final rank. TODO. make it same as in bullishness
+            df_date["dat_bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
                               + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
                               + df_date["period"].rank(ascending=False) * 0.03 \
                               + df_date["e_hp_mean240"].rank(ascending=False) * 0.01 \
@@ -895,6 +877,10 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
                               + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
                               + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
                               + df_date["e_rapid_down"].rank(ascending=True) * 0.03
+
+            df_date["dat_bull2"]= df_date["e_gmean"].rank(ascending=False) * 0.5 \
+                              + df_date["e_sharp"].rank(ascending=False) * 0.5
+
             LB.to_csv_feather(df_date, a_path)
             print(asset, freq, trade_date, "date updated")
 
@@ -970,7 +956,10 @@ def update_date_Oth_analysis_market_D(freq, market="CN"):  # TODO add it to all 
     df_result.to_csv(path, index=False, encoding='utf-8_sig')
 
 
-def update_date_stock_market_all(start_date="00000000", end_date=today(), assets=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
+def update_assets_stock_market_all(start_date="00000000", end_date=today(), assets=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
+    """ In theory this should be exactly same as Asset_E
+    """#TODO make this same as asset_E
+
     # check if big update and if the a previous saved file exists
     last_saved_date = "19990104"
     last_trade_date = get_last_trade_date("D")
@@ -992,7 +981,7 @@ def update_date_stock_market_all(start_date="00000000", end_date=today(), assets
     print("last saved day is", last_saved_date)
 
     # meta preparation
-    a_path = LB.a_path(f"Market/{market}/Btest/Setup/Stock_market/all_stock_market")
+    a_path = LB.a_path(f"Market/{market}/Asset/G/D/all_stock_market")
     a_result = []
     df_sh_index = get_asset(ts_code="000001.SH", asset="I", freq=freq, market="CN")
     df_sh_index = df_sh_index.loc[int(last_saved_date):int(last_trade_date)]
@@ -1027,10 +1016,10 @@ def update_date_stock_market_all(start_date="00000000", end_date=today(), assets
         df_result = df_saved.append(df_result, sort=False)
 
     # add comp chg and index
-    df_result["comp_chg"] = ICreate.column_add_comp_chg(df_result["pct_chg"])
+    df_result["comp_chg"] = Alpha.column_add_comp_chg(df_result["pct_chg"])
     for ts_code in comparison_index:
         df_result = add_asset_comparison(df=df_result, freq=freq, asset="I", ts_code=ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"])
-        df_result[f"comp_chg_{ts_code}"] = ICreate.column_add_comp_chg(df_result[f"pct_chg_{ts_code}"])
+        df_result[f"comp_chg_{ts_code}"] = Alpha.column_add_comp_chg(df_result[f"pct_chg_{ts_code}"])
 
     LB.to_csv_feather(df_result, a_path, index_relevant=False)
     print("Date_Base UPDATED")
@@ -1136,7 +1125,7 @@ def get_next_trade_date(freq="D", market="CN"):  # TODO might be wrong
 
 
 def get_stock_market_all(market="CN"):
-    return get(LB.a_path(f"Market/{market}/Btest/Setup/Stock_Market/all_stock_market"), set_index="trade_date")
+    return get(LB.a_path(f"Market/{market}/Asset/G/D/all_stock_market"), set_index="trade_date")
 
 
 def get_date(trade_date, a_assets=["E"], freq="D", market="CN"):  # might need get_date_all for efficiency
@@ -1149,7 +1138,7 @@ def get_date(trade_date, a_assets=["E"], freq="D", market="CN"):  # might need g
 def get_date_E_oth(trade_date, oth_name, market="CN"):
     return get(LB.a_path(f"Market/{market}/Date/E/{oth_name}/{trade_date}"), set_index="")  # nothing to set
 
-def get_example_column(asset="E",freq="D", numeric_only=False):
+def get_example_column(asset="E",freq="D", numeric_only=False, a_filter=[]):
     # get the latest column of the asset file
     if asset == "E":
         ts_code = "000001.SZ"
@@ -1164,10 +1153,12 @@ def get_example_column(asset="E",freq="D", numeric_only=False):
     else:
         ts_code = "000001.SZ"
 
+    #nummeric only or not
     if numeric_only:
         return list(get_numeric_df(get_asset(ts_code, asset, freq)).columns)
     else:
         return list(get_asset(ts_code, asset, freq).columns)
+
 
 
 
@@ -1230,17 +1221,17 @@ def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", mark
 
 
 # TODO preload also for E, FD, I
-def preload(asset="E", step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False):
+def preload(asset="E", on_asset=True, step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False):
     """
     query_on_df: filters df_asset/df_date by some criteria. If the result is empty dataframe, it will NOT be included in d_result
     """
     d_result = {}
-    df_listing = get_ts_code(a_asset=[asset], d_queries=d_queries_ts_code)[::step] if asset in LB.c_assets_big() else get_trade_date(start_date="20000101")[::step]
-    func = get_asset if asset in LB.c_assets_big() else get_date
-    kwargs = {"asset": asset} if asset in LB.c_assets_big() else {}
+    df_index = get_ts_code(a_asset=[asset], d_queries=d_queries_ts_code)[::step] if on_asset else get_trade_date(start_date="20000101")[::step]
+    func = get_asset if on_asset else get_date
+    kwargs = {"asset": asset} if on_asset else {"a_assets":[asset]}
 
-    bar = tqdm(range(len(df_listing)))
-    for index, i in zip(df_listing.index, bar):
+    bar = tqdm(range(len(df_index)))
+    for index, i in zip(df_index.index, bar):
         bar.set_description(f"{i}: {asset}: {index}")
         try:
             df = func(index, **kwargs)
@@ -1259,39 +1250,33 @@ def preload(asset="E", step=1, query_df="", period_abv=240, d_queries_ts_code={}
     return d_result
 
 
-def update_date_beta_table(a_asset=["E"], freq="D", a_freqs=[240]):
+def update_date_beta_table(a_asset=["E"], a_freqs=[240]):
 
     """
-
     This calculates pairwise beta between all stocks for all days
     for all trade_dates
         for all assets
             for all past beta frequencies
     """
 
-    #for now just consider E, I, FD
     allowed_assets=["E","I","FD"]
-
     for asset in a_asset:
         if asset not in allowed_assets:
             continue
 
         #get the index
         d_preload=preload(asset=asset,step=1)
-
         for freq in a_freqs:
-
-            """compare each asset with each other asset"""
             for asset_counter1, (ts_code1,df_asset1) in enumerate(d_preload.items()):
+                a_path = LB.a_path(f"{LB.c_root_beta()}Market/CN/Asset/Beta/{asset}/{freq}/{ts_code1}")
+                if os.path.isfile(a_path[0]):
+                    continue
 
-                df_result = df_asset1[["ts_code", "open", "high", "low", "close"]]
+                df_result = df_asset1[["close"]]
                 for asset_counter2, (ts_code2,df_asset2) in enumerate(d_preload.items()):
                     print(f"freq: {freq}. beta: {ts_code1} - {ts_code2}")
                     df_result[ts_code2]=df_result["close"].rolling(freq,min_periods=2).corr(df_asset2["close"])
-
-
-                a_path=LB.a_path(f"Market/CN/Asset/Beta/{freq}/{ts_code1}")
-                LB.to_csv_feather(df=df_result,a_path=a_path)
+                LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
 
 
 
@@ -1349,8 +1334,8 @@ def update_all_in_one(big_update=False):
     # update_assets_G_D(big_update=big_update)
 
     # # 3.3. DATE - BASE
-    # update_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
-    #
+    #update_assets_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, assets=["E"])  # SMART
+
 
 
 class Global:

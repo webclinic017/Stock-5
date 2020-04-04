@@ -2,7 +2,7 @@ import os
 import os.path
 import pandas as pd
 import DB
-import ICreate
+import Alpha
 import LB
 import random
 from scipy.stats.mstats import gmean
@@ -123,8 +123,8 @@ def bruteforce_summary(folderPath, summarypath):
 def bruteforce_iterate():
     d_df_asset = DB.preload(asset=setting["target"], step=setting["preload_step"], query_df="trade_date > 20050101")
 
-    e_ibase = ICreate.IBase
-    e_ideri = ICreate.IDeri
+    e_ibase = Alpha.ABase
+    e_ideri = Alpha.ADeri
 
     len_e_ibase = len([x for x in e_ibase])
     len_e_ideri = len([x for x in e_ideri])
@@ -137,11 +137,11 @@ def bruteforce_iterate():
         for ideri_counter, ideri in enumerate(e_ideri, start=1):
             ideri_name = ideri.value
             if ideri_name == "create":
-                deri_function = ICreate.get_func(ibase_name)
+                deri_function = Alpha.get_func(ibase_name)
             else:
-                deri_function = ICreate.get_func(ideri_name)
+                deri_function = Alpha.get_func(ideri_name)
             print("deri is,", ideri_name, deri_function.__name__)
-            settings_explode = ICreate.function_all_combinations(deri_function)
+            settings_explode = Alpha.function_all_combinations(deri_function)
 
             print("all combinations", settings_explode)
             len_setting_explode = len(settings_explode)

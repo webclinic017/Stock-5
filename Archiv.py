@@ -340,6 +340,8 @@ def asset_bullishness():
 
     df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I")
     df_sh_index["sh_close"] = df_sh_index["close"]
+    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I")
+    df_sz_index["sz_close"] = df_sz_index["close"]
     df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I")
     df_cy_index["cy_close"] = df_cy_index["close"]
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
@@ -358,50 +360,62 @@ def asset_bullishness():
             # period. the longer the better
             df_result.at[ts_code, "period"] = len(df_asset)
 
+            # gain / period
+            df_result.at[ts_code, "gain"] = df_result.at[ts_code, "comp_gain"] / df_result.at[ts_code, "period"]
+
             # Geomean.
             helper = 1 + (df_asset["pct_chg"] / 100)
             df_result.at[ts_code, "geomean"] = gmean(helper)
 
+            # sharp/sortino ratio: Note my sharp ratio is not anuallized but period adjusted
+            s=df_asset["pct_chg"]
+            df_result.at[ts_code, "sharp"] = (s.mean()/s.std())*np.sqrt(len(s))
+            #df_result.at[ts_code, "sortino"] = (s.mean()/s[s<0].std())*np.sqrt(len(s))
+
             # times above ma, bigger better
-            df_asset["abv_ma"] = 0
-            for freq in [240]:
-                df_asset[f"highpass{freq}"] = Atest.highpass(df_asset["close"], freq)
-                # df_asset[f"ma{freq}"] = df_asset["close"] - df_asset[f"highpass{freq}"]
-                df_asset[f"ma{freq}"] = df_asset["close"].rolling(freq).mean()
-                df_asset[f"abv_ma{freq}"] = (df_asset["close"] > df_asset[f"ma{freq}"]).astype(int)
-                df_asset["abv_ma"] = df_asset["abv_ma"] + df_asset[f"abv_ma{freq}"]
-            df_result.at[ts_code, "abv_ma"] = df_asset["abv_ma"].mean()
+            # df_asset["abv_ma"] = 0
+            # for freq in [240]:
+            #     df_asset[f"highpass{freq}"] = Atest.highpass(df_asset["close"], freq)
+            #     # df_asset[f"ma{freq}"] = df_asset["close"] - df_asset[f"highpass{freq}"]
+            #     df_asset[f"ma{freq}"] = df_asset["close"].rolling(freq).mean()
+            #     df_asset[f"abv_ma{freq}"] = (df_asset["close"] > df_asset[f"ma{freq}"]).astype(int)
+            #     df_asset["abv_ma"] = df_asset["abv_ma"] + df_asset[f"abv_ma{freq}"]
+            # df_result.at[ts_code, "abv_ma"] = df_asset["abv_ma"].mean()
 
             # trend swap. how long a trend average lasts
-            for freq in [240]:
-                df_result.at[ts_code, f"abv_ma_days{freq}"] = LB.trend_swap(df_asset, f"abv_ma{freq}", 1)
+            # for freq in [240]:
+            #     df_result.at[ts_code, f"abv_ma_days{freq}"] = LB.trend_swap(df_asset, f"abv_ma{freq}", 1)
 
             # volatility of the high pass, the smaller the better
-            highpass_mean = 0
-            for freq in [240]:
-                highpass_mean = highpass_mean + df_asset[f"highpass{freq}"].mean()
-            df_result.at[ts_code, "highpass_mean"] = highpass_mean
+            # highpass_mean = 0
+            # for freq in [240]:
+            #     highpass_mean = highpass_mean + df_asset[f"highpass{freq}"].mean()
+            # df_result.at[ts_code, "highpass_mean"] = highpass_mean
 
             # volatility pct_ chg, less than better
-            df_result.at[ts_code, "rapid_down"] = len(df_asset[df_asset["pct_chg"] <= (-5)]) / len(df_asset)
+            #df_result.at[ts_code, "rapid_down"] = len(df_asset[df_asset["pct_chg"] <= (-5)]) / len(df_asset)
 
             # beta, lower the better
             df_result.at[ts_code, "beta_sh"] = LB.calculate_beta(df_asset["close"], df_sh_index["sh_close"])
+            df_result.at[ts_code, "beta_sz"] = LB.calculate_beta(df_asset["close"], df_sz_index["sz_close"])
             df_result.at[ts_code, "beta_cy"] = LB.calculate_beta(df_asset["close"], df_cy_index["cy_close"])
-            df_result.at[ts_code, "beta"] = abs(df_result.at[ts_code, "beta_sh"]) * abs(df_result.at[ts_code, "beta_cy"])
 
             # is_max. How long the current price is around the all time high. higher better
-            df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
-            df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
+            # df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
+            # df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
 
-    df_result["final_rank"] = df_result["geomean"].rank(ascending=False) * 0.70 \
-                              + df_result["is_max"].rank(ascending=False) * 0.10 \
-                              + df_result["beta"].rank(ascending=True) * 0.05 \
-                              + df_result["period"].rank(ascending=False) * 0.04 \
-                              + df_result["abv_ma_days240"].rank(ascending=False) * 0.05 \
-                              + df_result["highpass_mean"].rank(ascending=False) * 0.02 \
-                              + df_result["abv_ma"].rank(ascending=False) * 0.02 \
-                              + df_result["rapid_down"].rank(ascending=True) * 0.02
+    #TODO update it to be exactly same as bullishness rank
+    gmean_rank=df_result["geomean"].rank(ascending=False)
+    sharp_rank=df_result["sharp"].rank(ascending=False)
+    beta_sh_rank=df_result["beta_sh"].rank(ascending=True)
+    beta_sz_rank=df_result["beta_sz"].rank(ascending=True)
+    beta_cy_rank=df_result["beta_cy"].rank(ascending=True)
+    df_result["final_rank"] = gmean_rank*0.45+\
+                              sharp_rank*0.40+\
+                              beta_sh_rank*0.05+\
+                              beta_sz_rank*0.05+\
+                              beta_cy_rank*0.05
+
 
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Atest/bullishness/bullishness.xlsx", group_result=True)
 
