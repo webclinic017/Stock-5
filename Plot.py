@@ -4,6 +4,8 @@ import time
 import os.path
 import numpy as np
 from pathlib import Path
+
+import matplotlib
 import matplotlib.pyplot as plt
 import DB
 import os
@@ -14,6 +16,8 @@ from pandas.plotting import autocorrelation_plot
 import Alpha
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
+
+
 
 def create_gif(ts_code="000002.SZ"):
     images = []
@@ -123,14 +127,16 @@ def plot_autocorrelation(series):
 def plot_chart(df, columns):
     df_copy = df[columns]
     df_copy.reset_index(inplace=True, drop=True)
+    """I dont understand why it has to be declared everytime"""
+    matplotlib.use("TkAgg")
     df_copy.plot(legend=True)
     plt.show()
     plt.close()
-
-
 
 
 if __name__ == '__main__':
     create_gif(ts_code="test")
     # support_resistance_multiple()
     pass
+
+

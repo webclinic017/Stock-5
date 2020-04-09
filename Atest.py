@@ -33,32 +33,32 @@ Btest (Backtest):
 """
 
 
-def trend(df: pd.DataFrame, ibase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
+def trend(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
     a_all = [1] + array
     a_small = [str(x) for x in a_all][:-1]
     a_big = [str(x) for x in a_all][1:]
 
-    rsi_name = indi_name(ibase=ibase, deri=f"{market_suffix}rsi")
-    phase_name = indi_name(ibase=ibase, deri=f"{market_suffix}phase")
-    rsi_abv = indi_name(ibase=ibase, deri=f"{market_suffix}rsi_abv")
-    turnpoint_name = indi_name(ibase=ibase, deri=f"{market_suffix}turnpoint")
-    under_name = indi_name(ibase=ibase, deri=f"{market_suffix}under")
-    trend_name = indi_name(ibase=ibase, deri=f"{market_suffix}{ADeri.trend.value}")
+    rsi_name = indi_name(abase=abase, deri=f"{market_suffix}rsi")
+    phase_name = indi_name(abase=abase, deri=f"{market_suffix}phase")
+    rsi_abv = indi_name(abase=abase, deri=f"{market_suffix}rsi_abv")
+    turnpoint_name = indi_name(abase=abase, deri=f"{market_suffix}turnpoint")
+    under_name = indi_name(abase=abase, deri=f"{market_suffix}under")
+    trend_name = indi_name(abase=abase, deri=f"{market_suffix}{ADeri.trend.value}")
 
     func = talib.RSI
     # RSI and CMO are the best. CMO is a modified RSI
     # RSI,CMO,MOM,ROC,ROCR100,TRIX
 
-    # df[f"detrend{ibase}"] = signal.detrend(data=df[ibase])
+    # df[f"detrend{abase}"] = signal.detrend(data=df[abase])
     for i in a_all:  # RSI 1
         try:
             if i == 1:
-                df[f"{rsi_name}{i}"] = (df[ibase].pct_change() > 0).astype(int)
+                df[f"{rsi_name}{i}"] = (df[abase].pct_change() > 0).astype(int)
                 print(df[f"{rsi_name}{i}"].dtype)
                 # df[ rsi_name + "1"] = 0
                 # df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
             else:
-                df[f"{rsi_name}{i}"] = func(df[ibase], timeperiod=i) / 100
+                df[f"{rsi_name}{i}"] = func(df[abase], timeperiod=i) / 100
                 # df[f"{rsi_name}{i}"] = func(df[f"{rsi_name}{i}"], timeperiod=i) / 100
 
                 # normalization causes error
@@ -535,16 +535,16 @@ def ent(data):
     return scipy.stats.entropy(p_data)  # get entropy from counts
 
 
-def macd_tor(df, ibase, sfreq):
-    name = f"{ibase}.vol.{sfreq}"
+def macd_tor(df, abase, sfreq):
+    name = f"{abase}.vol.{sfreq}"
 
-    df[f"ibase_{name}"] = zlema((df[ibase]), sfreq, 1.8)
+    df[f"abase_{name}"] = zlema((df[abase]), sfreq, 1.8)
     df[f"tor_{name}"] = zlema((df["turnover_rate"]), sfreq, 1.8)
     #
-    # df[f"ibase_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
-    # df[f"tor_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
+    # df[f"abase_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
+    # df[f"tor_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
 
-    df[f"macd_tor_diff{name}"] = df[f"ibase_{name}"] - df[f"tor_{name}"]
+    df[f"macd_tor_diff{name}"] = df[f"abase_{name}"] - df[f"tor_{name}"]
     df[f"macd_tor_diff{name}"] = df[f"macd_tor_diff{name}"] * 1
 
     df[f"macd_tor_dea_{name}"] = df[f"macd_tor_diff{name}"] - supersmoother_3p(df[f"macd_tor_diff{name}"], int(sfreq / 2))
@@ -562,7 +562,7 @@ def macd_tor(df, ibase, sfreq):
 #TODO
 """ basically all these should be called Isignal:
 they map a indicator to buy/sell """
-def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
+def my_macd(df, abase, sfreq, bfreq, type=1, score=10):
     """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
         on daily chart, useable freqs are 12*60, 24*60 ,5*60
 
@@ -577,38 +577,38 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
         Works good on high volatile time, works bad on flat times.
         TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
         """
-    name = f"{ibase}.{type, sfreq, bfreq,type}"
+    name = f"{abase}.{type, sfreq, bfreq,type}"
     df[f"zldif_{name}"] = 0
     df[f"zldea_{name}"] = 0
     if type == 0:  # standard macd with ma. conventional ma is very slow
-        df[f"ema1_{name}"] = df[ibase].rolling(sfreq).mean()
-        df[f"ema2_{name}"] = df[ibase].rolling(bfreq).mean()
+        df[f"ema1_{name}"] = df[abase].rolling(sfreq).mean()
+        df[f"ema2_{name}"] = df[abase].rolling(bfreq).mean()
         df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
         df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq / 2))
         df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
         df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
         df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
     if type == 1:  # standard macd but with zlema
-        df[f"ema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
+        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
+        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
         df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
         df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq))
         df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
         df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
         df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
     elif type == 2:  # macd where price > ema1 and ema2
-        df[f"ema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
-        df.loc[(df[ibase] > df[f"ema1_{name}"]) & (df[ibase] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
-        df.loc[(df[ibase] < df[f"ema1_{name}"]) & (df[ibase] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
+        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
+        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
+        df.loc[(df[abase] > df[f"ema1_{name}"]) & (df[abase] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
+        df.loc[(df[abase] < df[f"ema1_{name}"]) & (df[abase] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
     elif type == 3:  # standard macd : ema1 > ema2. better than type 2 because price is too volatile
-        df[f"ema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[ibase]), bfreq, 1.8)
+        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
+        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
         df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
         df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
     elif type == 4:  # macd with lowpass constructed from highpass. This basically replaces abv_ma
-        df[f"ema1_{name}"] = df[ibase] - highpass(df[ibase], int(sfreq))
-        df[f"ema2_{name}"] = df[ibase] - highpass(df[ibase], int(bfreq))
+        df[f"ema1_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
+        df[f"ema2_{name}"] = df[abase] - highpass(df[abase], int(bfreq))
         df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
         df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
 
@@ -617,7 +617,7 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
         # df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]) & (df[f"ema1_{name}"] < df[f"ma120"]) & (df[f"ema2_{name}"] < df["ma120"]) , f"zlmacd_{name}"] = -score
 
     elif type == 5:  # price and tor
-        df[f"ema1_{name}"] = zlema((df[ibase]), sfreq, 1.8)
+        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
         df[f"ema2_{name}"] = zlema((df["turnover_rate"]), sfreq, 1.8)
         df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
         df[f"zldea_{name}"] = df[f"zldif_{name}"] - supersmoother_3p(df[f"zldif_{name}"], int(sfreq))
@@ -627,78 +627,72 @@ def my_macd(df, ibase, sfreq, bfreq, type=1, score=10):
     return [f"zlmacd_{name}", f"ema1_{name}", f"ema2_{name}", f"zldif_{name}", f"zldea_{name}"]
 
 
-def my_ismax(df, ibase, q=0.95, score=10):
+def my_ismax(df, abase, q=0.95, score=10):
     """
-    the bigger the difference ibase/e_max, the closer they are together. the smaller the difference they far away they are
+    the bigger the difference abase/e_max, the closer they are together. the smaller the difference they far away they are
     """
-    name = f"{ibase}"
-    df[f"ismax_{name}"] = (df[ibase] / df["e_max"]).between(q, q + 0.05).astype(int) * score
+    name = f"{abase}"
+    df[f"ismax_{name}"] = (df[abase] / df["e_max"]).between(q, q + 0.05).astype(int) * score
     df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
     return [f"ismax_{name}", ]
 
 
-def my_ismin(df, ibase, q=0.95, score=10):
+def my_ismin(df, abase, q=0.95, score=10):
     """
-    the bigger the difference emin/ibase, the closer they are together. the smaller the difference they far away they are
+    the bigger the difference emin/abase, the closer they are together. the smaller the difference they far away they are
     """
-    name = f"{ibase}"
-    df[f"ismin_{name}"] = (df["e_min"] / df[ibase]).between(q, q + 0.05).astype(int) * score
+    name = f"{abase}"
+    df[f"ismin_{name}"] = (df["e_min"] / df[abase]).between(q, q + 0.05).astype(int) * score
     df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
     return [f"ismin_{name}", ]
 
 
-def my_gq(df, ibase, q_low=0.2, q_high=0.4, cg_freq=240, score=10):
+def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
     """can be used on any indicator
     gq=Generic quantile
     0. create an oscilator of that indicator
     1. create expanding mean of that indicator
     2. create percent=today_indicator/e_indicator
     3. assign rolling quantile quantile of percent
+
+    This appoach needs to be mean stationary !!!! otherwise quantile makes nosense
     """
     #init
-    name = f"gq{cg_freq}.{ibase}"
-    if f"cg_{name}" not in df.columns:
-        df[f"cg_{name}"]=cg_Oscillator(df[ibase], cg_freq)
+    name = f"{abase}.auto{norm_freq}.type{type}"
+    if f"norm_{name}" not in df.columns:
+        #3 choices. cg_oscilator, rsi, (today-yesterday)/today
+        if type==1:
+            df[f"norm_{name}"]=cg_Oscillator(df[abase], norm_freq)
+        elif type==2:
+            df[f"norm_{name}"]=talib.RSI(df[abase], norm_freq)
+        elif type==3:
+            #this is the same as ROCP rate of change percent
+            df[f"norm_{name}"]= (df[abase]-df[abase].shift(1))/df[abase].shift(1)
+        elif type==4:
+            df[f"norm_{name}"]= df[abase].pct_change(norm_freq)
 
     #create expanding quantile
     for q in [q_low, q_high]:
         if f"q{q}_{name}" not in df.columns:
-            df[f"q{q}_{name}"] = df[f"cg_{name}"].expanding(240).quantile(q)
+            df[f"q{q}_{name}"] = df[f"norm_{name}"].expanding(240).quantile(q)
 
     #assign todays value to a quantile
-    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"cg_{name}"]) & (df[f"cg_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
-    df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
-    return [f"in_q{q_low, q_high}_{name}", ]
-
-
-def my_gq_rsi(df, ibase, q_low=0.2, q_high=0.4, rsi_freq=240, score=10):
-    """Exactly the same as my_gq but using rsi instead
-    """
-    #init
-    name = f"gq{rsi_freq}.{ibase}"
-    if f"rsi_{name}" not in df.columns:
-        df[f"rsi_{name}"]=talib.RSI(df[ibase], rsi_freq)
-
-    #create expanding quantile
-    for q in [q_low, q_high]:
-        if f"q{q}_{name}" not in df.columns:
-            df[f"q{q}_{name}"] = df[f"rsi_{name}"].expanding(240).quantile(q)
-
-    #assign todays value to a quantile
-    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"rsi_{name}"]) & (df[f"rsi_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
+    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"norm_{name}"]) & (df[f"norm_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
     df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
     return [f"in_q{q_low, q_high}_{name}", ]
 
 
 
 
-def slopecross(df, ibase, sfreq, bfreq, smfreq):
+
+
+def slopecross(df, abase, sfreq, bfreq, smfreq):
     """using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
         slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
     """
-    name = f"{ibase, sfreq, bfreq, smfreq}"
-    df[f"slope1_{name}"] = df[ibase].rolling(sfreq).apply(trendslope_apply, raw=False)
-    df[f"slope2_{name}"] = df[ibase].rolling(bfreq).apply(trendslope_apply, raw=False)
+    name = f"{abase, sfreq, bfreq, smfreq}"
+    df[f"slope1_{name}"] = df[abase].rolling(sfreq).apply(trendslope_apply, raw=False)
+    df[f"slope2_{name}"] = df[abase].rolling(bfreq).apply(trendslope_apply, raw=False)
 
     # df[f"slopediff_{name}"] = df[f"slope1_{name}"] - df[f"slope2_{name}"]
     # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)
@@ -742,19 +736,19 @@ def indicator_test():
         #
         #     print("today", i)
         #
-        #     close_name=zlmacd(df_past, ibase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
+        #     close_name=zlmacd(df_past, abase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
         #     today_signal=df_past.at[end_date,f"zlmacd_{close_name}"]
         #     df.at[end_date,f"zlmacd_{close_name}"]=today_signal
         #
         # df[ f"zlmacd_{close_name}"]=df[ f"zlmacd_{close_name}"].fillna(method="ffill")
         #
 
-        # close_name = zlmacd(df, ibase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
-        # ivola_name = zlmacd(df, ibase="close", sfreq=12*days, bfreq=26*days, smfreq=12*days)
+        # close_name = zlmacd(df, abase="close", sfreq=12*days, bfreq=20*days, smfreq=4*days)
+        # ivola_name = zlmacd(df, abase="close", sfreq=12*days, bfreq=26*days, smfreq=12*days)
         # df["trade"] = 0
         # df.loc[(df[f"zlmacd_{close_name}"] == 10) & (df[f"zlmacd_{ivola_name}"] == 10), "trade"] = 10
 
-        ibase = "close"
+        abase = "close"
 
         freq = 240
 
@@ -767,14 +761,14 @@ def indicator_test():
         freqs = [5, 10, 20, 60, 120, 240]
         df["overall_rsi"] = 0
         for freq in freqs:
-            df[f"ma{freq}"] = df[ibase].rolling(freq).mean()
-            df[f"rsi{freq}"] = talib.RSI(df[ibase], freq)
+            df[f"ma{freq}"] = df[abase].rolling(freq).mean()
+            df[f"rsi{freq}"] = talib.RSI(df[abase], freq)
             df[f"rsi{freq}"] = supersmoother_3p(df[f"rsi{freq}"], 240)
             df[f"rsi_bull{freq}"] = (df[f"rsi{freq}"] > 50).astype(int)
             df["overall_rsi"] = df[f"overall_rsi"] + df[f"rsi_bull{freq}"]
-            # df[f"slope{freq}"]=df[ibase].rolling(freq).apply(trendslope_apply, raw=False)
-            df[f"rolling_max{freq}"] = df[ibase].rolling(freq).max()
-            df[f"rolling_min{freq}"] = df[ibase].rolling(freq).min()
+            # df[f"slope{freq}"]=df[abase].rolling(freq).apply(trendslope_apply, raw=False)
+            df[f"rolling_max{freq}"] = df[abase].rolling(freq).max()
+            df[f"rolling_min{freq}"] = df[abase].rolling(freq).min()
             a_max.append(f"rolling_max{freq}")
             a_min.append(f"rolling_min{freq}")
             a_ma.append(f"ma{freq}")
@@ -784,17 +778,17 @@ def indicator_test():
         df["overall_rsi"] = (df["overall_rsi"] / len(freqs))
 
         # init detrend
-        # df["detrend"]=  supersmoother_3p(df[ibase], int(freq/4))
-        # df["detrend"]=  (df[ibase]- df["detrend"])/ df["detrend"]
+        # df["detrend"]=  supersmoother_3p(df[abase], int(freq/4))
+        # df["detrend"]=  (df[abase]- df["detrend"])/ df["detrend"]
         # df["detrend"]=IFT(df["detrend"],min= -1,max=1)
         # df["detrend_buy"]=0
         # df.loc[df["detrend"] > 0.05, "detrend_buy"] = 5
         # df.loc[df["detrend"] < -0.05, "detrend_buy"] = -5
 
         #
-        df["highpass"] = highpass(df[ibase], int(freq * 1))
-        df["de_highpass"] = highpass(df[ibase], int(freq * 1))
-        df["de_highpass"] = df["de_highpass"] / df[ibase]
+        df["highpass"] = highpass(df[abase], int(freq * 1))
+        df["de_highpass"] = highpass(df[abase], int(freq * 1))
+        df["de_highpass"] = df["de_highpass"] / df[abase]
         df["de_highpass"] = df["de_highpass"] * 10
         # the result is a very responsive- rsi like oscilator
 
@@ -829,30 +823,30 @@ def indicator_test():
 
         # df["de_highpass"]=supersmoother_3p(df["de_highpass"],int(freq/4))
         #
-        # df["rel_close240"]=df[ibase].rolling(240).apply(normalize_apply, raw=False)
-        # df["rel_close20"]=df[ibase].rolling(20).apply(normalize_apply, raw=False)
+        # df["rel_close240"]=df[abase].rolling(240).apply(normalize_apply, raw=False)
+        # df["rel_close20"]=df[abase].rolling(20).apply(normalize_apply, raw=False)
         # df["rel_close20"]=FT(df["rel_close20"])
         # init=["detrend", "detrend_buy"]
-        df["rsi"] = talib.RSI(df[ibase], freq)
+        df["rsi"] = talib.RSI(df[abase], freq)
         df["ema_of_rsi"] = zlema(df["rsi"], int(freq), 1.0)
         df["rsi2"] = df["rsi"] - df["ema_of_rsi"]
         init = ["de_highpass", "rolling_de_highpass", "overall_rsi", "expanding_de_highpass", "rolling_max120", "rolling_min120"]  # r_gt_e_de_highpass
 
         # lowpass/Smoother
-        # df["zlema"] = zlema_best_gain(df[ibase], freq)
-        # df["ss_2p"] = supersmoother_2p(df[ibase], freq)
-        # df["butter_2p"] = butterworth_2p(df[ibase], freq)
-        # df["butter_3p"] = butterworth_3p(df[ibase], freq)
-        # df["my_inst"] = inst_trend(df[ibase],freq)
-        # df["ehlers"] = ehlers_filter_unstable(df[ibase], freq)
-        # df["mama"], df["fama"] = talib.MAMA(df[ibase])
+        # df["zlema"] = zlema_best_gain(df[abase], freq)
+        # df["ss_2p"] = supersmoother_2p(df[abase], freq)
+        # df["butter_2p"] = butterworth_2p(df[abase], freq)
+        # df["butter_3p"] = butterworth_3p(df[abase], freq)
+        # df["my_inst"] = inst_trend(df[abase],freq)
+        # df["ehlers"] = ehlers_filter_unstable(df[abase], freq)
+        # df["mama"], df["fama"] = talib.MAMA(df[abase])
         # stable_lowpass=["zlema","butter_3p","my_inst","butter_2p","ss_2p"]
         stable_lowpass = []
 
         # highpass/oscilator
-        # df["highpass"] = highpass(df[ibase], freq)
-        # df["roofing"] = roofing_filter(df[ibase], freq,  int(freq/2))
-        # df["bandpass"], df["bandpass_lead"] = bandpass_filter_with_lead(df[ibase], freq)
+        # df["highpass"] = highpass(df[abase], freq)
+        # df["roofing"] = roofing_filter(df[abase], freq,  int(freq/2))
+        # df["bandpass"], df["bandpass_lead"] = bandpass_filter_with_lead(df[abase], freq)
         # df["bandpass_buy"]=0
         # df.loc[df["bandpass"] > 0, "bandpass_buy"] = 10
         # df.loc[df["bandpass"] < -0, "bandpass_buy"] = -10
@@ -869,7 +863,7 @@ def indicator_test():
 
         # unstable period low pass
         # df["talib_inst"] = talib.HT_TRENDLINE(df["close"])
-        # df["laguerre"] = laguerre_filter_unstable(df[ibase])
+        # df["laguerre"] = laguerre_filter_unstable(df[abase])
         unstable_lowpass = []
 
         # unstable period high pass
@@ -879,7 +873,7 @@ def indicator_test():
         unstable_bandpass = []
 
         # trend vs cycle
-        # df["trend_mode"]=extract_trend(df[ibase],4)
+        # df["trend_mode"]=extract_trend(df[abase],4)
         # macd_trend_mode=zlmacd(df,"trend_mode",freq, freq*2 ,freq)
         a_trend = ["trend_mode"]
         a_trend = []
@@ -890,28 +884,28 @@ def indicator_test():
 
         # df["rvi"], df["rvi_sig"]=RVI(df["open"], df["close"],df["high"], df["low"], int(freq))
         # df["rvi"]=IFT(df["rvi"], min=-1, max=1)
-        # df["slope"]=df[ibase].rolling(freq).apply(trendslope_apply, raw=False)
-        # df["slope2"]=(df[ibase]*100).rolling(freq).apply(trendslope_apply, raw=False)
+        # df["slope"]=df[abase].rolling(freq).apply(trendslope_apply, raw=False)
+        # df["slope2"]=(df[abase]*100).rolling(freq).apply(trendslope_apply, raw=False)
         # df["slope"]=df["slope"]*10
         # df["slope2"]=df["slope2"]*10
         # df["slope_mean"]=supersmoother_3p(df["slope"],freq)
         # df["slope_mean2"]=supersmoother_3p(df["slope2"],freq)
         #
-        # df["cg"]=cg_Oscillator(df[ibase], int(freq/4))
+        # df["cg"]=cg_Oscillator(df[abase], int(freq/4))
         # df["cg"]=IFT(df["cg"],min=-1, max=1)
         #
         # df["cg_buy"] = 0
         # df.loc[df["cg"] > 0.5, "cg_buy"] = -10
         # df.loc[df["cg"] < -0.5, "cg_buy"] = 10
         #
-        # df["leading"], df["net_lead"]=leading(df[ibase],freq)
+        # df["leading"], df["net_lead"]=leading(df[abase],freq)
         #
-        # #df["laguerre_rsi"]=laguerre_RSI(df[ibase])
-        # df["cc"]=cybercycle(df[ibase], int(freq/4))
-        # df["talib_rsi1"]= normalize_vector(talib.RSI(df[ibase], timeperiod=int(freq/4)))
+        # #df["laguerre_rsi"]=laguerre_RSI(df[abase])
+        # df["cc"]=cybercycle(df[abase], int(freq/4))
+        # df["talib_rsi1"]= normalize_vector(talib.RSI(df[abase], timeperiod=int(freq/4)))
         # df["talib_rsi1"]= FT(df["talib_rsi1"],min=-1, max=1)
         #
-        # df["talib_rsi2"] = normalize_vector(talib.RSI(df[ibase], timeperiod=int(freq / 2)))
+        # df["talib_rsi2"] = normalize_vector(talib.RSI(df[abase], timeperiod=int(freq / 2)))
         # df["talib_rsi2"] = FT(df["talib_rsi2"], min=-1, max=1)
         #
         # df["rsi_buy"]=0
@@ -919,23 +913,23 @@ def indicator_test():
         # df.loc[(df["talib_rsi1"]< -0.7) & (df["talib_rsi2"]< -0.7), "rsi_buy"]=10
 
         ma = 240
-        score_base = df[ibase].mean()
+        score_base = df[abase].mean()
         final_score_at = (1 + 1.05 + 1.1 + 1.15 + 1.2) * score_base
 
         df[f"ma_buy{ma}"] = -10
-        df.loc[df[ibase] > df[f"ma{ma}"], f"ma_buy{ma}"] = 10
-        df["normalma"] = df[ibase].rolling(14).mean()
+        df.loc[df[abase] > df[f"ma{ma}"], f"ma_buy{ma}"] = 10
+        df["normalma"] = df[abase].rolling(14).mean()
         df["zero"] = 0
 
-        df["expand_max"] = df[ibase].expanding(freq).max()
-        df["is_max"] = ((df[ibase].rolling(10).mean() / df["expand_max"]) > 0.85).astype(int)
+        df["expand_max"] = df[abase].expanding(freq).max()
+        df["is_max"] = ((df[abase].rolling(10).mean() / df["expand_max"]) > 0.85).astype(int)
         df["is_max"] = df["is_max"] * 1.25 * score_base
-        custom_macd_name1, macd1_ema1, macd1_ema2, macd1_diff, macd1_dea = my_macd(df=df, ibase=ibase, sfreq=freq, bfreq=freq * 2, type=4, score=score_base * 1)
-        # custom_macd_name5, macd5_ema1, macd5_ema2, macd5_diff, macd5_dea = custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq * 2, type=5, score=score_base * 1.05)
-        # custom_macd_name2= custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq*2, type=2, score=score_base*1.05)
-        # custom_macd_name3, macd3_ema1,macd3_ema2, macd3_diff,macd3_dea= custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq*2, type=3, score=score_base*1.1)
-        # custom_macd_name4= custommacd(df=df, ibase=ibase, sfreq=freq/2, bfreq=freq*2, type=4, score=score_base*1.15)
-        # custom_macd_name5, macd5_ema1,macd5_ema2, macd5_diff,macd5_dea= custommacd(df=df, ibase=ibase, sfreq=freq, bfreq=freq*2, type=5, score=score_base*1.2)
+        custom_macd_name1, macd1_ema1, macd1_ema2, macd1_diff, macd1_dea = my_macd(df=df, abase=abase, sfreq=freq, bfreq=freq * 2, type=4, score=score_base * 1)
+        # custom_macd_name5, macd5_ema1, macd5_ema2, macd5_diff, macd5_dea = custommacd(df=df, abase=abase, sfreq=freq, bfreq=freq * 2, type=5, score=score_base * 1.05)
+        # custom_macd_name2= custommacd(df=df, abase=abase, sfreq=freq, bfreq=freq*2, type=2, score=score_base*1.05)
+        # custom_macd_name3, macd3_ema1,macd3_ema2, macd3_diff,macd3_dea= custommacd(df=df, abase=abase, sfreq=freq, bfreq=freq*2, type=3, score=score_base*1.1)
+        # custom_macd_name4= custommacd(df=df, abase=abase, sfreq=freq/2, bfreq=freq*2, type=4, score=score_base*1.15)
+        # custom_macd_name5, macd5_ema1,macd5_ema2, macd5_diff,macd5_dea= custommacd(df=df, abase=abase, sfreq=freq, bfreq=freq*2, type=5, score=score_base*1.2)
 
         a_custom_macd_names = [custom_macd_name1]
         df["final_score"] = 0
@@ -959,14 +953,14 @@ def indicator_test():
         a_vola = []
 
         # trend vs cycle mode
-        # df["d_period"]=talib.HT_DCPERIOD(df[ibase])
+        # df["d_period"]=talib.HT_DCPERIOD(df[abase])
         # df["d_period_ss"]=supersmoother_2p(df["d_period"], freq)
-        # #df["d_phase"]=talib.HT_DCPHASE(df[ibase])
-        # df["sine"], df["leadsine"]=talib.HT_SINE(df[ibase])
-        # #df["mode"]=talib.HT_TRENDMODE(df[ibase]) # mode is ueseless
+        # #df["d_phase"]=talib.HT_DCPHASE(df[abase])
+        # df["sine"], df["leadsine"]=talib.HT_SINE(df[abase])
+        # #df["mode"]=talib.HT_TRENDMODE(df[abase]) # mode is ueseless
         # df["sine_buy"]= (df["sine"]> df["leadsine"]).astype(int)
         # df["sine_buy"]=df["sine_buy"].diff()*5
-        # df["adjust_ma"]=adjust_ma(df,ibase)
+        # df["adjust_ma"]=adjust_ma(df,abase)
         a_hilbert = []
 
         # df_helper=df[ (df[dhp1].notna()) & (df[dhp2].notna())]
@@ -977,9 +971,9 @@ def indicator_test():
         general_mean = df["tomorrow2"].mean()
         general_gmean = gmean(df["tomorrow2"].dropna()) - 1
         period = len(df)
-        days_abv_ma5 = (df[ibase] > df[ibase].rolling(5).mean()).astype(int)
+        days_abv_ma5 = (df[abase] > df[abase].rolling(5).mean()).astype(int)
         days_abv_ma5 = days_abv_ma5.mean()
-        days_abv_ma240 = (df[ibase] > df[ibase].rolling(240).mean()).astype(int)
+        days_abv_ma240 = (df[abase] > df[abase].rolling(240).mean()).astype(int)
         days_abv_ma240 = days_abv_ma240.mean()
         close_to_max = len(df[df["is_max"] == 70]) / period
         de_highpass_std = df["de_highpass"].std
@@ -989,7 +983,7 @@ def indicator_test():
         # dhp_buy = gmean(df_helper.loc[df_helper[dh_buy] == 10, f"tomorrow2"].dropna()) - 1
         # dhp_not_buy = gmean(df_helper.loc[df_helper[dh_buy] == -10, f"tomorrow2"].dropna()) - 1
         # volatility=df_helper["de_highpass"].dropna().mean() # the smaller the better
-        # close_entropy=entropy(df[ibase].dropna())
+        # close_entropy=entropy(df[abase].dropna())
         # de_highpass_entropy=entropy(df["de_highpass"].dropna())
         #
         df_result.at[ts_code, "period"] = period
@@ -2086,7 +2080,7 @@ def kalman_filter():
     plt.show()
 
 
-def adjust_ma(df, ibase):
+def adjust_ma(df, abase):
     a_d_mean = []
     for index, row in df.iterrows():
         d_period = row["d_period"]
@@ -2094,7 +2088,7 @@ def adjust_ma(df, ibase):
         if d_period == 0:
             a_d_mean.append(np.nan)
         else:
-            d_past = df[ibase].iloc[index - d_period:index]
+            d_past = df[abase].iloc[index - d_period:index]
             mean = supersmoother_3p(d_past, d_period)[-1]
             a_d_mean.append(mean)
             print(d_period)
@@ -2115,7 +2109,7 @@ def find_peaks_array(s, n=60):
     return df[f"bot{n}"]
 
 
-def find_peaks(df, ibase, a_n=[60]):
+def find_peaks(df, abase, a_n=[60]):
     """
     Strengh of resistance support are defined by:
     1. how long it remains a resistance or support (remains good for n = 20,60,120,240?)
@@ -2125,7 +2119,7 @@ def find_peaks(df, ibase, a_n=[60]):
     a_bot_name = []
     a_peak_name = []
     np.random.seed(0)
-    s = df[ibase]
+    s = df[abase]
     xs = [0]
     for r in s:
         xs.append(xs[-1] * 0.9 + r)
@@ -2197,17 +2191,17 @@ def find_peaks(df, ibase, a_n=[60]):
     plt.show()
 
 
-def find_flat(df, ibase):
+def find_flat(df, abase):
     """
     go thorugh ALL possible indicators and COMBINE them together to an index that defines up, down trend or no trend.
 
     cast all indicator to 3 values: -1, 0, 1 for down trend, no trend, uptrend.
     :param df:
-    :param ibase:
+    :param abase:
     :return:
     """
     a_freq = [240]
-    df["ma20"] = df[ibase].rolling(20).mean()
+    df["ma20"] = df[abase].rolling(20).mean()
     a_stable = []
 
     # unstable period
@@ -2220,7 +2214,7 @@ def find_flat(df, ibase):
     a_unstable = ["bop", "ad", "obv"]
     # stable period
     for freq in a_freq:
-        df[f"rsi{freq}"] = talib.RSI(df[ibase], timeperiod=freq)
+        df[f"rsi{freq}"] = talib.RSI(df[abase], timeperiod=freq)
 
         """ idea: 
         1.average direction of past freq up must almost be same as average direction of past freq down. AND price should stay somewhat the same.
@@ -2335,9 +2329,9 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
 
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['ibase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
-        if os.path.exists(path):
-            print(f"path exists: {path}")
+        a_path = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}")
+        if os.path.exists(a_path[0]):
+            print(f"path exists: {a_path[0]}")
             continue
 
         df_result = pd.DataFrame()
@@ -2346,31 +2340,35 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
 
             try:
                 func_return_column = kwargs["func"](df=df_asset, **one_kwarg)[0]
+
+                """could also add pearson, but since outcome is binary, no need for pearson"""
+                df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
+                df_result.at[ts_code, "period"] = len(df_asset)
+                df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset["tomorrow1"].dropna())
+                df_result.at[ts_code, "sharp"] = asset_sharp = (df_asset["tomorrow1"]).mean()/(df_asset["tomorrow1"]).std()
+                df_result.at[ts_code, "general_daily_winrate"] = ((df_asset["tomorrow1"] > 1).astype(int)).mean()
+
+                df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
+                df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna()) / asset_gmean
+                df_result.at[ts_code, "uptrend_sharp"] = (df_macd_buy["tomorrow1"].mean()) / (df_macd_buy["tomorrow1"].std()) /asset_sharp
+                df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
+                df_result.at[ts_code, "uptrend_occ"] = len(df_macd_buy)/len(df_asset)
+
+                df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
+                df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna()) / asset_gmean
+                df_result.at[ts_code, "downtrend_sharp"] = (df_macd_sell["tomorrow1"].mean()) / (df_macd_sell["tomorrow1"].std()) / asset_sharp
+                df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
+                df_result.at[ts_code, "downtrend_occ"] = len(df_macd_sell) / len(df_asset)
             except Exception as e:
                 print("exception at func execute", e)
                 continue
-
-            """could also add pearson, but since outcome is binary, no need for pearson"""
-            df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
-            df_result.at[ts_code, "period"] = len(df_asset)
-            df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset["tomorrow1"].dropna())
-            df_result.at[ts_code, "general_daily_winrate"] = ((df_asset["tomorrow1"] > 1).astype(int)).mean()
-
-            df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
-            df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna()) / asset_gmean
-            df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
-            df_result.at[ts_code, "uptrend_occ"] = len(df_macd_buy)/len(df_asset)
-
-            df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
-            df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna()) / asset_gmean
-            df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
-            df_result.at[ts_code, "downtrend_occ"] = len(df_macd_sell) / len(df_asset)
 
         # important check only if up/downtrend_gmean are not nan. Which means they actually exist for this strategy.
         df_result.loc[df_result["uptrend_gmean"].notna(), "up_better_mean"] = (df_result.loc[df_result["uptrend_gmean"].notna(), "uptrend_gmean"] > df_result.loc[df_result["uptrend_gmean"].notna(), "gmean"]).astype(int)
         df_result.loc[df_result["downtrend_gmean"].notna(), "down_better_mean"] = (df_result.loc[df_result["downtrend_gmean"].notna(), "downtrend_gmean"] > df_result.loc[df_result["downtrend_gmean"].notna(), "gmean"]).astype(int)
         df_result["up_down_gmean_diff"] = df_result["uptrend_gmean"] - df_result["downtrend_gmean"]
-        DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
+        LB.to_csv_feather(df=df_result,a_path=a_path, skip_feather=True)
+        # very slow witgh DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
 
     # create summary for all
     df_summary = pd.DataFrame()
@@ -2378,26 +2376,24 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
     df_downtrend_gmean = pd.DataFrame()
     df_up_better_mean = pd.DataFrame()
     df_down_better_mean = pd.DataFrame()
-    ibase=one_kwarg['ibase'] #ibase should not change during iteration.otherwise unstable
+    abase=one_kwarg['abase'] #abase should not change during iteration.otherwise unstable
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        path = f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['ibase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx"
+        a_path =LB.a_path( f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}")
 
-
-        print(f"summarizing {path}")
-
-        df_macd = pd.read_excel(path)
-        df_summary.at[path, "gmean"] = df_macd["gmean"].mean()
-        df_summary.at[path, "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
-        df_summary.at[path, "uptrend_gmean"] = uptrend_gmean = df_macd["uptrend_gmean"].mean()
-        df_summary.at[path, "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
-        df_summary.at[path, "uptrend_occ"]=df_macd["uptrend_occ"].mean()
-        df_summary.at[path, "downtrend_gmean"] = downtrend_gmean = df_macd["downtrend_gmean"].mean()
-        df_summary.at[path, "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
-        df_summary.at[path, "downtrend_occ"] = df_macd["downtrend_occ"].mean()
-        df_summary.at[path, "up_better_mean"] = up_better_mean = df_macd["up_better_mean"].mean()
-        df_summary.at[path, "down_better_mean"] = down_better_mean = df_macd["down_better_mean"].mean()
-        df_summary.at[path, "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
+        print(f"summarizing {a_path[0]}")
+        df_macd = pd.read_csv(a_path[0])
+        df_summary.at[a_path[0], "gmean"] = df_macd["gmean"].mean()
+        df_summary.at[a_path[0], "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
+        df_summary.at[a_path[0], "uptrend_gmean"] = uptrend_gmean = df_macd["uptrend_gmean"].mean()
+        df_summary.at[a_path[0], "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
+        df_summary.at[a_path[0], "uptrend_occ"]=df_macd["uptrend_occ"].mean()
+        df_summary.at[a_path[0], "downtrend_gmean"] = downtrend_gmean = df_macd["downtrend_gmean"].mean()
+        df_summary.at[a_path[0], "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
+        df_summary.at[a_path[0], "downtrend_occ"] = df_macd["downtrend_occ"].mean()
+        df_summary.at[a_path[0], "up_better_mean"] = up_better_mean = df_macd["up_better_mean"].mean()
+        df_summary.at[a_path[0], "down_better_mean"] = down_better_mean = df_macd["down_better_mean"].mean()
+        df_summary.at[a_path[0], "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
 
         # create heatmap only if two frequencies are involved in creation
         #if up/downtrend exists, is it better than mean?
@@ -2406,37 +2402,31 @@ def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "ma
             df_downtrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = downtrend_gmean
             df_up_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = up_better_mean
             df_down_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = down_better_mean
-        elif kwargs['fname']== "gq":
-            df_uptrend_gmean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
-            df_downtrend_gmean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
-            df_up_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
-            df_down_better_mean.at[f"cg_freq{one_kwarg['cg_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
-        elif kwargs['fname']== "gq_rsi":
-            df_uptrend_gmean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
-            df_downtrend_gmean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
-            df_up_better_mean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
-            df_down_better_mean.at[f"rsi_freq{one_kwarg['rsi_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
-
+        elif kwargs['fname']== "my_gq":
+            df_uptrend_gmean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
+            df_downtrend_gmean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
+            df_up_better_mean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
+            df_down_better_mean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
 
     d_summary = {"Overview": df_summary}
     d_summary["uptrend_gmean"] = df_uptrend_gmean
     d_summary["downtrend_gmean"] = df_downtrend_gmean
     d_summary["up_better_mean"] = df_up_better_mean
     d_summary["down_better_mean"] = df_down_better_mean
-    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/{ibase}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
+    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/{abase}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
 
 
 def macd_for_one(sfreq=240, bfreq=750, ts_code="000002.SZ", type=1, score=20):
     df_asset = DB.get_asset(ts_code=ts_code)
     print("ts_code", ts_code)
-    macd_labels = my_macd(df=df_asset, ibase="close", sfreq=sfreq, bfreq=bfreq, type=type, score=score)
+    macd_labels = my_macd(df=df_asset, abase="close", sfreq=sfreq, bfreq=bfreq, type=type, score=score)
     df_asset = df_asset[macd_labels + ["close"]]
     Plot.plot_chart(df_asset, df_asset.columns)
 
 
-def atest_manu(fname="macd", a_ibase=["close"]):
+def atest_manu(fname="macd", a_abase=["close"]):
 
-    for ibase in a_ibase:
+    for abase in a_abase:
 
         #setting generation
         a_kwargs = []
@@ -2445,17 +2435,17 @@ def atest_manu(fname="macd", a_ibase=["close"]):
             d_steps = {"F": 1, "FD": 2, "G": 1, "I": 2, "E": 6}
             for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
                 if sfreq < bfreq:
-                    a_kwargs.append({"ibase": ibase, "sfreq": sfreq, "bfreq": bfreq, "type": 1, "score": 1})
+                    a_kwargs.append({"abase": abase, "sfreq": sfreq, "bfreq": bfreq, "type": 1, "score": 1})
         elif fname == "is_max":
             func = my_ismax
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
             for q in np.linspace(0, 1,11):
-                a_kwargs.append({"ibase": ibase, "q": q, "score": 1})
+                a_kwargs.append({"abase": abase, "q": q, "score": 1})
         elif fname == "is_min":
             func = my_ismin
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
             for q in np.linspace(0, 1,11):
-                a_kwargs.append({"ibase": ibase, "q": q, "score": 1})
+                a_kwargs.append({"abase": abase, "q": q, "score": 1})
 
         #run atest
         LB.print_iterables(a_kwargs)
@@ -2463,12 +2453,11 @@ def atest_manu(fname="macd", a_ibase=["close"]):
             atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
 
 
-def atest_auto(fname):
+def atest_auto(type=4):
 
-    for asset in ["F","FD","G","I","E"]:
+    for asset in ["E"]: #,"FD","G","I","E"
         #get example column of this asset
         a_example_column = DB.get_example_column(asset=asset, numeric_only=True)
-
         # remove unessesary columns:
         a_columns = []
         for column in a_example_column:
@@ -2479,18 +2468,12 @@ def atest_auto(fname):
         for col in a_columns:
             #setting generation
             a_kwargs = []
-            if fname == "gq":
-                func = my_gq
-                d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-                for cg_freq in [5,10,20,40,60]:
-                    for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
-                        a_kwargs.append({"ibase": col, "q_low": q_low, "q_high":q_high,"cg_freq":cg_freq,"score": 1})
-            elif fname == "gq_rsi":
-                func = my_gq_rsi
-                d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-                for cg_freq in [5,10,20,40,60]:
-                    for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
-                        a_kwargs.append({"ibase": col, "q_low": q_low, "q_high":q_high,"rsi_freq":cg_freq,"score": 1})
+            func = auto
+            fname=func.__name__
+            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 2}
+            for norm_freq in [5,10,20,60,120,240,500]:
+                for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
+                    a_kwargs.append({"abase": col, "q_low": q_low, "q_high":q_high,"norm_freq":norm_freq,"score": 1,"type":type})
 
             #run atest
             LB.print_iterables(a_kwargs)
@@ -2499,10 +2482,19 @@ def atest_auto(fname):
 
 
 if __name__ == '__main__':
-    for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
-        atest_manu(fname="gq_rsi", a_ibase=[column])
+    # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
+    #     atest_manu(fname="gq_rsi", a_abase=[column])
+    #
+    #
 
-    atest_auto(fname="gq_rsi")
+    pr = cProfile.Profile()
+    pr.enable()
+
+    atest_auto()
+
+
+    #pr.disable()
+    #pr.print_stats(sort='file')
 
 
 
@@ -2610,12 +2602,9 @@ How to distinguish between turn of trend vs temporal signal (fir finite impulse 
 similarities:
 1. both can have very high pass
 
-
 difference:
 1. at turnpoint, the volume would divergence
 2. 
-
-
 
 4. cases:
 1. price incease, vol increase
@@ -2623,41 +2612,16 @@ difference:
 3. price increase, vol decrease
 4. price decrease, vol increase
 
-
 5. Check volume to see if a resistance can be broken or not
 
 6. Bullishness measure. 1. gmean, 2. overma 3. how often it stays at 80% of history max price
 MACD + ma method = better MACD?
 
-
-7. The problem of finding a trend up or going down in ADVANCE is that high pass AND lowpass together form the price. 
-Sometimes High pass leads
-Sometimes low pass leads the trend
-high pass vs a lot of low pass. =80% vs 20%. Who do you trust?
-
-
-
-In an continous field, who to draw the line between buy and sell? 
-Basically. How to create border in continous world
-A: only relative comparison is useful. absolute values are not
-
-1. Use mean. Mean price, mean std
-2. Use quantile. 4 quantile
-3. 
-
-
 Strategy:
 1. Anticipate turning point
 1. Buy at (good) stock RSI extrem extrem low in a very long time and bet against the mean. e.g. at rsi 240 at -20 or top 10 most lowest case.
-
-
 2. wait for turning point to confirm
-2. 
 
-
-
-
-Properties on uptrend
 
 
 """

@@ -16,6 +16,8 @@ from scipy.stats import gmean
 from tqdm import tqdm
 import Alpha
 import Atest
+import _API_JQ
+import ffn
 
 from LB import *
 
@@ -180,7 +182,7 @@ def update_ts_code(asset="E", market="CN", big_update=True):
         df["name"] = df["ts_code"]
         print(df)
         df = df.set_index("ts_code")
-        df = df[~df.index.duplicated(keep="last")]
+        df = df.loc[~df.index.duplicated(keep="last")]
         df = df[["name"]]
     elif (asset == "B"):
         # 可转债，相当于股票。可以选择换成股票，也可以选择换成利率。网上信息很少，几乎没人玩
@@ -258,6 +260,8 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
 
     def set_index_helper(df):
         df.set_index(keys="trade_date", drop=True, inplace=True)
+        df = df.loc[~df.index.duplicated(keep="last")]  # important
+        df=df[df.index.notna()]
         df.index = df.index.astype(int)
         return df
 
@@ -347,7 +351,7 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
             # append old df and drop duplicates
             if not df_saved.empty:
                 df = df_saved.append(df, sort=False)
-            df = df[~df.index.duplicated(keep="last")]  # important
+            df = df.loc[~df.index.duplicated(keep="last")]  # important
 
             # interpolate/fill between empty fina and pledge_stat values
             all_report_label = list(df_balancesheet.columns.values) + list(df_cashflow.columns.values) + list(df_indicator.columns.values) + ["pledge_ratio"]
@@ -387,8 +391,8 @@ def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=Tr
         # 3. add my derivative indices and save it
         if not df.empty:
             update_assets_EIFD_D_rolling(df=df, asset=asset)
-            update_assets_EIFD_D_expanding(df=df, asset=asset, ts_code=ts_code)
-            update_assets_EIFD_D_custom(df=df, asset=asset)
+            update_assets_EIFD_D_expanding(df=df, asset=asset)
+            update_assets_EIFD_D_point(df=df, asset=asset)
         LB.to_csv_feather(df=df, a_path=a_path)
         print(asset, ts_code, freq, end_date, "UPDATED!", real_latest_trade_date)
 
@@ -413,6 +417,7 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
             for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
                 beta_corr = Alpha.corr(df=df, abase="close", freq=freq, re=Alpha.RE.r, corr_with=ts_code, corr_series=df_index["close"])
                 df[f"alpha_{ts_code}"] = df["pct_chg"] - df[beta_corr] * df_index["pct_chg"]
+                df[f"e_alpha_{ts_code}"]=df[f"alpha_{ts_code}"].expanding(240).mean()
 
     # sharp ratio
     for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
@@ -423,8 +428,15 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
         df[f"gmean{freq}"] = 1 + (df["pct_chg"] / 100)
         df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(my_sharp, raw=False)
 
+    # Testing - 高送转
+    #1. total share/ first day share
+    #2. difference between today share and tomorrow share
+    if "total_share"in df.columns:
+        df["norm_total_share"]=df["total_share"]/ df.at[df["total_share"].first_valid_index,"total_share"]
+        df["pct_total_share"]=df["pct_total_share"].pct_change()
 
-def update_assets_EIFD_D_custom(df, asset, bfreq=c_bfreq()):
+
+def update_assets_EIFD_D_point(df, asset, bfreq=c_bfreq()):
 
     # other alpha indicators
     Alpha.ivola(df=df)  # 0.890578031539917 for 300 loop
@@ -456,7 +468,7 @@ def update_assets_EIFD_D_expanding(df, asset):
         5. days above ma5
         """
 
-    a_freqs = [5, 20, 60, 240]
+    a_freqs = [5, 20, 60, 240, 500,750]
 
     # 1. Geomean.
     # one time calculation
@@ -474,6 +486,7 @@ def update_assets_EIFD_D_expanding(df, asset):
         df[f"ma{freq}"] = df["close"].rolling(freq).mean()
         df[f"abv_ma{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
         df[f"abv_lp{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
+        df[f"rsi{freq}"]=talib.RSI(df["close"],freq)
 
         # expanding
         df[f"e_abv_ma{freq}"] = df[f"abv_ma{freq}"].expanding(freq).mean()
@@ -541,51 +554,78 @@ def update_assets_F_D_reindex_reverse(ts_code, start_date, end_date):
 
 # For FD D
 def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_date, adj=None, market="CN"):
-    df = break_tushare_limit_helper(func=_API_Tushare.my_pro_bar, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}", "adj": adj, "freq": freq, "asset": asset}, limit=1000)
+    if ".OF" in str(ts_code):
+        # 场外基金
 
-    # TODO to be deletet if breaker works
-    # df = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
-    # request_df_len = len(df)
-    # last_df2 = df
-    #
-    # """for some reason tushare only allows fund to be given at max 1000 entries per request"""
-    # while request_df_len == 1000:  # TODO if this is fixed or add another way to loop
-    #     middle_date = last_df2.at[len(last_df2) - 1, "trade_date"]
-    #     df2 = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(middle_date), adj=adj)
-    #     if (df2.equals(last_df2)):
-    #         break
-    #     df = df.append(df2, sort=False, ignore_index=True)
-    #     df = df.drop_duplicates(subset="trade_date")
-    #     request_df_len = len(df2)
-    #     last_df2 = df2
+        df = break_tushare_limit_helper(func=_API_Tushare.my_fund_nav, kwargs={"ts_code": ts_code}, limit=1000)
+        LB.df_reverse_reindex(df)
 
-    """
-    不复权 = 无
-    前复权 = 当日收盘价 × 当日复权因子 / 最新复权因子 (This is the standard Xueqiu also uses)
-    后复权 = 当日收盘价 x 当日复权因子
-    Fund 前复权was tested and compared to xueqiu and it was CORRECT
-    """
-    if not df.empty:
-        df.index = df["trade_date"]
-        df_adj_factor = _API_Tushare.my_query(api_name='fund_adj', ts_code=ts_code, start_date=start_date, end_date=end_date)
-        if df_adj_factor.empty:
-            print(asset, ts_code, freq, "has no adj_factor, skip")
-        else:
-            df_adj_factor.index = df_adj_factor.index.astype(int)
-            latest_adj = df_adj_factor.at[0, "adj_factor"]
-            df_adj_factor.index = df_adj_factor["trade_date"]
-            df["adj_factor"] = df_adj_factor["adj_factor"]
-            df["adj_factor"] = df["adj_factor"].interpolate()  # interpolate between alues because some dates are missing from tushare
-
-            # df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]] * df.adj_factor / latest_adj
-            for column in ["open", "high", "low", "close"]:
-                # for debug include 不复权and后复权
-                # df[f"{column}_不复权"]=df[column]
-                # df[f"{column}_后复权"]=df[column] * df["adj_factor"]
-                df[column] = df[column] * df["adj_factor"] / latest_adj
+        df_helper=pd.DataFrame()
+        for ohlc in ["open","high","low","close"]:
+            df_helper[ohlc]=df["unit_nav"].astype(int)
+        df_helper["trade_date"]=df["ann_date"]
+        df_helper["pct_chg"]=df_helper["open"].pct_change()
+        df=df_helper
         df = LB.df_reverse_reindex(df)
-        LB.columns_remove(df, ["pre_close", "amount", "change", "adj_factor"])
-    return df
+
+        # df.to_csv(f"{ts_code}.csv")
+        # print(df)
+        # df.index=df["trade_date"]
+        # LB.columns_remove(df,["trade_date"])
+        # df = df.loc[~df.index.duplicated(keep="last")]
+        # df=df.loc[df.index.notna()]
+
+        return df
+
+    else:
+        #场内基金
+        df = break_tushare_limit_helper(func=_API_Tushare.my_fund_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
+        if df.empty:
+            print("not good")
+        # TODO to be deletet if breaker works
+        # df = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(end_date), adj=adj)
+        # request_df_len = len(df)
+        # last_df2 = df
+        #
+        # """for some reason tushare only allows fund to be given at max 1000 entries per request"""
+        # while request_df_len == 1000:  # TODO if this is fixed or add another way to loop
+        #     middle_date = last_df2.at[len(last_df2) - 1, "trade_date"]
+        #     df2 = API_Tushare.my_pro_bar(ts_code=ts_code, freq=freq, asset=asset, start_date=str(start_date), end_date=str(middle_date), adj=adj)
+        #     if (df2.equals(last_df2)):
+        #         break
+        #     df = df.append(df2, sort=False, ignore_index=True)
+        #     df = df.drop_duplicates(subset="trade_date")
+        #     request_df_len = len(df2)
+        #     last_df2 = df2
+
+        """
+        不复权 = 无
+        前复权 = 当日收盘价 × 当日复权因子 / 最新复权因子 (This is the standard Xueqiu also uses)
+        后复权 = 当日收盘价 x 当日复权因子
+        Fund 前复权was tested and compared to xueqiu and it was CORRECT
+        """
+        if not df.empty:
+            df.index = df["trade_date"]
+            df_adj_factor = _API_Tushare.my_query(api_name='fund_adj', ts_code=ts_code, start_date=start_date, end_date=end_date)
+            if df_adj_factor.empty:
+                print(asset, ts_code, freq, "has no adj_factor, skip")
+            else:
+                df_adj_factor.index = df_adj_factor.index.astype(int)
+                latest_adj = df_adj_factor.at[0, "adj_factor"]
+                df_adj_factor.index = df_adj_factor["trade_date"]
+                df["adj_factor"] = df_adj_factor["adj_factor"]
+                df["adj_factor"] = df["adj_factor"].interpolate()  # interpolate between alues because some dates are missing from tushare
+
+                # df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]] * df.adj_factor / latest_adj
+                for column in ["open", "high", "low", "close"]:
+                    # for debug include 不复权and后复权
+                    # df[f"{column}_不复权"]=df[column]
+                    # df[f"{column}_后复权"]=df[column] * df["adj_factor"]
+                    df[column] = df[column] * df["adj_factor"] / latest_adj
+
+            df = LB.df_reverse_reindex(df)
+            LB.columns_remove(df, ["pre_close", "amount", "change", "adj_factor"])
+        return df
 
 
 # recommended update frequency W
@@ -1025,6 +1065,26 @@ def update_assets_stock_market_all(start_date="00000000", end_date=today(), asse
     print("Date_Base UPDATED")
 
 
+def update_margin_total():
+    df_trade_date=get_trade_date()
+    a_result=[]
+    for trade_date in df_trade_date.index:
+        print(f"update_margin_total {trade_date}")
+        df_margintotal=_API_JQ.my_margin(date=trade_date)
+        a_result.append(df_margintotal)
+
+    df_result=pd.concat(a_result, sort=False)
+    df_sh=get_asset("000001.SH",asset="I")
+    df_sh=LB.ohlc(df_sh)
+    for market in [f"XSHE", f"XSHG"]:
+        df_market=df_result[df_result["exchange_code"]==market]
+        df_market["trade_date"]=df_market["date"].apply(LB.trade_date_switcher)
+        df_market["trade_date"]=df_market["trade_date"].astype(int)
+        df_market=pd.merge(df_sh,df_market,how="left",on="trade_date",sort=False)
+        a_path=LB.a_path(f"Market/CN/Asset/E_Market/margin_total/{market}")
+        LB.to_csv_feather(df=df_market,a_path=a_path)
+
+
 @LB.deco_except_empty_df
 def get_file(path):
     return pd.read_excel(path)
@@ -1054,7 +1114,7 @@ def get_ts_code(a_asset=["E"], market="CN", d_queries={}):
         if (asset == "FD"):
             df = df[df["delist_date"].isna()]
             # df = df[df["type"]=="契约型开放式"] #契约型开放式 and 契约型封闭式 都可以买 在线交易，封闭式不能随时赎回，但是可以在二级市场上专卖。 开放式更加资本化，发展的好可以扩大盘面，发展的不好可以随时赎回。所以开放式的盘面大小很重要。越大越稳重
-            df = df[df["market"] == "E"]  # for now, only consider Equity market traded funds
+            df = df[df["market"] == "E"]#TODO manually change it to E  # for now, only consider Equity market traded funds
 
         if d_queries:
             a_queries = d_queries[asset]
@@ -1073,6 +1133,58 @@ def get_asset(ts_code="000002.SZ", asset="E", freq="D", market="CN"):
 # def get_group_instance(ts_code="asset_E", market="CN", freq="D"):
 #     return get(LB.a_path(f"Market/{market}/Asset/G/{freq}/{ts_code}"), set_index="trade_date")
 
+def update_date_news_tushare():
+    df_trade_date=get_trade_date()
+    for today,tomorrow in LB.custom_pairwise_overlap(list(df_trade_date.index)):
+        a_path = LB.a_path(f"Market/CN/Date/News/tushare/{today}")
+        print(today)
+        if not os.path.isfile(a_path[0]):
+            df=_API_Tushare.my_major_news(start_date=f"{LB.trade_date_switcher(today)} 00:00:00",end_date=f"{LB.trade_date_switcher(tomorrow)} 00:00:00")
+            if df.empty:
+                continue
+            LB.to_csv_feather(df=df,a_path=a_path,skip_feather=True)
+
+def update_date_news_tushare_cctv():
+    df_trade_date=get_trade_date()
+    for today in df_trade_date.index[::-1]:
+        a_path = LB.a_path(f"Market/CN/Date/News/tushare_cctv/{today}")
+        print(today)
+        if not os.path.isfile(a_path[0]):
+            df=_API_Tushare.my_cctv_news(date=today)
+            if df.empty:
+                continue
+            LB.to_csv_feather(df=df,a_path=a_path,skip_feather=True)
+
+
+def update_date_news_jq():
+    df_trade_date=get_trade_date()
+    for today in df_trade_date.index[::-1]:
+        a_path = LB.a_path(f"Market/CN/Date/News/jq/{today}")
+        print(today)
+        if not os.path.isfile(a_path[0]):
+            df=_API_JQ.my_cctv_news(day=LB.trade_date_switcher(today))
+            if df.empty:
+                continue
+            LB.to_csv_feather(df=df,a_path=a_path,skip_feather=True)
+
+
+def get_date_news(trade_date, api="tushare"):
+    return get(LB.a_path(f"Market/CN/Date/News/{api}/{trade_date}"))
+
+def update_date_news_count(api="tushare"):
+    df_sh=get_asset("000001.SH",asset="I")
+    df_sh=df_sh[["open","high","low","close"]]
+    for trade_date in df_sh.index:
+        df_news=get_date_news(trade_date, api)
+        str_df=df_news.to_string()
+        for keyword in ["股市","股份","股份公司","增长","好","涨幅"]:
+            df_sh.at[trade_date,keyword]=str_df.count(keyword)/len(str_df)
+    a_path=LB.a_path(f"Market/CN/Date/News/{api}/count/count")
+    LB.to_csv_feather(df=df_sh,a_path=a_path)
+
+
+
+
 
 def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
     df = get(LB.a_path(f"Market/{market}/Asset/E/D_Fun/{query}/{ts_code}"), set_index="end_date")
@@ -1080,7 +1192,7 @@ def get_assets_E_D_Fun(query, ts_code, columns=["end_date"], market="CN"):
         print("Error get_assets_E_D_Fun ", query, "not exist for", ts_code)
         return LB.empty_df(query)[columns]
     else:
-        df = df[~df.index.duplicated(keep="last")]
+        df = df.loc[~df.index.duplicated(keep="last")]
         return df[columns]
 
 
@@ -1089,7 +1201,7 @@ def get_assets_pledge_stat(ts_code, columns, market="CN"):
     if df.empty:
         print("Error get_assets_pledge_stat not exist for", ts_code)
         df = LB.empty_df("pledge_stat")
-    df = df[~df.index.duplicated(keep="last")]
+    df = df.loc[~df.index.duplicated(keep="last")]
     return df[columns]
 
 
@@ -1138,7 +1250,7 @@ def get_date(trade_date, a_assets=["E"], freq="D", market="CN"):  # might need g
 def get_date_E_oth(trade_date, oth_name, market="CN"):
     return get(LB.a_path(f"Market/{market}/Date/E/{oth_name}/{trade_date}"), set_index="")  # nothing to set
 
-def get_example_column(asset="E",freq="D", numeric_only=False, a_filter=[]):
+def get_example_column(asset="E",freq="D", numeric_only=False, notna=True):
     # get the latest column of the asset file
     if asset == "E":
         ts_code = "000001.SZ"
@@ -1153,12 +1265,12 @@ def get_example_column(asset="E",freq="D", numeric_only=False, a_filter=[]):
     else:
         ts_code = "000001.SZ"
 
-    #nummeric only or not
-    if numeric_only:
-        return list(get_numeric_df(get_asset(ts_code, asset, freq)).columns)
-    else:
-        return list(get_asset(ts_code, asset, freq).columns)
+    df=get_asset(ts_code, asset, freq)
+    if notna:
+        df=df.dropna(how="all",axis=1)
 
+    #nummeric only or not
+    return list(get_numeric_df(df).columns) if numeric_only else list(df.columns)
 
 
 
@@ -1259,7 +1371,7 @@ def update_date_beta_table(a_asset=["E"], a_freqs=[240]):
             for all past beta frequencies
     """
 
-    allowed_assets=["E","I","FD"]
+    allowed_assets=["E","I","FD","G"]
     for asset in a_asset:
         if asset not in allowed_assets:
             continue
@@ -1276,6 +1388,33 @@ def update_date_beta_table(a_asset=["E"], a_freqs=[240]):
                 for asset_counter2, (ts_code2,df_asset2) in enumerate(d_preload.items()):
                     print(f"freq: {freq}. beta: {ts_code1} - {ts_code2}")
                     df_result[ts_code2]=df_result["close"].rolling(freq,min_periods=2).corr(df_asset2["close"])
+                LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
+
+def update_date_beta_table_I(a_freqs=[240]):
+
+    """
+    This calculates pairwise beta between Index and all stocks for all days
+    for all trade_dates
+        for all assets
+            for all past beta frequencies
+    """
+
+    for asset in ["E"]:
+
+        #get the index
+        d_preload_index = preload(asset="I",step=1,d_queries_ts_code=LB.c_I_queries())
+        d_preload = preload(asset=asset, step=1)
+
+        for freq in a_freqs:
+            for index_counter, (ts_code_index,df_index) in enumerate(d_preload_index.items()):
+                a_path = LB.a_path(f"{LB.c_root_beta()}Market/CN/Asset/Beta/I/{freq}/{ts_code_index}")
+                if os.path.isfile(a_path[0]):
+                    continue
+
+                df_result = df_index[["close"]]
+                for asset_counter, (ts_code_asset,df_asset) in enumerate(d_preload.items()):
+                    print(f"freq: {freq}. beta: {ts_code_index} - {ts_code_asset}")
+                    df_result[ts_code_asset]=df_result["close"].rolling(freq,min_periods=2).corr(df_asset["close"])
                 LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
 
 
@@ -1315,9 +1454,9 @@ def update_all_in_one(big_update=False):
 
     # 2.2. ASSET - DF
     # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
-    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
     # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_steps=middle_steps)  # SMART
-    multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
+    # multi_process(func=update_assets_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False}, a_steps=[1])  # SMART
 
 
     # 3.1. DATE - OTH
@@ -1339,8 +1478,8 @@ def update_all_in_one(big_update=False):
 
 
 class Global:
-    df_asset=get_asset()
-    d_index = preload(asset="I", d_queries_ts_code={"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]})
+    df_asset= get_asset()
+    d_index = preload(asset="I", d_queries_ts_code=LB.c_I_queries())
 
 
 # speed order=remove apply and loc, use vectorize where possible
@@ -1356,8 +1495,12 @@ if __name__ == '__main__':
     try:
         big_update = False
 
-
-        update_date_beta_table()
+        #update_date_news_tushare_cctv()
+        # for api in ["tushare","jq","tushare_cctv"]:
+        #     update_date_news_count(api)
+        #update_all_in_one(big_update)
+        update_margin_total()
+        #update_date_beta_table(a_asset=["G"])
 
     except Exception as e:
         traceback.print_exc()

@@ -152,7 +152,7 @@ def bruteforce_iterate():
                 # CHECK IF OVERRIDE OR NOT if small update, then continue if file exists
                 if not setting["big_update"]:
                     for key in LB.c_bfreq():
-                        path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_fgain{key}.csv"
+                        path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(abase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_fgain{key}.csv"
                         if not os.path.exists(path):
                             LB.line_print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
                             break  # go into the ibase
@@ -163,7 +163,7 @@ def bruteforce_iterate():
                     LB.line_print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
 
                 # create sample
-                path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_sample"
+                path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(abase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_sample"
                 df_sample = d_df_asset["000001.SZ"].copy()
                 print("one setting is", {**one_setting})
                 deri_function(df=df_sample, ibase=ibase.value, **one_setting)
@@ -185,7 +185,7 @@ def bruteforce_iterate():
                 # save evaluated results
                 for key, df in d_fgain_mean_detail.items():
                     df.index.name = "ts_code"
-                    path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(ibase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_{key}"
+                    path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(abase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_{key}"
                     # DB.ts_code_series_to_excel(df_ts_code=df, path=path, sort=[key, False], asset="E", group_result=setting["group_result"])
                     LB.to_csv_feather(df=df, a_path=LB.a_path(path), index_relevant=True, skip_feather=True)
 

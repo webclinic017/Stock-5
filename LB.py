@@ -34,6 +34,19 @@ pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
+
+#decorator
+def trade_date_norm(func):
+    def this_function_will_never_be_seen(*args, **kwargs):
+        try:
+            if "date" in kwargs:
+                kwargs["date"]=trade_date_switcher(kwargs["date"])
+            return func(*args, **kwargs)
+        except Exception as e:
+            return
+    return this_function_will_never_be_seen
+
+
 # decorator functions must be at top
 def deco_only_big_update(func):
     def this_invisible_func(*args, **kwargs):
@@ -80,7 +93,7 @@ def today():
     return str(datetime.now().date()).replace("-", "")
 
 
-def indi_name(ibase, deri, d_variables={}):
+def indi_name(abase, deri, d_variables={}):
     variables = ""
     for key, enum_val in d_variables.items():
         if key not in ["df", "ibase"]:
@@ -90,9 +103,9 @@ def indi_name(ibase, deri, d_variables={}):
             except:
                 variables = f"{variables}{key}={enum_val},"
     if variables:
-        return f"{ibase}.{deri}({variables})"
+        return f"{abase}.{deri}({variables})"
     else:
-        return f"{ibase}.{deri}"
+        return f"{abase}.{deri}"
 
 
 def fibonacci(n):
@@ -229,6 +242,7 @@ def get_trade_date_datetime_weekofyear(trade_date):
 
 
 def df_reverse_reindex(df):
+    df = df.loc[~df.index.duplicated(keep="last")]
     df = df.reindex(index=df.index[::-1]).set_index(pd.Series(range(0, len(df.index))))
     return df
 
@@ -450,6 +464,8 @@ def c_bfreq():
 def c_G_queries():
     return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','exchange'] "]}
 
+def c_I_queries():
+    return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
 
 class BFreq(enum.Enum):
     f1 = 1
@@ -659,6 +675,11 @@ def std(xs):
     std = math.sqrt(variance)
     return std
 
+def trade_date_switcher(trade_date):
+    if "-" in str(trade_date):
+        return str(trade_date).replace("-","")
+    else:
+        return str(str(trade_date)[0:4]+"-"+str(trade_date)[4:6]+"-"+str(trade_date)[6:8])
 
 def timeseries_to_season(df):
     """converts a df time series to another df containing only the last day of season"""
@@ -749,7 +770,10 @@ def drange(start,end,step):
 
 
 def my_sharp(series):
-    return series.mean()/series.std()
+    try:
+        return series.mean()/series.std()
+    except Exception as e:
+        return np.nan
 
 def my_gmean(series):
     return gmean((series / 100) + 1)
@@ -784,6 +808,8 @@ def print_iterables(d):
         for x in d:
             print(x)
 
+def ohlc(df):
+    return df[["open","high","low","close"]]
 
 def btest_quantile(series):
     """this function should not exist. it helps in btest to eval quantil str in one line"""
@@ -791,7 +817,29 @@ def btest_quantile(series):
     d_result={"left":array[0],"right":array[1]}
     return d_result
 
+def convert_index(df,column):
+    import DB
+    df_sh=pd.DataFrame()
+    df_sh["index_helper"]=DB.Global.d_index["000001.SH"].index
+    df_sh["index_helper"]=df_sh["index_helper"].astype(str)
 
+    def my_converter(val):
+        val=str(val).replace("-","")
+        if len(val)==6:#yyyymm
+            true_index=df_sh["index_helper"].str.slice(0,6)==(str(val))
+            df=df_sh[true_index]
+
+            df=df.tail(1)
+            if df.empty:
+                return val+"01"
+            else:
+                last_day_of_month=df["index_helper"].iat[-1]
+                val=last_day_of_month
+        elif len(val)==4:#yyyy
+            return my_converter(val+"12")
+        return val
+    df[column]=df[column].apply(my_converter)
+    """converts string or interger index to date format"""
 
 # inside functions
 class interrupt_class:  # static method inside class is required to break the loop because two threads

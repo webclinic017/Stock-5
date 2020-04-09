@@ -99,6 +99,11 @@ def my_index_member(index_code):
 def my_fund_basic(market="E", fields="ts_code,name,fund_type,list_date,delist_date,issue_amount,m_fee,c_fee,benchmark,invest_type,type,market,custodian,management"):
     return get(func=pro.fund_basic, fname="pro.fund_basic", kwargs=locals())
 
+def my_fund_daily(ts_code="",start_date="",end_date=""):
+    return get(func=pro.fund_daily, fname="pro.fund_daily", kwargs=locals())
+
+def my_fund_nav(ts_code="",market="O"):
+    return get(func=pro.fund_nav, fname="pro.fund_nav", kwargs=locals())
 
 def my_fx_daily(ts_code="", trade_date="", start_date="", end_date=""):
     """limited to 1000 rows"""
@@ -118,10 +123,15 @@ def my_yc_cb(ts_code="", curve_type="", trade_date="",start_date="",end_date="")
 def my_concept(src="ts"):
     return get(func=pro.concept, fname="pro.concept", kwargs=locals())
 
-def my_concept_detail(id="TS2",ts_code=""):
+def my_concept_detail(id="",ts_code="",fields="id,concept_name,ts_code,name,in_date,out_date"):
     return get(func=pro.concept_detail, fname="pro.concept_detail", kwargs=locals())
 
+def my_major_news(start_date="",end_date="",fields="title,content,pub_time,src"):
+    return get(func=pro.major_news, fname="pro.major_news", kwargs=locals())
+
+def my_cctv_news(date=""):
+    return get(func=pro.cctv_news, fname="pro.cctv_news", kwargs=locals())
+
 if __name__ == '__main__':
-    df = my_concept()
+    df=my_pro_bar(ts_code="600519.SH",asset="E",freq="30min",start_date="20200408",end_date="20200408")
     print(df)
-    pass

@@ -132,20 +132,28 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     df_port_c["tomorrow_pct_chg"] = df_port_c["all_pct_chg"].shift(-1)  # add a future pct_chg 1 for easier target
     period = len(df_trade_h.groupby("trade_date"))
     df_overview.at[0, "period"] = period
+
     df_overview.at[0, "pct_days_involved"] = 1 - (len(df_port_c[df_port_c["port_size"] == 0]) / len(df_port_c))
 
     df_overview.at[0, "sell_mean_T+"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "T+"].mean()
-    df_overview.at[0, "asset_sell_winrate"] = len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell") & (df_trade_h["comp_chg"] > 1)]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
+
+    s_sell_comp=df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna()
+
+    df_overview.at[0, "asset_sell_winrate"] = len(s_sell_comp[s_sell_comp > 1]) / len(df_trade_h.loc[(df_trade_h["trade_type"] == "sell")])
     df_overview.at[0, "all_daily_winrate"] = len(df_port_c.loc[df_port_c["all_pct_chg"] > 1]) / len(df_port_c)
 
-    df_overview.at[0, "asset_sell_gmean"] = gmean(df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].dropna())  # everytime you sell a stock
+    df_overview.at[0, "asset_sell_gmean"] = gmean(s_sell_comp)  # everytime you sell a stock
     df_overview.at[0, "all_gmean"] = gmean(df_port_c["all_pct_chg"].dropna())  # everyday
 
-    df_overview.at[0, "asset_sell_pct_chg"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].mean()  # everytime you sell a stock
+    df_overview.at[0, "asset_sell_pct_chg"] = s_sell_comp.mean()  # everytime you sell a stock
     df_overview.at[0, "all_pct_chg"] = df_port_c["all_pct_chg"].mean()  # everyday
 
-    df_overview.at[0, "asset_sell_pct_chg_std"] = df_trade_h.loc[(df_trade_h["trade_type"] == "sell"), "comp_chg"].std()
+    df_overview.at[0, "asset_sell_sharp"] = s_sell_comp.apply(LB.my_sharp)
+    df_overview.at[0, "all_sharp"] = df_port_c["all_pct_chg"].apply(LB.my_sharp)  # everyday
+
+    df_overview.at[0, "asset_sell_pct_chg_std"] = s_sell_comp.std()
     df_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
+
 
     try:
         df_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
@@ -230,8 +238,10 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     LB.to_csv_feather(df=df_overview, a_path=LB.a_path(f"{portfolio_path}/overview_{setting['id']}"), skip_feather=True,index_relevant=False)
     LB.to_csv_feather(df=df_trade_h, a_path=LB.a_path(f"{portfolio_path}/trade_h_{setting['id']}"), skip_feather=True,index_relevant=False)
     LB.to_csv_feather(df=df_port_c, a_path=LB.a_path(f"{portfolio_path}/chart_{setting['id']}"),  skip_feather=True,index_relevant=True)
+    for key, value in setting.items():
+        print("what",key,":",value)
+    df_setting = pd.DataFrame(setting,index=[0])
 
-    df_setting = pd.DataFrame(setting)
     LB.to_csv_feather(df=df_setting, a_path=LB.a_path(f"{portfolio_path}/setting_{setting['id']}"),  skip_feather=True,index_relevant=False)
 
     print("=" * 50)
@@ -581,7 +591,7 @@ def get_setting_master():
         "id": "",  # datetime.now().strftime('%Y%m%d%H%M%S'), but done in backtest_once_loop
         "send_mail": False,
         "print_log": True,
-        "auto": (),
+        "auto": {},
 
         # buy focus = Select.
         "f_query_asset": ["df_today['period']>240"],  # ,'period > 240' is ALWAYS THERE FOR SPEED REASON, "trend > 0.2", filter everything from group str to price int
@@ -608,11 +618,11 @@ def get_setting_master():
     }
 
 def btest_manu(setting_master = get_setting_master()):
-
+    setting_master["auto"] = {} #important {} and not ()
     # settings creation  #,"G"
     for asset in ["E"]:
+
         setting_asset = copy.deepcopy(setting_master)
-        setting_master["auto"] = ()
         setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"] if asset == "G" else []
         setting_asset["assets"] = [asset]
         a_setting_instance = []
@@ -652,15 +662,10 @@ def btest_manu(setting_master = get_setting_master()):
         #general: quantile, ,"turnover_rate","total_mv","pe_ttm","ps_ttm","total_share","pb","vol"
         #for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
 
-        for column1 in ["bull"]:
-            for low_quant1,high_quant1 in LB.custom_pairwise_overlap(LB.drange(0,101,20)):
-                for column2 in ["close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
-                    for low_quant2, high_quant2 in LB.custom_pairwise_overlap(LB.drange(0, 101, 20)):
-
+        for column1 in ["close"]:
+            for low_quant1,high_quant1 in LB.custom_pairwise_overlap(LB.drange(0,101,4)):
                         setting_instance = copy.deepcopy(setting_asset)
-                        setting_instance["f_query_asset"] += [
-                            f"df_today['{column1}'].between(  **LB.btest_quantile(df_today['{column1}'].quantile([{low_quant1},{high_quant1}])))",
-                            f"df_today['{column2}'].between(  **LB.btest_quantile(df_today['{column2}'].quantile([{low_quant2},{high_quant2}])))"]
+                        setting_instance["f_query_asset"] += [f"df_today['{column1}'].between(  **LB.btest_quantile(df_today['{column1}'].quantile([{low_quant1},{high_quant1}])))"]
                         setting_instance["s_weight1"] = {}
 
                         a_setting_instance.append(setting_instance)
@@ -699,7 +704,9 @@ def btest_auto(pair=1,setting_master = get_setting_master()):
     This has been simplified using cartesian product and is generic adjustable with variable pair
     """
 
-    for asset in ["E","G","FD","I","F"]:
+    #done E
+    #todo "FD","I","F"
+    for asset in ["E","I","FD","G"]:
 
         #copy master setting
         setting_asset = copy.deepcopy(setting_master)
@@ -755,8 +762,10 @@ def btest_auto(pair=1,setting_master = get_setting_master()):
         print("Total Settings:", len(a_setting_instance))
         time.sleep(10)
 
-        if a_setting_instance: btest(settings=a_setting_instance)
-    btest_overview_master(mode="auto",pair=pair)
+        if a_setting_instance:
+            btest(settings=a_setting_instance)
+            print("finished saving all. PC lag now")
+            btest_overview_master(mode="auto",pair=pair)
 
 
 
@@ -780,6 +789,7 @@ def btest_overview_master(mode="manu",pair=1):
             print(f"summarizing..{root}")
             df_overview=pd.read_csv(overview_path)
             df_setting=pd.read_csv(setting_path)
+            print(f"{len(df_overview),len(df_setting)}")
             df_overview_setting =pd.merge(left=df_overview.head(1), right=df_setting, left_on="strategy", right_on="id", sort=False)
             a_df_overview.append(df_overview_setting)
 
@@ -846,6 +856,7 @@ if __name__ == '__main__':
 
         #btest_validation(column="bull")
         #btest_manu()
+        #btest_overview_master(mode="manu",pair=1)
         for n in (1,):
             #btest_overview_master(mode="auto",pair=n)
             btest_auto(pair=n)
