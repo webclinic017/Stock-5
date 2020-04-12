@@ -11,6 +11,7 @@ import smtplib
 from email.message import EmailMessage
 import os
 import math
+import re
 from scipy.stats.mstats import gmean
 import itertools
 from enum import auto
@@ -240,6 +241,10 @@ def get_trade_date_datetime_dayofyear(trade_date):
 def get_trade_date_datetime_weekofyear(trade_date):
     return get_trade_date_datetime(trade_date).strftime("%W")
 
+def get_trade_date_datetime_weekofmonth(trade_date):
+    trade_date=get_trade_date_datetime(trade_date)
+    return (trade_date.isocalendar()[1] - trade_date.replace(day=1).isocalendar()[1] + 1)
+
 
 def df_reverse_reindex(df):
     df = df.loc[~df.index.duplicated(keep="last")]
@@ -462,7 +467,7 @@ def c_bfreq():
 
 
 def c_G_queries():
-    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','exchange'] "]}
+    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','market'] "]}
 
 def c_I_queries():
     return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
@@ -492,7 +497,7 @@ class SFreq(enum.Enum):
 
 def c_group_score_weight():
     return {"area": 0.10,
-            "exchange": 0.40,
+            "market": 0.40,
             "industry1": 0.20,
             "industry2": 0.20,
             "state_company": 0.05,
@@ -595,34 +600,59 @@ def c_candle():
 
 
 # TODO transform hard coded to soft coded
-def c_d_groups(assets=c_assets(), a_ignore=[]):
+def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
     import DB
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
     asset = {"asset": c_assets()}
     if "E" in assets:
-        df_ts_code_E = DB.get_ts_code(["E"])
-        df_ts_code_concept=DB.get_ts_code(["concept"])
-        d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
-               "industry2": list(df_ts_code_E["industry2"].unique()),
-               "industry3": list(df_ts_code_E["industry3"].unique()),
-               "concept": list(df_ts_code_concept["concept"].unique()),
-               "area": list(df_ts_code_E["area"].unique()),
-               "exchange": list(df_ts_code_E["exchange"].unique()),
-               "is_hs": list(df_ts_code_E["is_hs"].unique()),
-               "state_company": list(df_ts_code_E["state_company"].unique()),}
+        df_ts_code_E = DB.get_ts_code(["E"],market=market)
+
+        a_columns=[x for x in df_ts_code_E.columns if x in ["industry1","industry2","industry3","area","market","is_hs","state_company","concept"]]
+        # d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
+        #        "industry2": list(df_ts_code_E["industry2"].unique()),
+        #        "industry3": list(df_ts_code_E["industry3"].unique()),
+        #        "concept": list(df_ts_code_concept["concept"].unique()),
+        #        "area": list(df_ts_code_E["area"].unique()),
+        #        "market": list(df_ts_code_E["market"].unique()),
+        #        "is_hs": list(df_ts_code_E["is_hs"].unique()),
+        #        "state_company": list(df_ts_code_E["state_company"].unique()),}
+
+        d_e={}
+        for column in a_columns:
+            if column !="concept":
+                d_e[column]=list(df_ts_code_E[column].unique())
+            else:
+                df_ts_code_concept = DB.get_ts_code(["concept"], market=market)
+                d_e[column] = list(df_ts_code_concept[column].unique())
+
         asset = {**asset, **d_e}
     if "I" in assets:
-        df_ts_code_I = DB.get_ts_code(["I"])
-        d_i = {"category": list(df_ts_code_I["category"].unique()),
-               "publisher": list(df_ts_code_I["publisher"].unique()), }
+        df_ts_code_I = DB.get_ts_code(["I"],market=market)
+        a_columns = [x for x in df_ts_code_I.columns if x in ["category","publisher"]]
+
+        # d_i = {"category": list(df_ts_code_I["category"].unique()),
+        #        "publisher": list(df_ts_code_I["publisher"].unique()), }
+
+        d_i = {}
+        for column in a_columns:
+            d_i[column] = list(df_ts_code_I[column].unique())
+
         asset = {**asset, **d_i}
     if "FD" in assets:
-        df_ts_code_FD = DB.get_ts_code(["FD"])
-        d_fd = {"fund_type": list(df_ts_code_FD["fund_type"].unique()),
-                "invest_type": list(df_ts_code_FD["invest_type"].unique()),
-                "type": list(df_ts_code_FD["type"].unique()),
-                "management": list(df_ts_code_FD["management"].unique()),
-                "custodian": list(df_ts_code_FD["custodian"].unique()), }
+        df_ts_code_FD = DB.get_ts_code(["FD"],market=market)
+        a_columns = [x for x in df_ts_code_FD.columns if x in ["fund_type", "invest_type","type","management","custodian"]]
+
+        # d_fd = {"fund_type": list(df_ts_code_FD["fund_type"].unique()),
+        #         "invest_type": list(df_ts_code_FD["invest_type"].unique()),
+        #         "type": list(df_ts_code_FD["type"].unique()),
+        #         "management": list(df_ts_code_FD["management"].unique()),
+        #         "custodian": list(df_ts_code_FD["custodian"].unique()), }
+        #
+
+        d_fd = {}
+        for column in a_columns:
+            d_fd[column] = list(df_ts_code_FD[column].unique())
+
         asset = {**asset, **d_fd}
     return {key: value for key, value in asset.items() if key not in a_ignore}
 
@@ -675,6 +705,14 @@ def std(xs):
     std = math.sqrt(variance)
     return std
 
+def ts_code_switcher(ts_code):
+    dict_replace={".XSHE":".SZ", ".XSHG":".SH",".SZ":".XSHE",".SH":".XSHG"}
+    for key,value in dict_replace.items():
+        if key in ts_code:
+            return re.sub(key,dict_replace[key],ts_code)
+
+
+
 def trade_date_switcher(trade_date):
     if "-" in str(trade_date):
         return str(trade_date).replace("-","")
@@ -695,8 +733,7 @@ def timeseries_to_season(df):
             last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
-
-    return df_copy.loc[a_index]
+    return timeseries_helper(df=df,a_index=a_index)
 
 
 def timeseries_to_week(df):
@@ -704,16 +741,16 @@ def timeseries_to_week(df):
     df_copy = df.copy()
     df_copy["weekday"] = df_copy.index
     df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x))  # can be way more efficient
-    return df_copy[df_copy["weekday"] == "Friday"]
+    df= df_copy[df_copy["weekday"] == "Friday"]
+    return timeseries_helper(df=df,a_index=list(df.index))
 
 
 def timeseries_to_month(df):
     """converts a df time series to another df containing only the last day of month"""
     df_copy = df.copy()
-    df_copy["year"] = df_copy.index
-    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-    df_copy["month"] = df_copy.index
-    df_copy["month"] = df_copy["month"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+    df_copy["index_copy"] = df_copy.index
+    df_copy["year"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+    df_copy["month"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
 
     a_index = []
     for year in df_copy["year"].unique():
@@ -722,9 +759,26 @@ def timeseries_to_month(df):
             last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
+    return timeseries_helper(df=df,a_index=a_index)
 
-    return df_copy.loc[a_index]
+def timeseries_to_year(df):
+    """converts a df time series to another df containing only the last day of month"""
+    df_copy = df.copy()
+    df_copy["year"] = df_copy.index
+    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
 
+    a_index = []
+    for year in df_copy["year"].unique():
+        last_year_day = df_copy[df_copy["year"] == year].last_valid_index()
+        a_index.append(last_year_day)
+    return timeseries_helper(df=df,a_index=a_index)
+
+def timeseries_helper(df,a_index):
+    """converts index to time series and cleans up. Return only ohlc and pct_chg"""
+    df_result=df.loc[a_index]
+    df_result =ohlc(df_result)
+    df_result["pct_chg"] = df_result["close"].pct_change() * 100
+    return df_result
 
 def custom_quantile(df, column, p_setting=[0,0.2,0.4,0.6,0.8,1], key_val=True):
     d_df = {}
@@ -809,7 +863,7 @@ def print_iterables(d):
             print(x)
 
 def ohlc(df):
-    return df[["open","high","low","close"]]
+    return df[["open","high","low","close","pct_chg"]]
 
 def btest_quantile(series):
     """this function should not exist. it helps in btest to eval quantil str in one line"""

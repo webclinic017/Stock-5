@@ -31,20 +31,27 @@ def my_pro_bar(asset: str, ts_code: str, freq: str, start_date: str, end_date: s
     """for FD limited to 1000 rows. For E, limited to 4000 Rows"""
     return get(func=ts.pro_bar, fname="ts.pro_bar", kwargs=locals(), df_fallback=LB.empty_df("pro_bar"))
 
+def my_hk_daily( ts_code: str, start_date: str, end_date: str):
+    """for FD limited to 1000 rows. For E, limited to 4000 Rows"""
+    return get(func=pro.hk_daily, fname="pro.hk_daily", kwargs=locals(), df_fallback=LB.empty_df("pro_bar"))
+
 
 def my_query(api_name="", ts_code="000001.SZ", start_date="00000000", end_date="00000000"):
     return get(func=pro.query, fname="pro.query", kwargs=locals())
 
 
-def my_stockbasic(is_hs="", list_status="L", exchange="", fields='ts_code,name,area,list_date,is_hs'):
+def my_stockbasic(is_hs="", list_status="L", exchange="", fields='ts_code,name,area,list_date,is_hs,market'):
     return get(func=pro.stock_basic, fname="pro.stock_basic", kwargs=locals())
+
+def my_hk_basic(list_status="L"):
+    return get(func=pro.hk_basic, fname="pro.hk_basic", kwargs=locals())
 
 
 def my_pro_daily(trade_date="00000000"):
     return get(func=pro.daily, fname="pro.daily", kwargs=locals())
 
 
-def my_trade_cal(api_name="trade_cal", start_date="00000000", end_date="00000000"):
+def my_trade_cal(api_name="trade_cal", start_date="00000000", end_date="00000000", exchange="SSE"):
     return get(func=pro.query, fname="pro.query", kwargs=locals())
 
 

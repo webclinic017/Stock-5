@@ -2481,6 +2481,124 @@ def atest_auto(type=4):
 
 
 
+def start_of_season(df, n=1, type="year"):
+    """
+    Hypothesis Question: if first n month return is positive, how likely is the whole year positive?
+
+    1. convert day format to month format
+    2. create month and year df
+    3. merge together
+    4. analyze pct_chg
+
+    True_True, True_False,False_True, False_False are to determine the correct prediction
+    Pearson, spearman are to predict the strengh of prediction
+    """
+
+    if type=="monthofyear": #1-12
+        suffix1="_y"
+        suffix2="_m"
+        df_year=LB.timeseries_to_year(df)
+        df_month = LB.timeseries_to_month(df)
+
+        df_year["index_copy"]=df_year.index
+        df_year["year"]=df_year["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+
+        df_month["index_copy"] = df_month.index
+        df_month["year"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+        df_month=df_month[df_month["month"] == n]
+
+        df_combined=pd.merge(df_year,df_month, on="year", how="left",suffixes=[suffix1,suffix2],sort=False)
+    elif type=="seasonofyear": #1-4
+        suffix1 = "_y"
+        suffix2 = "_s"
+        df_year = LB.timeseries_to_year(df)
+        df_season = LB.timeseries_to_season(df)
+
+        df_year["index_copy"] = df_year.index
+        df_year["year"] = df_year["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+
+        df_season["index_copy"] = df_season.index
+        df_season["year"] = df_season["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_season["season"] = df_season["index_copy"].apply(lambda x: get_trade_date_datetime_s(x))  # can be way more efficient
+        df_season = df_season[df_season["season"] == n]
+
+        df_combined = pd.merge(df_year, df_season, on="year", how="left", suffixes=[suffix1, suffix2], sort=False)
+
+        pass
+    elif type=="weekofmonth":#1-6
+        suffix1 = "_m"
+        suffix2 = "_w"
+        df_month = LB.timeseries_to_month(df)
+        df_week = LB.timeseries_to_week(df)
+
+        df_month["index_copy"] = df_month.index
+        df_month["year"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+
+        df_week["index_copy"] = df_week.index
+        df_week["year"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_week["month"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+        df_week["weekofmonth"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_weekofmonth(x))  # can be way more efficient
+        df_week = df_week[df_week["weekofmonth"] == n]
+
+        df_combined = pd.merge(df_month, df_week, on=["year","month"], how="left", suffixes=[suffix1, suffix2], sort=False)
+
+
+    elif type=="dayofweek": #1-5
+        pass
+
+    #many ways to determine that
+    periods=len(df_combined)
+    TT= len(df_combined[(df_combined[f"pct_chg{suffix2}"]>0) & (df_combined[f"pct_chg{suffix1}"]>0) ])/periods
+    TF= len(df_combined[(df_combined[f"pct_chg{suffix2}"]>0) & (df_combined[f"pct_chg{suffix1}"]<0) ])/periods
+    FT= len(df_combined[(df_combined[f"pct_chg{suffix2}"]<0) & (df_combined[f"pct_chg{suffix1}"]>0) ])/periods
+    FF= len(df_combined[(df_combined[f"pct_chg{suffix2}"]<0) & (df_combined[f"pct_chg{suffix1}"]<0) ])/periods
+    pearson=df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"])
+    spearman=df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"],method="spearman")
+    return pd.Series({"periods":periods,"TT":TT,"TF":TF,"FT":FT,"FF":FF,"pearson":pearson,"spearman":spearman})
+
+
+
+def start_tester(asset="I", a_n=[1, 2, 3, 4,5,6,7,8,9,10,11,12], type="monthofyear"):
+
+    if asset == "I":
+        d_queries_ts_code={"I":["category != '债券指数' "]}
+    elif asset=="G":
+        d_queries_ts_code=LB.c_G_queries()
+    else:
+        d_queries_ts_code = {}
+
+    d_preload=DB.preload(asset=asset,step=1,d_queries_ts_code=d_queries_ts_code)
+    for n in a_n:
+        a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/n{n}")
+        if not os.path.isfile(a_path[0]):
+            a_result = []
+
+            for ts_code, df_asset in d_preload.items():
+                print(f"start_tester {ts_code} {n}")
+                s=start_of_season(df=df_asset, n=n,type=type)
+                s["ts_code"]=ts_code
+                a_result.append(s)
+            df_result=pd.DataFrame(a_result)
+            LB.to_csv_feather(df=df_result,a_path=a_path)
+
+    #summarizing summary
+    a_result=[]
+    for n in a_n:
+        a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/n{n}")
+        df=DB.get(a_path,set_index="index")
+        df=df.mean()
+        a_result.append(df)
+        print("load",a_path[0])
+    df_result = pd.DataFrame(a_result)
+
+    a_path=LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/summary_{type}_{asset}")
+    LB.to_csv_feather(df=df_result, a_path=a_path,skip_feather=True)
+
+
+
+
 if __name__ == '__main__':
     # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
     #     atest_manu(fname="gq_rsi", a_abase=[column])
@@ -2490,9 +2608,10 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
 
-    atest_auto()
-
-
+    #atest_auto()
+    start_tester(asset="E",type="monthofyear")
+    # df_sh=DB.get_asset("000001.SH",asset="I")
+    # start_year_relation(df_sh,month=1)
     #pr.disable()
     #pr.print_stats(sort='file')
 

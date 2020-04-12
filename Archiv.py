@@ -332,21 +332,21 @@ def asset_volatility(start_date, end_date, assets, freq):
 
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
-def asset_bullishness():
+def asset_bullishness(market="CN"):
     from scipy.stats import gmean
-    df_ts_code = DB.get_ts_code(a_asset=["E","I","FD","F","G"])[::1]
-    df_ts_code.to_csv("check.csv",encoding="utf-8_sig")
+    df_ts_code = DB.get_ts_code(a_asset=["E","I","FD","F","G"],market=market)[::1]
+    #df_ts_code.to_csv("check.csv",encoding="utf-8_sig")
     df_result = pd.DataFrame()
 
-    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I")
+    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I",market="CN")
     df_sh_index["sh_close"] = df_sh_index["close"]
-    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I")
+    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I",market="CN")
     df_sz_index["sz_close"] = df_sz_index["close"]
-    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I")
+    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I",market="CN")
     df_cy_index["cy_close"] = df_cy_index["close"]
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
         print("ts_code", ts_code, asset)
-        df_asset = DB.get_asset(ts_code=ts_code, asset=asset)
+        df_asset = DB.get_asset(ts_code=ts_code, asset=asset,market=market)
         df_result.at[ts_code, "period"] = len(df_asset)
         try:
             df_asset = df_asset[(df_asset["period"] > 240)]
@@ -417,7 +417,7 @@ def asset_bullishness():
                               beta_cy_rank*0.05
 
 
-    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path="Market/CN/Atest/bullishness/bullishness.xlsx", group_result=True)
+    DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}.xlsx", group_result=True, market=market)
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -548,4 +548,4 @@ def my_monte_carlo(s_close,n,m):
 
 
 if __name__ == '__main__':
-    asset_bullishness()
+    asset_bullishness(market="HK")

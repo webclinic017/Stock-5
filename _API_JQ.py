@@ -6,7 +6,11 @@ import traceback
 from jqdatasdk import *
 import DB
 
-auth('13817373362', '373362')
+for i in range(10):
+    try:
+        auth('13817373362', '373362')
+    except:
+        pass
 
 def break_jq_limit_helper_finance(code, limit=5000):
     """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
@@ -55,8 +59,15 @@ def my_margin(date=""):
     #df["date"]=df["date"].apply(LB.trade_date_switcher)
     return df
 
+def my_get_bars(jq_code,freq):
+    df=get_bars(security=jq_code,count=5000000,unit=freq,fields=["date","open","high","low","close"])
+    return df
+
 if __name__ == '__main__':
     pass
+
+    df=my_get_bars(LB.ts_code_switcher("600519.SH"))
+    print(df)
 
     # df=break_jq_limit_helper_xueqiu(code="002501.XSHE")
     # df["trade_date"]=df["day"].apply(LB.trade_date_switcher)
