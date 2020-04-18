@@ -30,8 +30,6 @@ def break_jq_limit_helper_finance(code, limit=5000):
     return df
 
 
-
-
 def break_jq_limit_helper_xueqiu(code, limit=3000):
     """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
     #first call
@@ -39,7 +37,7 @@ def break_jq_limit_helper_xueqiu(code, limit=3000):
     len_df_this = len(df)
     df_last = df
 
-    while len_df_this == limit:  # TODO if this is fixed or add another way to loop
+    while len_df_this >= limit:  # TODO if this is fixed or add another way to loop
         day = df_last.at[len(df_last) - 1, "day"]
         df_this=finance.run_query(query(finance.STK_XUEQIU_PUBLIC).filter(finance.STK_XUEQIU_PUBLIC.code == code, finance.STK_XUEQIU_PUBLIC.day > day ))
         if (df_this.equals(df_last)):

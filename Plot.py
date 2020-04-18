@@ -12,11 +12,13 @@ import os
 import datetime
 import imageio
 import glob
+import scipy.fftpack
+import LB
+from scipy.signal import find_peaks
 from pandas.plotting import autocorrelation_plot
 import Alpha
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
-
 
 
 def create_gif(ts_code="000002.SZ"):
@@ -73,11 +75,9 @@ def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.S
         # df_partcial.to_csv(f"resistance{row}.csv", index=False)
         plt.close()
 
-def plot_fft():
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import scipy.fftpack
-    df = DB.get_asset(ts_code="300036.SZ")
+
+def plot_fft(ts_code="000002.SZ"):
+    df = DB.get_asset(ts_code=ts_code)
 
     # Number of samplepoints
     N = 2000
@@ -93,8 +93,8 @@ def plot_fft():
     ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
     plt.show()
 
-def plot_polynomials():
-    df_asset = DB.get_asset(ts_code="000938.SZ")
+def plot_polynomials(ts_code="000002.SZ"):
+    df_asset = DB.get_asset(ts_code=ts_code)
     df_asset = df_asset.reset_index()
     window = 265
     step = 5
@@ -116,27 +116,36 @@ def plot_polynomials():
         df.plot(legend=True)
     plt.close()
 
-def plot_distribution(series):
+def plot_histo(series):
     plt.hist(series)  # use this to draw histogram of your data
     plt.show()
+
+def plot_distribution(df, abase="close",rfreq=10):
+    df["norm"] = df[abase].rolling(rfreq).apply(Alpha.normalize_apply, raw=False)
+    plot_histo(df["norm"])
 
 def plot_autocorrelation(series):
     autocorrelation_plot(series.dropna())
     plt.show()
 
 def plot_chart(df, columns):
-    df_copy = df[columns]
-    df_copy.reset_index(inplace=True, drop=True)
-    """I dont understand why it has to be declared everytime"""
-    matplotlib.use("TkAgg")
+    df_copy = df[columns].copy().reset_index(drop=True)
     df_copy.plot(legend=True)
     plt.show()
-    plt.close()
 
+def plot_peaks(df, abase, distance=120, height=""):
+    y=df[abase]
+    peaks,_=find_peaks(df[abase],distance=distance)
+    plt.plot(df[abase].index,df[abase])
+    plt.plot(peaks,y[peaks],"x")
+    plt.show()
 
 if __name__ == '__main__':
-    create_gif(ts_code="test")
     # support_resistance_multiple()
     pass
+    matplotlib.use("TkAgg")
+
+else:
+    matplotlib.use("TkAgg")
 
 

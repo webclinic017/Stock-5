@@ -308,6 +308,328 @@ def indicator_common(indicator_label, index, df_saved, period, dict_result_dfs, 
                     df_result.at[index, f"pearson_fgain{rolling_freq}_trend{trend}{trend_op_label}"] = correlation
 
 
+
+def rsi_sim_no_bins_multiple():
+    """
+    proven to be useless: because past data can not 1:1 predict future data.
+    the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
+
+    def sim_no_bins_once(df_result, ts_code):
+        # create target freq and target period
+        for target in all_target:
+            df_result[f"tomorrow{target}"] = df_result["open"].shift(-target) / df_result["open"].shift(-1)
+
+        # pre calculate all rsi
+        for column in all_column:
+            for freq in all_freq:
+                df_result[f"{column}.rsi{freq}"] = talib.RSI(df_result[column], timeperiod=freq)
+
+        # go through each day and measure similarity
+        for trade_date in df_result.index:
+            if trade_date < start_date:
+                continue
+
+            # df_yesterday = df_result.loc[(df_result.index < trade_date)]
+            trade_date_index_loc_minus_past = df_result.index.get_loc(trade_date) - 280
+            date_lookback = df_result.index[trade_date_index_loc_minus_past]
+            df_past_ref = df_result.loc[(df_result.index < date_lookback)]
+            s_final_sim = pd.Series(data=1, index=df_past_ref.index)  # an array of days with the highest or lowest simlarity to today
+
+            print(f"{ts_code} {trade_date}", f"reference until {date_lookback}")
+
+            # check for each rsi column combination their absolute derivation
+            for freq in all_freq:
+                for column in all_column:
+                    freq_today_value = df_result.at[trade_date, f"{column}.rsi{freq}"]
+
+                    # IN yesterdays df you can see how similar one column.freq is to today
+                    column_freq_sim = ((freq_today_value - df_past_ref[f"{column}.rsi{freq}"]).abs()) / 100
+                    column_freq_sim = 1 + column_freq_sim
+                    column_freq_sim = column_freq_sim.fillna(2)  # 1 being lowest, best. 2 or any other number higher 1 being highest, worst
+
+                    column_freq_sim_weight = all_weight[f"{column}.{freq}"]
+                    weighted_column_freq_sim = column_freq_sim ** column_freq_sim_weight
+                    s_final_sim = s_final_sim.multiply(weighted_column_freq_sim, fill_value=1)
+
+            # calculate a final similarity score (make the final score cross columns)
+            # remove the last 240 items to prevent the algo know whats going on future
+            nsmallest = s_final_sim.nsmallest(past_samples)
+            # print(f"on trade_date {trade_date} the most similar days are: {list(nsmallest.index)}")
+            df_similar = df_result.loc[nsmallest.index]
+            df_result.at[trade_date, "similar"] = str(list(nsmallest.index))
+            for target in all_target:
+                df_result.at[trade_date, f"final.rsi.tomorrow{target}.score"] = df_similar[f"tomorrow{target}"].mean()
+
+        LB.to_csv_feather(df_result, LB.a_path(f"sim_no_bins/result/similar_{ts_code}.{str(all_column)}"))
+        return df_result
+
+    # setting
+    all_weight = {
+        "close.2": 0.5,
+        "close.5": 0.7,
+        "close.10": 0.9,
+        "close.20": 1,
+        "close.40": 1.2,
+        "close.60": 1.3,
+        "close.120": 1.4,
+        "close.240": 1.6,
+        # "ivola.2": 0.0,
+        # "ivola.5": 0.0,
+        # "ivola.10": 0.3,
+        # "ivola.20": 0.3,
+        # "ivola.40": 0.3,
+        # "ivola.60": 0.3,
+        # "ivola.120": 0.3,
+        # "ivola.240": 0.3,
+    }
+
+    all_column = ["close"]
+    all_target = [2, 5, 10, 20, 40, 60, 120, 240]  # -60, -1 means future 60 days return to future 1 day, means in
+    all_freq = [10, 20, 120, 240]  # 780, 20, 520， 2, 5,
+    past_samples = 2
+    start_date = 20050101
+
+    df_summary = pd.DataFrame()
+    df_ts_code = DB.get_ts_code()
+    df_ts_code = df_ts_code[df_ts_code.index == "000001.SZ"]
+
+    for ts_code in df_ts_code.index[::100]:
+        df_result = DB.get_asset(ts_code=ts_code)
+        df_result = df_result[df_result["period"] > 240]
+
+        try:
+            df_result = sim_no_bins_once(df_result, ts_code)
+        except:
+            continue
+
+        for target in all_target:
+            try:
+                df_summary.at[ts_code, f"tomorrow{target}_pearson"] = df_result[f"tomorrow{target}"].corr(df_result[f"final.rsi.tomorrow{target}.score"])
+            except:
+                pass
+
+    DB.to_excel_with_static_data(df_ts_code=df_summary, path=f"sim_no_bins/summary.{str(all_column)}.xlsx", sort=[], a_assets=["E"], group_result=True)
+
+
+def rsi_sim_bins():
+    """
+    proven to be useless: because past data can not 1:1 predict future data.
+    the bins and no bins variation all conclude a inverse relationship. Maybe this is correct regarding law of big data"""
+    df_ts_code = DB.get_ts_code()
+    df_result_summary = pd.DataFrame()
+
+    for ts_code in df_ts_code.index[::100]:
+
+        df_result = DB.get_asset(ts_code)
+        df_result = df_result[df_result["period"] > 240]
+        df_result = df_result[df_result.index > 20000101]
+
+        # setting
+        all_column = ["close"]
+        all_target = [2, 5, 10, 20, 40, 60, 120, 240]  # -60, -1 means future 60 days return to future 1 day, means in
+        all_q = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+        all_freq = [2, 5, 10, 20, 120, 260, 520]  # 780
+        all_freq_comb = [(2, 120), (2, 260), (2, 520), (5, 120), (5, 260), (5, 520), (10, 120), (10, 260), (10, 520), (20, 120), (20, 260), (20, 520)]  # (2,780),(5,780),(10,780),(20,780),(120,260),(120,520),(120,780),(260,520),(260,780),(520,780)
+
+        # create target freq and target period
+        for target in all_target:
+            df_result[f"tomorrow{target}"] = df_result["open"].shift(-target) / df_result["open"].shift(-1)
+
+        # pre calculate all rsi
+        for column in all_column:
+            for freq in all_freq:
+                # plain pct_chg pearson 0.01, plain tor pearson, 0.07, rsi dv_ttm is crap,ivola very good
+                df_result[f"{column}.rsi{freq}"] = talib.RSI(df_result[column], timeperiod=freq)
+
+        # for each day, check in which bin that rsi is
+        for trade_date in df_result.index:
+            df_today = df_result.loc[(df_result.index < trade_date)]
+            if len(df_today) < 620:
+                continue
+            last_Day = df_today.index[-600]
+            df_today = df_result.loc[(df_result.index < last_Day)]
+            print(f"{ts_code} {trade_date}. last day is {last_Day}", )
+
+            d_accel = {}
+            # create quantile
+            for column in all_column:
+                for freq in all_freq:
+                    # divide all past values until today by bins/gategories/quantile using quantile:  45<50<55
+                    a_q_result = list(df_today[f"{column}.rsi{freq}"].quantile(all_q))
+                    for counter, item in enumerate(a_q_result):
+                        df_result.at[trade_date, f"{column}.freq{freq}_q{counter}"] = item
+                        d_accel[f"{column}.freq{freq}_q{counter}"] = item
+
+            # for each day check what category todays rsi belong
+            for column in all_column:
+                for freq in all_freq:
+                    for counter in range(0, len(all_q) - 1):
+                        under_limit = d_accel[f"{column}.freq{freq}_q{counter}"]
+                        above_limit = d_accel[f"{column}.freq{freq}_q{counter + 1}"]
+                        today_rsi_value = df_result.at[trade_date, f"{column}.rsi{freq}"]
+                        if under_limit <= today_rsi_value <= above_limit:
+                            df_result.at[trade_date, f"{column}.rsi{freq}_bin"] = int(counter)
+                            break
+
+            # calculate simulated value
+
+            for column in all_column:
+                d_column_target_results = {key: [] for key in all_target}
+                for small, big in all_freq_comb:
+                    try:
+                        small_bin = df_result.at[trade_date, f"{column}.rsi{small}_bin"]
+                        big_bin = df_result.at[trade_date, f"{column}.rsi{big}_bin"]
+                        df_filtered = df_today[(df_today[f"{column}.rsi{big}_bin"] == big_bin) & (df_today[f"{column}.rsi{small}_bin"] == small_bin)]
+                        for target in d_column_target_results.keys():
+                            d_column_target_results[target] = df_filtered[f"tomorrow{target}"].mean()
+                    except Exception as e:
+                        print("error", e)
+
+                for target, a_estimates in d_column_target_results.items():
+                    df_result.at[trade_date, f"{column}.score{target}"] = pd.Series(data=a_estimates).mean()
+
+        # create sume of all results
+        for freq in all_freq:
+            try:
+                df_result[f"sum.score{freq}"] = bi.sum([df_result[f"{x}.score{freq}"] for x in all_column])
+            except:
+                pass
+
+        # initialize setting result
+        LB.to_csv_feather(df_result, LB.a_path(f"trade/result/trading_result_{ts_code}.{str(all_column)}"))
+
+        for target in all_target:
+            try:
+                pearson = df_result[f"{column}.score{target}"].corr(df_result[f"tomorrow{target}"])
+                df_result_summary.at[ts_code, f"pearson_{target}"] = pearson
+            except:
+                pass
+
+    LB.to_csv_feather(df_result_summary, LB.a_path(f"trade/summary.{str(all_column)}"))
+
+
+def price_statistic_train(a_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750], past=10, q_step=5, df=DB.get_stock_market_all()):
+    """use quantile to count insted of fixed price gaps
+    This method does not work because past can not predict future due to unstable period. This means that at the same stage of two past days with the exact same situation. One can go up and one can go down due to unstable period of the next happening thing
+    """
+    df_result = pd.DataFrame()
+    # for future in a_freq:
+    #     df[f"tomorrow{future}"] = df["close"].shift(-future) / df["close"]
+    #     df[f"past{future}"] = df["close"] / df["close"].shift(future)
+
+    for key, df_filtered in  LB.custom_quantile(df=df, column=f"past{past}", p_setting=[x/100 for x in range(0, 101, q_step)]).items():
+        df_result.at[key, "count"] = len(df_filtered)
+        df_result.at[key, "q1"] ,df_result.at[key, "q2"] ,df_result.at[key, "q1_val"] ,df_result.at[key, "q2_val"]= [float(x) for x in key.split(",")]
+        for future in a_freq:
+            # df_result.at[f"{from_price,to_price}", f"tomorrow{future}_mean"] = (df_filtered[f"tomorrow{future}"].mean())
+            # df_result.at[f"{from_price,to_price}", f"tomorrow{future}_std"] = (df_filtered[f"tomorrow{future}"].std())
+            df_result.at[key, f"tomorrow{future}gmean"] = gmean(df_filtered[f"tomorrow{future}"].dropna())
+
+        # a_path=LB.a_path(f"Market/CN/Atest/seasonal/all_date_price_statistic_past_{past}")
+        # LB.to_csv_feather(df_result,a_path,skip_feather=True)
+    return df_result
+
+"""does not work here. Past can not predict future here"""
+def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]):
+    """performs a strategy based on past experience of price structure
+    This method does not work because past can not predict future due to unstable period. This means that at the same stage of two past days with the exact same situation. One can go up and one can go down due to unstable period of the next happening thing
+
+    Test 1: single past
+    1. train expanding window data set on past gain future gain
+    2. use the past trained data on to predict future gain
+    """
+    a_all_freq = [750]
+    a_past_freq=a_all_freq
+    a_future_freq=[750]
+
+    df=DB.get_stock_market_all()
+
+    for freq in a_all_freq:
+        df[f"tomorrow{freq}"] = df["close"].shift(-freq) / df["close"]
+        df[f"past{freq}"] = df["close"] / df["close"].shift(freq)
+    df_result = df.copy()
+
+    #simulate past by expanding
+    for trade_date,df_past in LB.custom_expand(df=df, min_freq=1000).items():
+
+        #1. cut df_past AGAIN: instead of expanding until today, we expand until couple days before that. So that latest value does not disturb calculation
+        df_past=df_past.iloc[0:len(df_past)-500]
+
+        #get result of past quantile and their predicted future gain
+        for past_freq in a_all_freq:
+
+            #1. train past values and create matrix
+            df_pred_matrix=price_statistic_train(a_freq=a_all_freq,past=past_freq, q_step=10,df=df_past)
+
+            for future_freq in a_future_freq:
+
+                # predict what happens in the future using past trained value
+                todays_value = float(df.at[trade_date, f"past{past_freq}"])
+                try:
+                    #todays value has been happened in the past
+                    predicted_value=df_pred_matrix.loc[ (df_pred_matrix["q1_val"]<=todays_value) & (todays_value<=df_pred_matrix["q2_val"]), f"tomorrow{future_freq}gmean"].values[0]
+                except :
+                    #todays value is extrem value, either maxima or minima.
+                    if todays_value > 1:#maxima
+                        predicted_value=df_pred_matrix.tail(1)[f"tomorrow{future_freq}gmean"].values[0]
+                    else: #minima
+                        predicted_value=df_pred_matrix.head(1)[f"tomorrow{future_freq}gmean"].values[0]
+                print(f"{trade_date} past{past_freq} predicted future{future_freq} =", predicted_value)
+                df_result.at[trade_date, f"past{past_freq}_pred_future{future_freq}"] = predicted_value
+
+    #combine the score using mean
+    for future_freq in a_future_freq:
+        #combined score
+        df_result[f"pred_future{future_freq}"]=sum([df_result[f"past{past_freq}_pred_future{future_freq}"] for past_freq in a_past_freq]) / len(a_past_freq)
+
+        #combined score bin
+        df_result[f"pred_future{future_freq}_bin"] =pd.qcut(df_result[f"pred_future{future_freq}"], q=10, labels=False)
+
+    df_result.to_csv("past_test.csv")
+    df_pred_matrix.to_csv(("last_pred_matrix.csv"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+def my_monte_carlo(s_close,n,m):
+    """
+    s_close=close series
+    n= n days forcast into the future
+    m= amount of simulations
+    Basically useless simulation!
+    It is just a random std
+    """
+    from scipy.stats import norm
+    log_returns = np.log(1 + s_close.pct_change())
+    u=log_returns.mean()
+    var=log_returns.var()
+    drift=u-(0.5*var)
+    stdev=log_returns.std()
+
+    daily_returns=np.exp(drift + stdev*norm.ppf(np.random.rand(n,m)))
+
+    #takes last day as starting point
+    s0=s_close.iat[-1]
+    price_list=np.zeros_like(daily_returns)
+    price_list[0]=s0
+
+    #apply monte carlo
+    for t in range(1, n):
+        price_list[t]=price_list[t-1]*daily_returns[t]
+
+
+    plt.plot(price_list)
+    plt.show()
+
 if __name__ == '__main__':
     try:
         # cross_corr_multiple()

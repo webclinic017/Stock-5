@@ -436,6 +436,11 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
     for rolling_freq in [LB.BFreq.f1, LB.BFreq.f2, LB.BFreq.f5][::-1]:
         Alpha.fgain(df=df, abase="open", freq=rolling_freq)  # future gain does not include today = tomorrow+atomorrow comp_gain
 
+    #counts how many percent of past n days are positive
+    for rolling_freq in [5,10,20,60,120,240]:
+        df[f"pp{rolling_freq}"]=df["pct_chg"].rolling(rolling_freq).apply(LB.pp)
+
+
     # alpha and Beta, lower the better. too slow
     if asset in ["I", "E", "FD"]:
         for ts_code, df_index in Global.d_index.items():
@@ -513,7 +518,7 @@ def update_assets_EIFD_D_expanding(df, asset):
     # 2. times above ma, bigger better
     for freq in a_freqs:
         # one time calculation
-        df[f"hp{freq}"] = Atest.highpass(df["close"], freq)
+        df[f"hp{freq}"] = Alpha.highpass(df["close"], freq)
         df[f"lp{freq}"] = df["close"] - df[f"hp{freq}"]
         df[f"ma{freq}"] = df["close"].rolling(freq).mean()
         df[f"abv_ma{freq}"] = (df["close"] > df[f"ma{freq}"]).astype(int)
@@ -861,7 +866,7 @@ def update_asset_intraday(asset="I",freq="15m"):
             LB.to_csv_feather(df=df,a_path=a_path)
 
 
-def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
+def update_date(asset="E", freq="D", market="CN", big_update=True, step=1,start_date="000000",end_date=today()):
     """step -1 might be wrong if trade dates and asset are updated seperately. then they will not align
         step 1 always works
         naive: approach always works, but is extremly slow
@@ -871,20 +876,22 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
 
     #latest example column
     naive = True if asset == "F" else False
-    example_column = get_example_column(asset=asset,freq=freq)
+    naive = True
+    example_column = get_example_column(asset=asset,freq="Xueqiu",market=market)
 
     #init df
     df_static_data = get_ts_code(a_asset=[asset])
-    df_trade_dates = get_trade_date("00000000", LB.today(), freq, market=market)
+    df_trade_dates = get_trade_date(start_date=start_date, end_date=end_date, freq=freq, market=market)
 
     #init dict
     d_list_date = {ts_code: row["list_date"] for ts_code, row in get_ts_code(a_asset=[asset]).iterrows()}
     d_queries_ts_code = c_G_queries() if asset == "G" else {}
-    d_preload = preload(asset=asset, step=1, period_abv=240, d_queries_ts_code=d_queries_ts_code)
+    d_preload = preload(asset=asset, freq="Xueqiu",step=1, period_abv=240, d_queries_ts_code=d_queries_ts_code)
     d_lookup_table = {ts_code: (0 if step == 1 else len(df) - 1) for ts_code, df in d_preload.items()}
 
+    #TODO remove xueqiu only
     for trade_date in df_trade_dates.index[::step]:  # IMPORTANT! do not modify step, otherwise lookup will not work
-        a_path = LB.a_path(f"Market/{market}/Date/{asset}/{freq}/{trade_date}")
+        a_path = LB.a_path(f"Market/{market}/Date/{asset}/Xueqiu/{trade_date}")
         a_date_result = []
 
         # date file exists AND not big_update. If big_update, then always overwrite
@@ -946,31 +953,34 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1):
             # create df_date from a_date_result
             df_date = pd.DataFrame(data=a_date_result, columns=example_column)
 
+            print("ts_code" in df_date.columns)
             # remove duplicate columns that also exist in static data. Then merge
-            no_duplicate_cols = df_date.columns.difference(df_static_data.columns)
-            df_date = pd.merge(df_date[no_duplicate_cols], df_static_data, how='left', on=["ts_code"], suffixes=["", ""], sort=False).set_index("ts_code")  # add static data
+            #no_duplicate_cols = df_date.columns.difference(df_static_data.columns)
+            #df_date = pd.merge(df_date[no_duplicate_cols], df_static_data, how='left', on=["ts_code"], suffixes=["", ""], sort=False).set_index("ts_code")  # add static data
+
             df_date.insert(loc=0, column='trade_date', value=int(trade_date))
 
-            # create final rank. TODO. make it same as in bullishness
-            df_date["dat_bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
-                              + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
-                              + df_date["period"].rank(ascending=False) * 0.03 \
-                              + df_date["e_hp_mean240"].rank(ascending=False) * 0.01 \
-                              + df_date["e_hp_mean60"].rank(ascending=False) * 0.01 \
-                              + df_date["e_hp_mean20"].rank(ascending=False) * 0.01 \
-                              + df_date["e_hp_mean5"].rank(ascending=False) * 0.01 \
-                              + df_date["e_hp_std240"].rank(ascending=True) * 0.01 \
-                              + df_date["e_hp_std60"].rank(ascending=True) * 0.01 \
-                              + df_date["e_hp_std20"].rank(ascending=True) * 0.01 \
-                              + df_date["e_hp_std5"].rank(ascending=True) * 0.01 \
-                              + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
-                              + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
-                              + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
-                              + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
-                              + df_date["e_rapid_down"].rank(ascending=True) * 0.03
+            if False:
+                # create final rank. TODO. make it same as in bullishness
+                df_date["dat_bull"] = df_date["e_gmean"].rank(ascending=False) * 0.70 \
+                                  + df_date["e_max_pct"].rank(ascending=False) * 0.08 \
+                                  + df_date["period"].rank(ascending=False) * 0.03 \
+                                  + df_date["e_hp_mean240"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_hp_mean60"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_hp_mean20"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_hp_mean5"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_hp_std240"].rank(ascending=True) * 0.01 \
+                                  + df_date["e_hp_std60"].rank(ascending=True) * 0.01 \
+                                  + df_date["e_hp_std20"].rank(ascending=True) * 0.01 \
+                                  + df_date["e_hp_std5"].rank(ascending=True) * 0.01 \
+                                  + df_date["e_abv_ma240"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_abv_ma60"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_abv_ma20"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_abv_ma5"].rank(ascending=False) * 0.01 \
+                                  + df_date["e_rapid_down"].rank(ascending=True) * 0.03
 
-            df_date["dat_bull2"]= df_date["e_gmean"].rank(ascending=False) * 0.5 \
-                              + df_date["e_sharp"].rank(ascending=False) * 0.5
+                df_date["dat_bull2"]= df_date["e_gmean"].rank(ascending=False) * 0.5 \
+                                  + df_date["e_sharp"].rank(ascending=False) * 0.5
 
             LB.to_csv_feather(df_date, a_path)
             print(asset, freq, trade_date, "date updated")
@@ -1131,7 +1141,7 @@ def update_margin_total():
 
     df_result=pd.concat(a_result, sort=False)
     df_sh=get_asset("000001.SH",asset="I")
-    df_sh=LB.ohlc(df_sh)
+    df_sh=LB.ohlcpp(df_sh)
     for market in [f"XSHE", f"XSHG"]:
         df_market=df_result[df_result["exchange_code"]==market]
         df_market["trade_date"]=df_market["date"].apply(LB.trade_date_switcher)
@@ -1312,7 +1322,7 @@ def get_date(trade_date, a_assets=["E"], freq="D", market="CN"):  # might need g
 def get_date_E_oth(trade_date, oth_name, market="CN"):
     return get(LB.a_path(f"Market/{market}/Date/E/{oth_name}/{trade_date}"), set_index="")  # nothing to set
 
-def get_example_column(asset="E",freq="D", numeric_only=False, notna=True):
+def get_example_column(asset="E",freq="D", numeric_only=False, notna=True,market="CN"):
     # get the latest column of the asset file
     if asset == "E":
         ts_code = "000001.SZ"
@@ -1327,7 +1337,7 @@ def get_example_column(asset="E",freq="D", numeric_only=False, notna=True):
     else:
         ts_code = "000001.SZ"
 
-    df=get_asset(ts_code, asset, freq)
+    df=get_asset(ts_code, asset, freq,market=market)
     if notna:
         df=df.dropna(how="all",axis=1)
 
@@ -1397,14 +1407,14 @@ def add_asset_final_analysis_rank(df, assets, freq, analysis="bullishness", mark
 
 
 # TODO preload also for E, FD, I
-def preload(asset="E", on_asset=True, step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False):
+def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False):
     """
     query_on_df: filters df_asset/df_date by some criteria. If the result is empty dataframe, it will NOT be included in d_result
     """
     d_result = {}
     df_index = get_ts_code(a_asset=[asset], d_queries=d_queries_ts_code)[::step] if on_asset else get_trade_date(start_date="20000101")[::step]
     func = get_asset if on_asset else get_date
-    kwargs = {"asset": asset} if on_asset else {"a_assets":[asset]}
+    kwargs = {"asset": asset, "freq":freq} if on_asset else {"a_assets":[asset]}
 
     bar = tqdm(range(len(df_index)))
     for index, i in zip(df_index.index, bar):
@@ -1481,67 +1491,45 @@ def update_date_beta_table_I(a_freqs=[240]):
                     df_result[ts_code_asset]=df_result["close"].rolling(freq,min_periods=2).corr(df_asset["close"])
                 LB.to_csv_feather(df=df_result,a_path=a_path,skip_feather=True)
 
-def intraday_analysis():
-    var = 15
-    asset="I"
-    for ts_code in ["000001.SH","399006.SZ","399001.SZ"]:
-        df = pd.read_csv(f"D:\Stock\Market\CN\Asset\{asset}\{var}m/{ts_code}.csv")
+def update_asset_xueqiu(asset="E", market="CN"):
+    df_ts_code=get_ts_code(a_asset=[asset])
+    for ts_code in df_ts_code.index:
+        print(f"update xueqiu {ts_code}")
+        a_path=LB.a_path(f"Market/{market}/Asset/E/Xueqiu_raw/{ts_code}")
+        if not os.path.isfile(a_path[0]):
+            code=LB.ts_code_switcher(ts_code)
+            df_xueqiu=_API_JQ.break_jq_limit_helper_xueqiu(code=code)
+            LB.to_csv_feather(df=df_xueqiu, a_path=a_path)
 
-        df["pct_chg"] = df["close"].pct_change()
+def convert_asset_xueqiu(asset="E",market="CN"):
+    df_ts_code = get_ts_code(a_asset=[asset])
+    for ts_code in df_ts_code.index:
+        print(f"update xueqiu {ts_code}")
+        a_path = LB.a_path(f"Market/{market}/Asset/E/Xueqiu_raw/{ts_code}")
 
-        df["day"] = df["date"].str.slice(0, 10)
-        df["intraday"] = df["date"].str.slice(11, 22)
-        df["h"] = df["intraday"].str.slice(0, 2)
-        df["m"] = df["intraday"].str.slice(3, 5)
-        df["s"] = df["intraday"].str.slice(6, 8)
+        df_asset = get_asset(ts_code=ts_code,asset="E",market="CN")
 
-        df_result = pd.DataFrame()
-        a_intraday = list(df["intraday"].unique())
-        #1.part stats about mean and volatility
-        for intraday in a_intraday:
-            df_filter = df[df["intraday"] == intraday]
-            mean = df_filter["pct_chg"].mean()
-            pct_chg_pos=len(df_filter[df_filter["pct_chg"]>0])/len(df_filter)
-            pct_chg_neg=len(df_filter[df_filter["pct_chg"]<0])/len(df_filter)
-            std = df_filter["pct_chg"].std()
-            sharp = mean / std
-            df_result.at[intraday, "mean"] = mean
-            df_result.at[intraday, "pos"] = pct_chg_pos
-            df_result.at[intraday, "neg"] = pct_chg_neg
-            df_result.at[intraday, "std"] = std
-            df_result.at[intraday, "sharp"] = sharp
-        df_result.to_csv(f"intraday{ts_code}.csv")
+        if df_asset.empty:
+            continue
+
+        df_asset=LB.ohlcpp(df_asset)
+
+        df_xueqiu = get(a_path)
+        if df_xueqiu.empty:
+            continue
+        df_xueqiu["trade_date"]=df_xueqiu["day"].apply(LB.trade_date_switcher)
+        df_xueqiu["trade_date"]=df_xueqiu["trade_date"].astype(int)
+        df_xueqiu=df_xueqiu[["trade_date","follower", "new_follower", "discussion","new_discussion", "trade", "new_trade"]]
+        df_xueqiu=df_xueqiu.set_index("trade_date",drop=True)
+
+        df=pd.merge(df_asset,df_xueqiu,on="trade_date",how="left",sort=False)
+
+        a_path = LB.a_path(f"Market/{market}/Asset/E/Xueqiu/{ts_code}")
+
+        LB.to_csv_feather(df,a_path=a_path)
 
 
-        #2.part:prediction. first 15 min predict today
-        a_results=[]
-        for intraday in a_intraday:
-            df_day=get_asset(ts_code=ts_code,asset=asset)
-            df_filter = df[df["intraday"] == intraday]
-            df_filter["trade_date"]=df_filter["day"].apply(LB.trade_date_switcher)
-            df_filter["trade_date"]=df_filter["trade_date"].astype(int)
-            df_final=pd.merge(LB.ohlc(df=df_day),df_filter,on="trade_date",suffixes=["_d","_15m"],sort=False)
 
-            df_final["pct_chg_d"] = df_final["pct_chg_d"].shift(-1)
-            df_final.to_csv(f"intraday_prediction_{ts_code}.csv")
-
-            len_df=len(df_final)
-
-            TT= len(df_final[(df_final["pct_chg_15m"]>0) & (df_final["pct_chg_d"]>0)])/len_df
-            TF= len(df_final[(df_final["pct_chg_15m"]>0) & (df_final["pct_chg_d"]<0)])/len_df
-            FT= len(df_final[(df_final["pct_chg_15m"]<0) & (df_final["pct_chg_d"]>0)])/len_df
-            FF= len(df_final[(df_final["pct_chg_15m"]<0) & (df_final["pct_chg_d"]<0)])/len_df
-
-            #rolling version
-            rolling=5
-            df_final[f"pct_chg_15m_r{rolling}"]=df_final[f"pct_chg_15m"].rolling(rolling).mean()
-            pearson=df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"])
-            spearman=df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"],method="spearman")
-
-            s=pd.Series({"intraday":intraday,"TT":TT,"TF":TF,"FT":FT,"FF":FF,"pearson":pearson,"sparman":spearman})
-            a_results.append(s)
-        df_predict_result=pd.DataFrame(a_results)
-        df_predict_result.to_csv(f"intraday_prediction_result_{ts_code}.csv")
 
 def update_all_in_one_hk(big_update=False):
     #update trade calendar
@@ -1634,15 +1622,17 @@ if __name__ == '__main__':
     try:
         big_update = False
 
-        update_all_in_one_hk()
-
+        #update_all_in_one_hk()
+        #convert_asset_xueqiu()
+        update_date(asset="E",start_date="20150101",end_date="20190801")
+        #convert_asset_xueqiu()
         #update_date_news_tushare_cctv()
         # for api in ["tushare","jq","tushare_cctv"]:
         #     update_date_news_count(api)
         #update_all_in_one(big_update)
         #update_asset_intraday(asset="I",freq="15m")
 
-        intraday_analysis()
+        #intraday_analysis()
         #update_date_beta_table(a_asset=["G"])
 
     except Exception as e:
@@ -1654,13 +1644,15 @@ if __name__ == '__main__':
 
 # slice
 # a[-1]    # last item in the array
-# a[-2:]   # last two items in the array
+# a[-6:]   # get last 6 elements
+
 # a[:-2]   # everything except the last two items
+
 # a[::-1]    # all items in the array, reversed
 # a[1::-1]   # the first two items, reversed
 # a[:-3:-1]  # the last two items, reversed
 # a[-3::-1]  # everything except the last two items, reversed
-
+#qcut
 
 # '…'
 

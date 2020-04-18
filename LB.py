@@ -1,5 +1,6 @@
 import operator
 from multiprocessing import Process
+
 import tushare as ts
 from datetime import datetime
 import pandas as pd
@@ -9,20 +10,18 @@ import xlsxwriter
 import threading
 import smtplib
 from email.message import EmailMessage
-import os
 import math
 import re
+
 from scipy.stats.mstats import gmean
 import itertools
-from enum import auto
 from win32com.client import Dispatch
 import traceback
+
 import _API_Tushare
 
-import matplotlib.pyplot as plt
 import atexit
 from time import time, strftime, localtime
-import inspect
 import time
 import subprocess, os, platform
 from datetime import timedelta
@@ -276,9 +275,37 @@ def columns_remove(df, columns_array):
             pass
 
 
+def ent(data):
+    import scipy.stats
+    """Calculates entropy of the passed pd.Series
+    =randomness of the close price distribution
+    =Entropy should be same as calculating the high pass
+    =Sounds good, but not really useful
+    """
+
+    p_data = data.value_counts()  # counts occurrence of each value
+    return scipy.stats.entropy(p_data)  # get entropy from counts
+
+def polyfit(df, degree=1, column="close"):
+    s_index = df[column].index
+    y = df[column]
+    weights = np.polyfit(s_index, y, degree)
+    data = pd.Series(index=s_index, data=0)
+    for i, polynom in enumerate(weights):
+        pdegree = degree - i
+        data = data + (polynom * (s_index ** pdegree))
+    return data
+
+
 def get_linear_regression_s(s_index, s_data):
     z = np.polyfit(s_index, s_data, 1)
     return pd.Series(index=s_index, data=s_index * z[0] + z[1])
+
+def get_linear_regression_s_full(s_index, s_data):
+    full = np.polyfit(s_index, s_data, 1,full=True)
+    z=full[0]
+    residuals=full[1]
+    return [pd.Series(index=s_index, data=s_index * z[0] + z[1]),residuals]
 
 
 def get_linear_regression_variables(s_index, s_data):
@@ -776,7 +803,7 @@ def timeseries_to_year(df):
 def timeseries_helper(df,a_index):
     """converts index to time series and cleans up. Return only ohlc and pct_chg"""
     df_result=df.loc[a_index]
-    df_result =ohlc(df_result)
+    df_result =ohlcpp(df_result)
     df_result["pct_chg"] = df_result["close"].pct_change() * 100
     return df_result
 
@@ -793,6 +820,7 @@ def custom_quantile(df, column, p_setting=[0,0.2,0.4,0.6,0.8,1], key_val=True):
 
 def custom_expand(df, min_freq):
     d_result = {}
+    step_counter=0
     for counter, expanding_index in enumerate(df.index):
         if counter >= min_freq:
             d_result[expanding_index] = df.loc[df.index[0]:expanding_index]
@@ -862,8 +890,12 @@ def print_iterables(d):
         for x in d:
             print(x)
 
-def ohlc(df):
-    return df[["open","high","low","close","pct_chg"]]
+def ohlcpp(df):
+    return df[["ts_code","period","open","high","low","close","pct_chg"]]
+
+"""past positive: how many past days are positive"""
+def pp(s):
+    return len(s[s>0])/len(s)
 
 def btest_quantile(series):
     """this function should not exist. it helps in btest to eval quantil str in one line"""
@@ -924,3 +956,5 @@ else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     sound("start.mp3")
     atexit.register(endlog)
     log("START")
+
+
