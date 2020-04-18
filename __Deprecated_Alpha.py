@@ -23,29 +23,153 @@ from LB import *
 pd.options.mode.chained_assignment = None  # default='warn'
 
 """
-
-For all functions that create series
-
-
-Ideally, option to choose to return array or do it inplace
-A. single series
-1. If return array. Another function chooss the name of the function
-2. If inplace. return the standard function name
-
-B. multiple series
-1. return multiple array
-2. return multiple names
-
-Auto name is always local automatically generated with wrapper
-
-
-Standard case is to return standard name so that I dont mess up with non unique names.
-Special case can be requested to return array instead of series so that I can assign myself
+KEEP THIS DEPRECATED FILE AS A SNAPSHOT OF LAST STAND
 """
 
 
+class AutoName(enum.Enum):
+    def _generate_next_value_(name, start, count, last_values):
+        return name
 
 
+# BOTTLE NECK modify here
+class ABase(AutoName):  # every Indicator base should take no argument in create process. The tester should always find best argument by hand. Any other argument should be put into deri.
+    # pri
+    open = auto()
+    high = auto()
+    low = auto()
+    close = auto()
+    pct_chg = auto()
+    co_pct_chg = auto()
+    fgain = auto()
+    pgain = auto()
+    pjup = auto()
+    pjdown = auto()
+    ivola = auto()
+    cdl = auto()
+
+    # fun
+    pe_ttm = auto()
+    pb = auto()
+    ps_ttm = auto()
+    dv_ttm = auto()
+    total_cur_assets = auto()
+    total_assets = auto()
+    total_cur_liab = auto()
+    total_liab = auto()
+    n_cashflow_act = auto()
+    n_cashflow_inv_act = auto()
+    n_cash_flows_fnc_act = auto()
+    profit_dedt = auto()
+    netprofit_yoy = auto()
+    or_yoy = auto()
+    grossprofit_margin = auto()
+    netprofit_margin = auto()
+    debt_to_assets = auto()
+    turn_days = auto()
+
+    # oth
+    period = auto()
+    total_share = auto()
+    total_mv = auto()
+    pledge_ratio = auto()
+    vol = auto()
+    turnover_rate = auto()
+
+
+class ADeri(AutoName):  # first level Ideri = IDeri that only uses abase and no other IDeri
+    # statistic
+    create = auto()
+    count = auto()
+    sum = auto()
+    mean = auto()
+    median = auto()
+    var = auto()
+    std = auto()
+    min = auto()
+    max = auto()
+    corr = auto()
+    cov = auto()
+    skew = auto()
+    kurt = auto()
+
+    # technical Derivation
+    rsi = auto()
+    # mom = auto()
+    # rocr = auto()
+    # # ppo = "ppo" for some reason not existing in talib
+    # cmo = auto()
+    # apo = auto()
+    # boll=auto()
+    # ema=auto()
+    # sma=auto()
+
+    # transform = normalize and standardize
+    # net=auto()
+    # rank=auto()
+    # pct_change=auto()
+    # divmean=auto()
+    # divmabs=auto()
+    # scale =auto() #normalize value to 1 and 0
+    # abv=auto()
+    # cross=auto()
+
+    # second level IDERI, need other functions as argument
+    trend = auto()  # RSI CMO
+
+    # generating buy or not buy signals : 1, 0 and np.nan
+    over = auto()  # s1 over s2
+    cross = auto()  # s1 cross s2
+    overthres = auto()  # s1 over certain thresh
+    # rs=auto()
+    # cross over
+    # divergence
+
+
+# clip,autocorr,cummax
+
+def get_func(name: str):
+    return globals()[name]
+
+
+# NOT MODELLING FREQ AS ENUM because Every indicator always have many freqs. So it is not function specific
+class Trend2Weight(enum.Enum):
+    t8 = 0.08
+    t16 = 0.16
+    t32 = 0.32
+    t64 = 0.64
+    t128 = 1.28
+
+
+class RE(AutoName):
+    r = auto()
+    e = auto()
+
+
+class Gain(enum.Enum):
+    g1 = 1
+    g2 = 2
+    g3 = 3
+    g4 = 4
+    g5 = 5
+    g6 = 6
+    g7 = 7
+    g8 = 8
+    g9 = 9
+    g10 = 10
+
+
+class Lose(enum.Enum):
+    l1 = -1
+    l2 = -2
+    l3 = -3
+    l4 = -4
+    l5 = -5
+    l6 = -6
+    l7 = -7
+    l8 = -8
+    l9 = -9
+    l10 = -10
 
 
 def open(df: pd.DataFrame, abase: str): return abase
@@ -165,11 +289,13 @@ def ivola(df: pd.DataFrame, abase: str = "ivola"):
     df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
     return add_to
 
+
 def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
     add_to = f"{abase}.sharp{freq.value}"
     add_column(df, add_to, abase, 1)
     df[add_to] = df[abase].rolling(freq.value).apply(LB.my_sharp)
     return add_to
+
 
 # past n days until today. including today
 def pgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
@@ -688,29 +814,8 @@ def min(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
     return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.min)
 
 
-def alpha_name(func):
-    def this_function_will_never_be_seen(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            return
-
-    return this_function_will_never_be_seen
-
-
-@alpha_name
-def max(df: pd.DataFrame, abase: str, freq: int, func: callable, inplace=False):
-    if inplace:
-        # inplace use standard name
-        name = "lol"
-        df[name] = func(df[abase], freq).max()
-        return
-    else:
-        # not inplace, return self contained names
-        df_copy = df.copy()
-        df_copy[name] = func(df_copy[abase], freq).max()
-        return list(df_copy[name])
-
+def max(df: pd.DataFrame, abase: str, freq: BFreq, re: RE):
+    return deri_sta(df=df, freq=freq, abase=abase, re=re, ideri=ADeri.max)
 
 
 def corr(df: pd.DataFrame, abase: str, freq: BFreq, re: RE, corr_with, corr_series):
@@ -736,17 +841,17 @@ def deri_sta(df: pd.DataFrame, abase: str, ideri: ADeri, freq: BFreq, re: RE, co
     ideri = ideri.value
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
-    add_to = LB.indi_name(abase=abase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name":corr_with} if corr_with else {"freq": freq, "re": re.value})
+    add_to = LB.indi_name(abase=abase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name": corr_with} if corr_with else {"freq": freq, "re": re.value})
     add_column(df, add_to, abase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
 
-    #pairwise rolling
+    # pairwise rolling
     if ideri == "corr":
         df[add_to] = reFunc(df[abase], freq, min_periods=2).corr(corr_series)
 
 
-    #single rolling
+    # single rolling
     elif ideri == "count":
         df[add_to] = reFunc(df[abase], freq).count()
     elif ideri == "sum":

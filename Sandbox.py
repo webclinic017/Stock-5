@@ -361,19 +361,11 @@ def main():
 
     #maybe no automatic detection. instead do a simple filter, then human has to look at it.
 
-    # even if outside factors like oil, employment affects the stock market. The stock market can remain unchanged and not react until a very long time.
-    # so, even knowing the outside factors, still need to check technical price
-
     #If use longest trend streak, when it is very late to detect new trend. Lag would be too big. Even here, the trade off is real.
 
-
-"""
-My note
-"""
     #Q: is it better to anticipate or wait for turning point to confirm?
     #A: both. It is a tradeoff. Sometimes wait is better. sometimes participate better
     #A: Hypothesis: Short term anticipate. Long term wait to confirm. Because short term swings very frequently. Long term swings very few. Waiting for confirm makes sense.
-
 
     #Bet against the trend or with the trend?
     #A: after you buy high price can go up, after you buy low price can go up.
@@ -391,69 +383,29 @@ My note
     #A: A method must be very significant to be able to use. Otherwise its wrong signals will interfere too much with other methods
 
 
+
 """
-useful techniqes
-1. MACD with EMA and SS
-2. Bandpass filter (as oscilator) + macd (bandpass is always later than MACD) 
-3. highpass as RSI 
-4. A trendline on oscilator like bandpass seems to really good to indicate the next low or high. So use momentum to see the indicator if it is already deviating from price
-5. close price to rsi but better: 1. better_rsi= (close - ss)/ss
-
-
-
-IDEAS
-0. See stock chart as wave
-- Use methods from eletrical engineering
-- use methods from quantum physic: superposition, heisenberg uncertainty. The smaller the days, the more random are the price jumps 
-
-Use super position and heiserbergishe ungleichung on stocks
-
-
-In uptrend: Buy until ATR drops
-In downtrend: wait until ATR goes up and then buy. 
-
-
-1.0 ATR is a pretty good volatility measure. When the price is at bottom. The True range is at highest because buyer and seller are very mixed. In an uptrend, The ATR should decrease
-1.1 Most time dominant period is 15-40 which means this is the best period to do sell or buy. 
-
-1. Average True Range to set threshhold
-calculate average true range over past period
-add a fraction of the average true range to nonlinear/ unstable period filters. 
-by doing this, you allow the price to swing within the past true range. If it exceeds, then it is likely an special case. 
-
-My thought:
-ATR + STD = True Range
-
-2. The general problem of all unstable period indicator is that they are too volatile and need a bigger frequency to compensate
-
-2. Voting system
-Use uncorrelated pairs: 
-momentum: ma, instand_trend
-Cycle:
-oscilator: RSI
-
-
-
-
-
-5. What JOHN Ehler did not incooperate:
-volume, ANN, fundamentals, comparative best stock using same technique at one day, industry comparison
-
-
-6. Relationships
+summmary
 the bigger the freq the more predictable, the more useless the data
 The smoother your signal, the longer the lag (solveable by insta trendline, kalman filter)
 the earlier you want to detect the turnpoint, the more sensitive the indicator needs to be, the more whiplas it creates. (Basically, you need to adjust the period based on probability for the next turning point signal)
 the better the trend the easier to make money.
-the more normalize, the morr sensitive, the more recent is the data,   《==》  the more whipsaw, the more noise.
+the more normalize, the more sensitive, the more recent is the data,   《==》  the more whipsaw, the more noise.
 In Up Trend move, buy and hold
 In cycle mode buy and sell
-in downtrend mode, Shortsell and hold
-hyper overbought= long period + short period overbought
-hyper udnerbought = long period + short period underbought
+in downtrend mode, shortsell or dont buy at all
+john ehler did not incoperate ANN, fundamental, industry, date
+if combining indicators, they need to come from independed sources
+The general problem of all unstable period indicator is that they are too volatile and need a bigger frequency to compensate
+ATR is pretty good to determine volatility
+most dominant period is 15-40.Does this mean the reverse happens are 15-40 days? Check again #TODO
+Heisenberg: the earlier you know the signal, the less predictive it is
+Newton: if there is no anti force, the current trend continues
+Superposition: short term wave + long term wave interfere
+Even if outside factors like oil, employment affects the stock market. The stock market can remain unchanged and not react until a very long time. So you need long freq macd to determine.
+The market self contained drive seems to be stronger than anything else. It is just pure evaluation of a company, nothing else.
 
 """
-
 
 
 if __name__ == '__main__':

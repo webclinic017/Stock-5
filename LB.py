@@ -93,6 +93,25 @@ def today():
     return str(datetime.now().date()).replace("-", "")
 
 
+def name_standardizer(dict_locals):
+    """
+
+    format of all names are like this:
+    abase1.min(freq5.7, colpct_chg, ).macd(var1value1,var2value2)
+    """
+
+    if "abase" not in dict_locals or "func" not in dict_locals:
+        raise AssertionError
+    dict_locals_variables = {key: value for key, value in dict_locals.items() if key not in ["df", "abase", "func", "inplace"]}
+
+    result = f"{dict_locals['abase']}.{dict_locals['func']}"
+
+
+
+
+
+
+
 def indi_name(abase, deri, d_variables={}):
     variables = ""
     for key, enum_val in d_variables.items():

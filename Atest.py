@@ -26,6 +26,10 @@ Atest (Assettest):
 Btest (Backtest):
 = COMPARE past time to now (relative to past)(quantile to past)
 = COMPARE assets with other (relative to other)(quantile to others)
+
+
+
+
 """
 
 

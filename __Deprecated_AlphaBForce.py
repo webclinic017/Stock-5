@@ -10,6 +10,15 @@ import traceback
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
+"""
+brute force is only useful when double combining
+But since this would yield exploding complexity, it should not be considered
+so manual auto
+
+
+KEEP THIS FILE AS DEPRECATED SNAPSHOT FROM LAST STAND 
+"""
+
 
 # evaluate a columns agains fgain in various aspects
 def bruteforce_eval_fgain(df, ts_code, column, d_fgain_gmean_detail):
