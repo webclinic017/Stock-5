@@ -1,24 +1,15 @@
-import pandas as pd
-import tushare as ts
-import numpy as np
+import Alpha
 import _API_Tushare
 import LB
 import os.path
-import inspect
-from itertools import combinations
-import operator
-import math
-from numba import njit
-import traceback
 import cProfile
-import threading
 from scipy.stats import gmean
 from tqdm import tqdm
-import Alpha
-import Atest
+#import Alpha
+#import Atest
 import _API_JQ
-import ffn
 
+from Alpha import sharp_apply, gmean_apply, mean_apply, std_apply, mean_std_diff_apply
 from LB import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -62,7 +53,7 @@ def update_date_seasonal_stats(group_instance="asset_E"):
 
     # create and sort single groups
     for group in a_groups:
-        df_result = df_group[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", my_gmean, my_mean, my_std, my_mean_std_diff])
+        df_result = df_group[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", gmean_apply, mean_apply, std_apply, mean_std_diff_apply])
         df_result.to_excel(pdwriter, sheet_name=group[1], index=True, encoding='utf-8_sig')
 
     pdwriter.save()
@@ -457,7 +448,7 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
     # gmean
     for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
         df[f"gmean{freq}"] = 1 + (df["pct_chg"] / 100)
-        df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(my_sharp, raw=False)
+        df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(sharp_apply, raw=False)
 
     # Testing - 高送转
     #1. total share/ first day share
@@ -512,7 +503,7 @@ def update_assets_EIFD_D_expanding(df, asset):
     df["e_gmean"] = df["e_gmean"].expanding(240).apply(gmean, raw=False)
 
     #sharp ratio
-    df["e_sharp"] = df["pct_chg"].expanding(240).apply(LB.my_sharp, raw=False)
+    df["e_sharp"] = df["pct_chg"].expanding(240).apply(Alpha.sharp_apply, raw=False)
     #e_sharp and e_gmean are pretty similar
 
     # 2. times above ma, bigger better
@@ -1117,10 +1108,10 @@ def update_assets_stock_market_all(start_date="00000000", end_date=today(), asse
         df_result = df_saved.append(df_result, sort=False)
 
     # add comp chg and index
-    df_result["comp_chg"] = Alpha.column_add_comp_chg(df_result["pct_chg"])
+    df_result["comp_chg"] = Alpha.comp_chg(df=df_result,abase="pct_chg", inplace=False)
     for ts_code in comparison_index:
         df_result = add_asset_comparison(df=df_result, freq=freq, asset="I", ts_code=ts_code, a_compare_label=["open", "high", "low", "close", "pct_chg"])
-        df_result[f"comp_chg_{ts_code}"] = Alpha.column_add_comp_chg(df_result[f"pct_chg_{ts_code}"])
+        df_result[f"comp_chg_{ts_code}"] = Alpha.comp_chg(df=df_result,abase=f"pct_chg_{ts_code}", inplace=False)
 
     LB.to_csv_feather(df_result, a_path, index_relevant=False)
     print("Date_Base UPDATED")

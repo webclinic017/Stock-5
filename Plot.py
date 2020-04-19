@@ -16,7 +16,7 @@ import scipy.fftpack
 import LB
 from scipy.signal import find_peaks
 from pandas.plotting import autocorrelation_plot
-import Alpha
+#import Alpha
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -102,11 +102,11 @@ def plot_polynomials(ts_code="000002.SZ"):
         df = df_asset[i:i + window]
         trade_date = df_asset.at[i, "trade_date"]
 
-        df["poly1"] = Alpha.polynomial_series(df=df, degree=1, column="close")
-        df["poly2"] = Alpha.polynomial_series(df=df, degree=2, column="close")
-        df["poly3"] = Alpha.polynomial_series(df=df, degree=3, column="close")
-        df["poly4"] = Alpha.polynomial_series(df=df, degree=4, column="close")
-        df["poly5"] = Alpha.polynomial_series(df=df, degree=5, column="close")
+        df["poly1"] = Alpha.poly_fit(df=df, degree=1, column="close")
+        df["poly2"] = Alpha.poly_fit(df=df, degree=2, column="close")
+        df["poly3"] = Alpha.poly_fit(df=df, degree=3, column="close")
+        df["poly4"] = Alpha.poly_fit(df=df, degree=4, column="close")
+        df["poly5"] = Alpha.poly_fit(df=df, degree=5, column="close")
         df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
         df.reset_index(inplace=True, drop=True)
         newpath = f"Media/Plot/stock/000938.SZ/"
@@ -146,6 +146,7 @@ if __name__ == '__main__':
     matplotlib.use("TkAgg")
 
 else:
+    pass
     matplotlib.use("TkAgg")
 
 

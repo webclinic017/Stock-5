@@ -408,8 +408,9 @@ The market self contained drive seems to be stronger than anything else. It is j
 """
 
 
+
 if __name__ == '__main__':
     # ball.set_token('xq_a_token=2ee68b782d6ac072e2a24d81406dd950aacaebe3;')
     # df=ball.report("SH600519")
     # print(df)
-    volatility()
+    test_func()

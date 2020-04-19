@@ -13,7 +13,6 @@ from email.message import EmailMessage
 import math
 import re
 
-from scipy.stats.mstats import gmean
 import itertools
 from win32com.client import Dispatch
 import traceback
@@ -93,18 +92,34 @@ def today():
     return str(datetime.now().date()).replace("-", "")
 
 
-def name_standardizer(dict_locals):
+def name_norm(d_locals, func_name):
     """
+        format of all names are like this:
+        abase1.min(freq5.7, colpct_chg, ).macd(var1value1,var2value2)
+        """
 
-    format of all names are like this:
-    abase1.min(freq5.7, colpct_chg, ).macd(var1value1,var2value2)
-    """
+    def d_to_str(d):
+        return ", ".join([f"{key}{item.__name__ if callable(item) else item}" for key,item in d.items() if item not in [np.nan, None, ""]])
 
-    if "abase" not in dict_locals or "func" not in dict_locals:
+    if func_name in [np.nan, None, ""] :
+        print(d_locals)
         raise AssertionError
-    dict_locals_variables = {key: value for key, value in dict_locals.items() if key not in ["df", "abase", "func", "inplace"]}
 
-    result = f"{dict_locals['abase']}.{dict_locals['func']}"
+    d_clean = {key: value for key, value in d_locals.items() if key not in ["df", "abase", "inplace", "inspect", "Columns", "Index"]}
+
+    variables = d_to_str(d_clean)
+    if "abase" in d_locals:#derivation function based on an existing abase
+
+        if variables:
+            return f"{d_locals['abase']}.{func_name}({variables})"
+        else:
+            return f"{d_locals['abase']}.{func_name}"
+    else:#creational function, hardcoded, without abase
+
+        if variables:
+            return f"{func_name}({variables})"
+        else:
+            return f"{func_name}"
 
 
 
@@ -868,31 +883,6 @@ def custom_pairwise_cartesian(a_array,n):
 
 def drange(start,end,step):
     return [x/100 for x in range(start,end,step)]
-
-
-def my_sharp(series):
-    try:
-        return series.mean()/series.std()
-    except Exception as e:
-        return np.nan
-
-def my_gmean(series):
-    return gmean((series / 100) + 1)
-
-
-def my_mean(series):
-    return ((series / 100) + 1).mean()
-
-
-def my_std(series):
-    return ((series / 100) + 1).std()
-
-
-def my_mean_std_diff(series):
-    new_series = (series / 100) + 1
-    series_mean = new_series.mean()
-    series_std = new_series.std()
-    return series_mean - series_std
 
 
 # for some reason the last one is always wrong

@@ -1,7 +1,7 @@
 import cProfile
 # set global variable flag
-import Alpha
-from Alpha import *
+#import Alpha
+#from Alpha import *
 import Plot
 from scipy.stats.mstats import gmean
 import sys
@@ -10,7 +10,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 
-from Alpha import trendslope_apply, zlema, supersmoother_3p, highpass, cg_Oscillator
+from Alpha import poly_fit_apply, zlema, supersmoother_3p, highpass, cg_Oscillator
 
 sys.setrecursionlimit(1000000)
 
@@ -140,8 +140,8 @@ def slopecross(df, abase, sfreq, bfreq, smfreq):
         slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
     """
     name = f"{abase, sfreq, bfreq, smfreq}"
-    df[f"slope1_{name}"] = df[abase].rolling(sfreq).apply(trendslope_apply, raw=False)
-    df[f"slope2_{name}"] = df[abase].rolling(bfreq).apply(trendslope_apply, raw=False)
+    df[f"slope1_{name}"] = df[abase].rolling(sfreq).apply(poly_fit_apply, raw=False)
+    df[f"slope2_{name}"] = df[abase].rolling(bfreq).apply(poly_fit_apply, raw=False)
 
     # df[f"slopediff_{name}"] = df[f"slope1_{name}"] - df[f"slope2_{name}"]
     # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)

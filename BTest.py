@@ -120,7 +120,8 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     # chart add competitor
     for competitor in p_compare:
         df_port_c = DB.add_asset_comparison(df=df_port_c, freq=setting["freq"], asset=competitor[0], ts_code=competitor[1], a_compare_label=["pct_chg"])
-        df_port_c[f"comp_chg_{competitor[1]}"] = Alpha.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
+        #old df_port_c[f"comp_chg_{competitor[1]}"] = Alpha.column_add_comp_chg(df_port_c[f"pct_chg_{competitor[1]}"])
+        df_port_c[f"comp_chg_{competitor[1]}"] = Alpha.comp_chg(df=df_port_c,abase=f"pct_chg_{competitor[1]}",inplace=False)
 
     #PORT_C final
     df_port_c = df_port_c[["rank_final", "port_rank_pearson", "port_rank_spearman", "port_size", "buy", "hold", "sell", "port_cash", "port_close", "all_close", "all_pct_chg", "all_comp_chg", "port_sell_pct_chg", "port_sell_comp_chg"] + [f"pct_chg_{x}" for x in [x[1] for x in p_compare]] + [f"comp_chg_{x}" for x in [x[1] for x in p_compare]]]

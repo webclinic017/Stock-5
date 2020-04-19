@@ -4,6 +4,7 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 
+import Alpha
 import DB
 import LB
 import os
@@ -293,7 +294,7 @@ def ivola(df: pd.DataFrame, abase: str = "ivola"):
 def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
     add_to = f"{abase}.sharp{freq.value}"
     add_column(df, add_to, abase, 1)
-    df[add_to] = df[abase].rolling(freq.value).apply(LB.my_sharp)
+    df[add_to] = df[abase].rolling(freq.value).apply(Alpha.sharp_apply)
     return add_to
 
 

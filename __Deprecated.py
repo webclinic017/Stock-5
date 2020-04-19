@@ -21,6 +21,7 @@ import copy
 import cProfile
 from tqdm import tqdm
 import operator
+import matplotlib as plt
 
 """This .py contains deprecated or wrong or old functions that are no longer in use"""
 
@@ -591,12 +592,114 @@ def price_statistic_predict(a_all_freq=[1, 2, 5, 10, 20, 60, 120, 240, 500, 750]
 
 
 
+def kalman_filter():
+    """
+        From stack overflow, might be just wrong. Kalman filter is generally very noisy. Not smooth at all.
+        Reasons why kalman filter is not the best for measure stock price:
+        1. The assmumes the true value exist, Whereas stock price true value might always have a lot of noise, so no true value
+        2. The kalman filter itself deviates a lot with a lot of error
+
+
+        Parameters:
+        x: initial state 4-tuple of location and velocity: (x0, x1, x0_dot, x1_dot)
+        P: initial uncertainty convariance matrix
+        measurement: observed position
+        R: measurement noise
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        """
+
+    def kalman(x, P, measurement, R, motion, Q, F, H):
+        '''
+
+
+        Parameters:
+        x: initial state
+        P: initial uncertainty convariance matrix
+        measurement: observed position (same shape as H*x)
+        R: measurement noise (same shape as H)
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        F: next state function: x_prime = F*x
+        H: measurement function: position = H*x
+
+        Return: the updated and predicted new values for (x, P)
+
+        See also http://en.wikipedia.org/wiki/Kalman_filter
+
+        This version of kalman can be applied to many different situations by
+        appropriately defining F and H
+        '''
+        # UPDATE x, P based on measurement m
+        # distance between measured and current position-belief
+        y = np.matrix(measurement).T - H * x
+        S = H * P * H.T + R  # residual convariance
+        K = P * H.T * S.I  # Kalman gain
+        x = x + K * y
+        I = np.matrix(np.eye(F.shape[0]))  # identity matrix
+        P = (I - K * H) * P
+
+        # PREDICT x, P based on motion
+        x = F * x + motion
+        P = F * P * F.T + Q
+        return x, P
+
+    def kalman_xy(x, P, measurement, R, motion=np.matrix('0. 0. 0. 0.').T, Q=np.matrix(np.eye(4))):
+        """
+        Parameters:
+        x: initial state 4-tuple of location and velocity: (x0, x1, x0_dot, x1_dot)
+        P: initial uncertainty convariance matrix
+        measurement: observed position
+        R: measurement noise
+        motion: external motion added to state vector x
+        Q: motion noise (same shape as P)
+        """
+        return kalman(x, P, measurement, R, motion, Q, F=np.matrix('''  1. 0. 1. 0.;
+                                                                          0. 1. 0. 1.;
+                                                                          0. 0. 1. 0.;
+                                                                          0. 0. 0. 1.
+                                                                          '''),
+                      H=np.matrix('''
+                                                                          1. 0. 0. 0.;
+                                                                          0. 1. 0. 0.'''))
+
+    x = np.matrix('0. 0. 0. 0.').T
+    P = np.matrix(np.eye(4)) * 1000  # initial uncertainty
+
+    df = DB.get_asset()
+
+    N = len(df["close"])
+    observed_x = range(0, N)
+    observed_y = df["close"]
+    plt.plot(observed_x, observed_y)
+    result = []
+    R = 800 ** 2  # the bigger the noise, the more the lag . Otherwise too close to actual price, no need to filter
+    for meas in zip(observed_x, observed_y):
+        x, P = kalman_xy(x, P, meas, R)
+        result.append((x[:2]).tolist())
+    kalman_x, kalman_y = zip(*result)
+    plt.plot(kalman_x, kalman_y)
+    plt.show()
 
 
 
+"""incompleted"""
+def swissarmy(type, s_high, s_low, n):
+    """http://www.mesasoftware.com/papers/SwissArmyKnifeIndicator.pdf
+        Various indicators together in one place
+    """
+    delta = 0.1
+    N = 0
+    s_price = (s_high + s_low) / 2
 
-
-
+    a_result = []
+    if type == "EMA":
+        for i in range(0, len(s_high)):
+            if i < n:
+                result = s_price.iloc[i]
+                alpha = (math.cos(np.radians(360) / n) + math.sin((np.radians(360) / n)) - 1) / math.cos(np.radians(360) / n)
+                b0 = alpha
+                a1 = 1 - alpha
 
 
 
