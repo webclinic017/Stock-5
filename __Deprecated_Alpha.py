@@ -356,7 +356,7 @@ def cdl(df: pd.DataFrame, abase: str):
 
     df[abase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
     # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
-    columns_remove(df, a_positive_columns + a_negative_columns)
+    remove_columns(df, a_positive_columns + a_negative_columns)
     return abase
 
 
@@ -487,7 +487,7 @@ def trend(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, m
         # a_remove.append(market_suffix + "rsi" + str(i))
         # a_remove.append(market_suffix + "phase" + str(i))
         pass
-    LB.columns_remove(df, a_remove)
+    LB.remove_columns(df, a_remove)
 
     # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
     df[trend_name] = df[f"{trend_name}2"] * 0.80 + df[f"{trend_name}5"] * 0.12 + df[f"{trend_name}10"] * 0.04 + df[f"{trend_name}20"] * 0.02 + df[f"{trend_name}60"] * 0.01 + df[f"{trend_name}240"] * 0.01
@@ -1031,7 +1031,7 @@ def trendslope_apply(s):
     """Trend apply = 1 degree polynomials"""
     index = range(0, len(s))
     normalized_s = normalize_vector(s, min=0, max=len(s))
-    return LB.get_linear_regression_slope(index, normalized_s)
+    return LB.polyfit_slope(index, normalized_s)
 
 
 def zlema(s, n, gain):

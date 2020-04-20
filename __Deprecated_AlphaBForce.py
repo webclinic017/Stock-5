@@ -1,3 +1,6 @@
+import enum
+import inspect
+import itertools
 import os
 import os.path
 import pandas as pd
@@ -150,7 +153,7 @@ def bruteforce_iterate():
             else:
                 deri_function = Alpha.get_func(ideri_name)
             print("deri is,", ideri_name, deri_function.__name__)
-            settings_explode = Alpha.function_all_combinations(deri_function)
+            settings_explode = function_all_combinations(deri_function)
 
             print("all combinations", settings_explode)
             len_setting_explode = len(settings_explode)
@@ -163,14 +166,19 @@ def bruteforce_iterate():
                     for key in LB.c_bfreq():
                         path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(abase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_fgain{key}.csv"
                         if not os.path.exists(path):
-                            LB.line_print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                            print("=" * 40)
+                            print(f"SMALL UPDATE: File NOT EXIST. DO. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                            print("=" * 40)
                             break  # go into the ibase
                     else:
-                        LB.line_print(f"SMALL UPDATE: File Exists. Skip. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                        print("=" * 40)
+                        print(f"SMALL UPDATE: File Exists. Skip. -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                        print("=" * 40)
                         continue  # go to next ibase
                 else:
-                    LB.line_print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
-
+                    print("=" * 40)
+                    print(f"BIG UPDATE: -> {ibase}:{ibase_counter}/{len_e_ibase}. Deri.{ideri_name}:{ideri_counter}/{len_e_ideri}. setting:{setting_counter}/{len_setting_explode}")
+                    print("=" * 40)
                 # create sample
                 path = f"{setting['path_general']}{ibase_name}/{ideri_name}/" + LB.indi_name(abase=ibase_name, deri=ideri_name, d_variables=one_setting) + f"_sample"
                 df_sample = d_df_asset["000001.SZ"].copy()
@@ -206,3 +214,30 @@ if __name__ == '__main__':
 
     bruteforce_iterate()
     bruteforce_summary(setting["path_general"], setting["path_result"])
+
+
+def explode_settings(d_one_indicator_variables):
+    # 1. only get values form above dict
+    # 2. create cartesian product of the list
+    # 3. create dict out of list
+
+    # first list out all possible choices
+    for key, value in d_one_indicator_variables.items():
+        print(f"Input ---> {key}: {value}")
+
+    a_product_result = []
+    for one_combination in itertools.product(*d_one_indicator_variables.values()):
+        d_result = dict(zip(d_one_indicator_variables.keys(), one_combination))
+        a_product_result.append(d_result)
+    print(f"there are that many combinations: {len(a_product_result)}")
+    return a_product_result
+
+
+def function_all_combinations(func):
+    signature = inspect.getfullargspec(func).annotations
+    result_dict = {}
+    # get function annotation with variable and type
+    for variable, enum_or_class in signature.items():
+        if issubclass(enum_or_class, enum.Enum):  # ignore everything else that is not a enum. All Variable types MUST be custom defined Enum
+            result_dict[variable] = enum_or_class
+    return explode_settings(result_dict)

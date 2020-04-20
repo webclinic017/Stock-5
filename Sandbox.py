@@ -1,74 +1,11 @@
-import tushare as ts
-import pandas as pd
-import time
 import DB
 import LB
-import traceback
 from jqdatasdk import *
 import _API_JQ
-import pysnowball as ball
+
+from _API_JQ import my_macro
 
 auth('13817373362', '373362')
-
-
-def my_macro_run(query_content):
-    macro.run_query(query(query_content))
-
-
-def mymacro(macro_query):
-    query_result = query(macro_query)
-    df = macro.run_query(query_result)
-
-    query_from = str(query_result).split("FROM")[1]
-    query_from = query_from.replace(" ", "")
-    query_from = query_from.replace('"', '')
-
-    index_label = "stat_quarter"
-    if "QUARTER" in query_from:
-        index_label = "stat_quarter"
-    elif "MONTH" in query_from:
-        index_label = "stat_month"
-    elif "YEAR" in query_from:
-        index_label = "stat_year"
-    else:
-        columns = df.columns
-        if "stat_quarter" in columns:
-            index_label = "stat_quarter"
-        elif "stat_month" in columns:
-            index_label = "stat_month"
-        elif "stat_year" in columns:
-            index_label = "stat_year"
-        elif "stat_date" in columns:
-            index_label = "stat_date"
-        else:
-            index_label = "day"
-
-    if "MAC_CPI_MONTH" == query_from:
-        df = df[df["area_name"] == "全国"]
-
-    print(f"index: {index_label}. query_:{query_from}")
-    LB.convert_index(df, index_label)
-    df.sort_values(index_label, inplace=True)
-    return [query_from, index_label, df]
-    # df.to_csv(f"jq/{query_from}.csv", index=False,encoding="utf-8_sig")
-
-
-def volatility():
-    """one day pct_chg std
-    Hypothesis: if one day pct_chg.std of all stocks is small market is stable
-
-    """
-    d_date = DB.preload(asset='E', on_asset=False)
-    df_result = pd.DataFrame()
-    for trade_date, df_date in d_date.items():
-        print(trade_date)
-        df_result.at[trade_date, "close"] = df_date["close"].mean()
-        df_result.at[trade_date, "mean"] = df_date["pct_chg"].mean()
-        df_result.at[trade_date, "std"] = df_date["pct_chg"].std()
-        df_result.at[trade_date, "sharp"] = df_date["pct_chg"].mean() / df_date["pct_chg"].std()
-    for i in [5, 10, 20, 60, 240]:
-        df_result[f"std{i}"] = df_result["std"].rolling(i).mean()
-    df_result.to_csv("volatilty.csv")
 
 
 def main():
@@ -151,7 +88,7 @@ def main():
     a_global_index = ["800000.XHKG", "INX", "KS11", "FTSE", "RTS", "MIB", "GDAXI", "N225", "IBEX", "FCHI", "IBOV", "MXX", "GSPTSE"]
     for code in a_global_index:
         df = _API_JQ.break_jq_limit_helper_finance(code=code)
-        df["day"] = df["day"].apply(LB.trade_date_switcher)
+        df["day"] = df["day"].apply(LB.switch_trade_date)
         df["day"] = df["day"].astype(int)
         df = pd.merge(df_sh, df, how="left", left_on="trade_date", right_on="day", suffixes=["_sh", "_F"], sort="False")
         if code == "INX":
@@ -234,7 +171,7 @@ def main():
     # make query, adjust df and safe
     a_all = []
     for macro_query in a_macro_queries:
-        a_answer = mymacro(macro_query)
+        a_answer = my_macro(macro_query)
         name = a_answer[0]
         index_label = a_answer[1]
         df = a_answer[2]
@@ -266,7 +203,7 @@ def main():
         df[index_label] = df[index_label].astype(int)
         df = pd.merge(df_sh.copy().reset_index(), df, how='left', left_on=["trade_date"], right_on=[index_label], sort=False)
         df = df.set_index("trade_date")
-        LB.columns_remove(df, [index_label])
+        LB.remove_columns(df, [index_label])
         a_important_labels = [x for x in a_important_labels if x != index_label]
         for label in a_important_labels:
             df[label] = df[label].fillna(method="ffill")
@@ -382,8 +319,8 @@ def main():
     #Q: combining two method will cause multiple causaion problem (or like this)
     #A: A method must be very significant to be able to use. Otherwise its wrong signals will interfere too much with other methods
 
-
-
+    # TODO kurt and skew are actually good high pass indicator.compare them against other high pass to see which one is better.
+    # TODO define crazy time and standard time by using cov and std. It works
 """
 summmary
 the bigger the freq the more predictable, the more useless the data
@@ -410,7 +347,7 @@ The market self contained drive seems to be stronger than anything else. It is j
 
 
 if __name__ == '__main__':
+    pass
     # ball.set_token('xq_a_token=2ee68b782d6ac072e2a24d81406dd950aacaebe3;')
     # df=ball.report("SH600519")
     # print(df)
-    test_func()

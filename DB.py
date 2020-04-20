@@ -5,8 +5,8 @@ import os.path
 import cProfile
 from scipy.stats import gmean
 from tqdm import tqdm
-#import Alpha
-#import Atest
+import Alpha
+import Atest
 import _API_JQ
 
 from Alpha import sharp_apply, gmean_apply, mean_apply, std_apply, mean_std_diff_apply
@@ -434,7 +434,7 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
 
     # alpha and Beta, lower the better. too slow
     if asset in ["I", "E", "FD"]:
-        for ts_code, df_index in Global.d_index.items():
+        for ts_code, df_index in Global.d_assets.items():
             for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
                 beta_corr = Alpha.corr(df=df, abase="close", freq=freq, re=Alpha.RE.r, corr_with=ts_code, corr_series=df_index["close"])
                 df[f"alpha{freq}_{ts_code}"] = df["pct_chg"] - df[beta_corr] * df_index["pct_chg"]
@@ -482,7 +482,7 @@ def update_assets_EIFD_D_point(df, asset, bfreq=c_bfreq()):
     for sfreq, bfreq in [(5, 10), (10, 20), (240, 300), (300, 500)]:
         # for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 120, 180, 240, 300, 500], 2):
         if sfreq < bfreq:
-            Atest.my_macd(df=df, abase="close", sfreq=sfreq, bfreq=bfreq, type=1, score=10)
+            Alpha.macd(df=df, abase="close", freq=sfreq, freq2=bfreq, type=1, score=10)
 
 
 def update_assets_EIFD_D_expanding(df, asset):
@@ -571,7 +571,7 @@ def update_assets_EI_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
 
 
     df = LB.df_reverse_reindex(df)
-    LB.columns_remove(df, ["pre_close", "amount", "change"])
+    LB.remove_columns(df, ["pre_close", "amount", "change"])
     return df
 
 
@@ -657,7 +657,7 @@ def update_assets_FD_D_reindex_reverse(ts_code, freq, asset, start_date, end_dat
                     df[column] = df[column] * df["adj_factor"] / latest_adj
 
             df = LB.df_reverse_reindex(df)
-            LB.columns_remove(df, ["pre_close", "amount", "change", "adj_factor"])
+            LB.remove_columns(df, ["pre_close", "amount", "change", "adj_factor"])
         return df
 
 
@@ -850,7 +850,7 @@ def update_asset_intraday(asset="I",freq="15m"):
         print(f"update intraday {asset,freq,ts_code}")
         a_path = LB.a_path(f"Market/CN/Asset/{asset}/{freq}/{ts_code}")
         if not os.path.isfile(a_path[0]):
-            jq_code=LB.ts_code_switcher(ts_code)
+            jq_code=LB.switch_ts_code(ts_code)
             df=_API_JQ.my_get_bars(jq_code=jq_code,freq=freq)
             df["ts_code"]=ts_code
             df=df.set_index("date",drop=True)
@@ -1135,7 +1135,7 @@ def update_margin_total():
     df_sh=LB.ohlcpp(df_sh)
     for market in [f"XSHE", f"XSHG"]:
         df_market=df_result[df_result["exchange_code"]==market]
-        df_market["trade_date"]=df_market["date"].apply(LB.trade_date_switcher)
+        df_market["trade_date"]=df_market["date"].apply(LB.switch_trade_date)
         df_market["trade_date"]=df_market["trade_date"].astype(int)
         df_market=pd.merge(df_sh,df_market,how="left",on="trade_date",sort=False)
         a_path=LB.a_path(f"Market/CN/Asset/E_Market/margin_total/{market}")
@@ -1202,7 +1202,7 @@ def update_date_news_tushare():
         a_path = LB.a_path(f"Market/CN/Date/News/tushare/{today}")
         print(today)
         if not os.path.isfile(a_path[0]):
-            df=_API_Tushare.my_major_news(start_date=f"{LB.trade_date_switcher(today)} 00:00:00",end_date=f"{LB.trade_date_switcher(tomorrow)} 00:00:00")
+            df=_API_Tushare.my_major_news(start_date=f"{LB.switch_trade_date(today)} 00:00:00", end_date=f"{LB.switch_trade_date(tomorrow)} 00:00:00")
             if df.empty:
                 continue
             LB.to_csv_feather(df=df,a_path=a_path,skip_feather=True)
@@ -1225,7 +1225,7 @@ def update_date_news_jq():
         a_path = LB.a_path(f"Market/CN/Date/News/jq/{today}")
         print(today)
         if not os.path.isfile(a_path[0]):
-            df=_API_JQ.my_cctv_news(day=LB.trade_date_switcher(today))
+            df=_API_JQ.my_cctv_news(day=LB.switch_trade_date(today))
             if df.empty:
                 continue
             LB.to_csv_feather(df=df,a_path=a_path,skip_feather=True)
@@ -1385,7 +1385,7 @@ def add_asset_comparison(df, freq, asset, ts_code, a_compare_label=["open", "hig
     d_rename = {column: f"{column}_{ts_code}" for column in a_compare_label}
     df_compare = get_asset(ts_code, asset, freq)[a_compare_label]
     df_compare.rename(columns=d_rename, inplace=True)
-    LB.columns_remove(df, [f"{label}_{ts_code}" for label in a_compare_label])
+    LB.remove_columns(df, [f"{label}_{ts_code}" for label in a_compare_label])
     return pd.merge(df, df_compare, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
 
 
@@ -1488,7 +1488,7 @@ def update_asset_xueqiu(asset="E", market="CN"):
         print(f"update xueqiu {ts_code}")
         a_path=LB.a_path(f"Market/{market}/Asset/E/Xueqiu_raw/{ts_code}")
         if not os.path.isfile(a_path[0]):
-            code=LB.ts_code_switcher(ts_code)
+            code=LB.switch_ts_code(ts_code)
             df_xueqiu=_API_JQ.break_jq_limit_helper_xueqiu(code=code)
             LB.to_csv_feather(df=df_xueqiu, a_path=a_path)
 
@@ -1508,7 +1508,7 @@ def convert_asset_xueqiu(asset="E",market="CN"):
         df_xueqiu = get(a_path)
         if df_xueqiu.empty:
             continue
-        df_xueqiu["trade_date"]=df_xueqiu["day"].apply(LB.trade_date_switcher)
+        df_xueqiu["trade_date"]=df_xueqiu["day"].apply(LB.switch_trade_date)
         df_xueqiu["trade_date"]=df_xueqiu["trade_date"].astype(int)
         df_xueqiu=df_xueqiu[["trade_date","follower", "new_follower", "discussion","new_discussion", "trade", "new_trade"]]
         df_xueqiu=df_xueqiu.set_index("trade_date",drop=True)
@@ -1595,9 +1595,18 @@ def update_all_in_one_cn(big_update=False):
 
 
 
-class Global:
-    df_asset= get_asset()
-    d_index = preload(asset="I", d_queries_ts_code=LB.c_I_queries())
+fast_load={}
+
+def get_fast_load(ts_code):
+    if ts_code in fast_load:
+        return fast_load[ts_code]
+    else:
+        print(f"{ts_code} fast loaded from DB")
+        df_ts_code=get_ts_code(a_asset=["E","I","FD","F","G"])
+        asset=df_ts_code.at[ts_code,"asset"]
+        fast_load[ts_code]=get_asset(ts_code=ts_code,asset=asset)
+        return fast_load[ts_code]
+
 
 
 # speed order=remove apply and loc, use vectorize where possible

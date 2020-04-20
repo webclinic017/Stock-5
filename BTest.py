@@ -574,7 +574,7 @@ def btest(settings=[{}]):
 
 
 
-def get_setting_master():
+def btest_setting_master():
     return {
         # general = Non changeable through one run
         "start_date": "20000101",
@@ -613,7 +613,7 @@ def get_setting_master():
         "p_compare": [["I", "000001.SH"]],  # ["I", "CJ000001.SH"],  ["I", "399001.SZ"], ["I", "399006.SZ"]   compare portfolio against other performance
     }
 
-def btest_manu(setting_master = get_setting_master()):
+def btest_manu(setting_master = btest_setting_master()):
     setting_master["auto"] = {} #important {} and not ()
     # settings creation  #,"G"
     for asset in ["E"]:
@@ -683,7 +683,7 @@ def btest_manu(setting_master = get_setting_master()):
     btest_overview_master(mode="manu")
 
 
-def btest_auto(pair=1,setting_master = get_setting_master()):
+def btest_auto(pair=1, setting_master = btest_setting_master()):
     """
     this btest is to single test each indicator on each asset, and put them into organized category.
 

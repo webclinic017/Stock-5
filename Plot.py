@@ -16,7 +16,7 @@ import scipy.fftpack
 import LB
 from scipy.signal import find_peaks
 from pandas.plotting import autocorrelation_plot
-#import Alpha
+import Alpha
 from multiprocessing import Process
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -30,7 +30,7 @@ def create_gif(ts_code="000002.SZ"):
     print("Plotting...please wait...")
     imageio.mimsave(output_file, images, duration=0.005)
 
-def support_resistance_once_plot(window=1000, rolling_freq=20, ts_code="000002.SZ", step=5):
+def plot_support_resistance(window=1000, rolling_freq=20, ts_code="000002.SZ", step=5):
     def support_resistance_acc(df, freq, max_rs, s_minmax, adj_start_date, end_date, df_asset):
         s_occurence_bins = s_minmax.value_counts(bins=100)
         for counter, (index, value) in enumerate(s_occurence_bins.iteritems()):
@@ -93,28 +93,18 @@ def plot_fft(ts_code="000002.SZ"):
     ax.plot(xf, 2.0 / N * np.abs(yf[:N // 2]))
     plt.show()
 
-def plot_polynomials(ts_code="000002.SZ"):
-    df_asset = DB.get_asset(ts_code=ts_code)
-    df_asset = df_asset.reset_index()
-    window = 265
-    step = 5
-    for i in range(0, 6000, step):
-        df = df_asset[i:i + window]
-        trade_date = df_asset.at[i, "trade_date"]
-
-        df["poly1"] = Alpha.poly_fit(df=df, degree=1, column="close")
-        df["poly2"] = Alpha.poly_fit(df=df, degree=2, column="close")
-        df["poly3"] = Alpha.poly_fit(df=df, degree=3, column="close")
-        df["poly4"] = Alpha.poly_fit(df=df, degree=4, column="close")
-        df["poly5"] = Alpha.poly_fit(df=df, degree=5, column="close")
-        df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
-        df.reset_index(inplace=True, drop=True)
-        newpath = f"Media/Plot/stock/000938.SZ/"
-        if not os.path.exists(newpath):
-            os.makedirs(newpath)
-        plt.savefig(f"{newpath}{trade_date}.jpg")
-        df.plot(legend=True)
+def plot_polynomials(df):
+    df = df.copy().reset_index()
+    df["poly1"] = Alpha.poly_fit(df=df, abase="close",degree=1,inplace=False)
+    df["poly2"] = Alpha.poly_fit(df=df, abase="close",degree=2,inplace=False)
+    df["poly3"] = Alpha.poly_fit(df=df, abase="close",degree=3,inplace=False)
+    df["poly4"] = Alpha.poly_fit(df=df, abase="close",degree=4,inplace=False)
+    df["poly5"] = Alpha.poly_fit(df=df, abase="close",degree=5,inplace=False)
+    df = df[["close", "poly1", "poly2", "poly3", "poly4", "poly5"]]
+    df.plot(legend=True)
+    plt.show()
     plt.close()
+
 
 def plot_histo(series):
     plt.hist(series)  # use this to draw histogram of your data

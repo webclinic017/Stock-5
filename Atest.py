@@ -1,7 +1,8 @@
 import cProfile
 # set global variable flag
-#import Alpha
-#from Alpha import *
+import Alpha
+from Alpha import *
+import numpy as np
 import Plot
 from scipy.stats.mstats import gmean
 import sys
@@ -10,7 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 
-from Alpha import poly_fit_apply, zlema, supersmoother_3p, highpass, cg_Oscillator
+from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
 
 sys.setrecursionlimit(1000000)
 
@@ -27,448 +28,15 @@ Btest (Backtest):
 = COMPARE past time to now (relative to past)(quantile to past)
 = COMPARE assets with other (relative to other)(quantile to others)
 
-
-
-
 """
 
 
-def trend(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
-    a_all = [1] + array
-    a_small = [str(x) for x in a_all][:-1]
-    a_big = [str(x) for x in a_all][1:]
-
-    rsi_name = indi_name(abase=abase, deri=f"{market_suffix}rsi")
-    phase_name = indi_name(abase=abase, deri=f"{market_suffix}phase")
-    rsi_abv = indi_name(abase=abase, deri=f"{market_suffix}rsi_abv")
-    turnpoint_name = indi_name(abase=abase, deri=f"{market_suffix}turnpoint")
-    under_name = indi_name(abase=abase, deri=f"{market_suffix}under")
-    trend_name = indi_name(abase=abase, deri=f"{market_suffix}{ADeri.trend.value}")
-
-    func = talib.RSI
-    # RSI and CMO are the best. CMO is a modified RSI
-    # RSI,CMO,MOM,ROC,ROCR100,TRIX
-
-    # df[f"detrend{abase}"] = signal.detrend(data=df[abase])
-    for i in a_all:  # RSI 1
-        try:
-            if i == 1:
-                df[f"{rsi_name}{i}"] = (df[abase].pct_change() > 0).astype(int)
-                print(df[f"{rsi_name}{i}"].dtype)
-                # df[ rsi_name + "1"] = 0
-                # df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
-            else:
-                df[f"{rsi_name}{i}"] = func(df[abase], timeperiod=i) / 100
-                # df[f"{rsi_name}{i}"] = func(df[f"{rsi_name}{i}"], timeperiod=i) / 100
-
-                # normalization causes error
-                # df[f"{rsi_name}{i}"] = (df[f"{rsi_name}{i}"]-df[f"{rsi_name}{i}"].min())/ (df[f"{rsi_name}{i}"].max()-df[f"{rsi_name}{i}"].min())
-        except Exception as e:  # if error happens here, then no need to continue
-            print("error", e)
-            df[trend_name] = np.nan
-            return trend_name
-
-    # Create Phase
-    for i in [str(x) for x in a_all]:
-        maximum = (thresh_log * math.log((int(i))) + thresh_rest)
-        minimum = 1 - maximum
-
-        high_low, high_high = list(df[f"{rsi_name}{i}"].quantile([0.70, 1]))
-        low_low, low_high = list(df[f"{rsi_name}{i}"].quantile([0, 0.30]))
-
-        # df[f"{phase_name}{i}"] = [1 if high_high > x > high_low else 0 if low_low < x < low_high else np.nan for x in df[f"{rsi_name}{i}"]]
-
-    # rsi high abve low
-    for freq_small, freq_big in zip(a_small, a_big):
-        df[f"{rsi_abv}{freq_small}"] = (df[f"{rsi_name}{freq_small}"] > df[f"{rsi_name}{freq_big}"]).astype(int)
-
-    # one loop to create trend from phase
-    for freq_small, freq_big in zip(a_small, a_big):
-        trendfreq_name = f"{trend_name}{freq_big}"  # freg_small is 2, freq_big is 240
-        # the following reason is that none of any single indicator can capture all. one need a second dimension to create a better fuzzy logic
-
-        # 2. find all points where freq_small is higher/over/abv freq_big
-        df[f"{trendfreq_name}"] = np.nan
-        df[f"{turnpoint_name}{freq_small}helper"] = df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]
-
-        freq_small_top_low, freq_small_top_high = list(df[f"{rsi_name}{freq_small}"].quantile([0.97, 1]))
-        freq_small_bot_low, freq_small_bot_high = list(df[f"{rsi_name}{freq_small}"].quantile([0, 0.03]))
-
-        freq_big_top_low, freq_big_top_high = list(df[f"{rsi_name}{freq_big}"].quantile([0.96, 1]))
-        freq_big_bot_low, freq_big_bot_high = list(df[f"{rsi_name}{freq_big}"].quantile([0, 0.04]))
-
-        # if bottom big and small freq are at their alltime rare high
-        # df.loc[(df[f"{rsi_name}{freq_big}"] > freq_big_top_low), f"{trendfreq_name}"] = 0
-        # df.loc[(df[f"{rsi_name}{freq_big}"] < freq_big_bot_high), f"{trendfreq_name}"] = 1
-
-        # df.loc[(df[f"{rsi_name}{freq_small}"] > freq_small_top_low), f"{trendfreq_name}"] = 0
-        # df.loc[(df[f"{rsi_name}{freq_small}"] < freq_small_bot_high), f"{trendfreq_name}"] = 1
-
-        # small over big
-        df.loc[(df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]) > 1.01, f"{trendfreq_name}"] = 1
-        df.loc[(df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]) < 0.99, f"{trendfreq_name}"] = 0
-
-        # 2. find all points that have too big distant between rsi_freq_small and rsi_freq_big. They are the turning points
-        # top_low, top_high = list(df[f"{turnpoint_name}{freq_small}helper"].quantile([0.98, 1]))
-        # bot_low, bot_high = list(df[f"{turnpoint_name}{freq_small}helper"].quantile([0, 0.02]))
-        # df.loc[ (df[f"{turnpoint_name}{freq_small}helper"]) < bot_high, f"{trendfreq_name}"] = 1
-        # df.loc[ (df[f"{turnpoint_name}{freq_small}helper"]) > top_low, f"{trendfreq_name}"] = 0
-
-        # 3. Create trend based on these two combined
-        df[trendfreq_name] = df[trendfreq_name].fillna(method='ffill')
-        # df.loc[(df[phase_name + freq_big] == 1) & (df[phase_name + freq_small] == 1), trendfreq_name] = 0
-        # df.loc[(df[phase_name + freq_big] == 0) & (df[phase_name + freq_small] == 0), trendfreq_name] = 1
-
-        # fill na based on the trigger points. bfill makes no sense here
-        # df[trendfreq_name].fillna(method='ffill', inplace=True)
-        # TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
-
-    # remove RSI and phase Columns to make it cleaner
-    a_remove = []
-    for i in a_all:
-        # a_remove.append(market_suffix + "rsi" + str(i))
-        # a_remove.append(market_suffix + "phase" + str(i))
-        pass
-    LB.columns_remove(df, a_remove)
-
-    # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
-    return trend_name
 
 
-def slopecross(df, abase, sfreq, bfreq, smfreq):
-    """using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
-        slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
+
+def extrema_rdm_2(df, abase, a_n=[60]):
     """
-    name = f"{abase, sfreq, bfreq, smfreq}"
-    df[f"slope1_{name}"] = df[abase].rolling(sfreq).apply(poly_fit_apply, raw=False)
-    df[f"slope2_{name}"] = df[abase].rolling(bfreq).apply(poly_fit_apply, raw=False)
-
-    # df[f"slopediff_{name}"] = df[f"slope1_{name}"] - df[f"slope2_{name}"]
-    # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)
-
-    df[f"slope_{name}"] = 0
-    df.loc[(df[f"slope1_{name}"] > df[f"slope2_{name}"]) & (df[f"slope1_{name}"] > 0), f"slope_{name}"] = 10
-    df.loc[(df[f"slope1_{name}"] <= df[f"slope2_{name}"]) & (df[f"slope1_{name}"] <= 0), f"slope_{name}"] = -10
-
-
-def macd_tor(df, abase, sfreq):
-    """
-    is not very useful since price/vol relationship is rather random
-    So even if price and volume deviates/converges, it doesnt say anything about the future price
-    """
-
-    name = f"{abase}.vol.{sfreq}"
-
-    df[f"abase_{name}"] = zlema((df[abase]), sfreq, 1.8)
-    df[f"tor_{name}"] = zlema((df["turnover_rate"]), sfreq, 1.8)
-    #
-    # df[f"abase_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
-    # df[f"tor_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
-
-    df[f"macd_tor_diff{name}"] = df[f"abase_{name}"] - df[f"tor_{name}"]
-    df[f"macd_tor_diff{name}"] = df[f"macd_tor_diff{name}"] * 1
-
-    df[f"macd_tor_dea_{name}"] = df[f"macd_tor_diff{name}"] - supersmoother_3p(df[f"macd_tor_diff{name}"], int(sfreq / 2))
-    df[f"macd_tor_dea_{name}"] = df[f"macd_tor_dea_{name}"] * 1
-
-    df.loc[(df[f"macd_tor_dea_{name}"] > 0), f"macd_tor_{name}"] = 80
-    df.loc[(df[f"macd_tor_dea_{name}"] <= 0), f"macd_tor_{name}"] = -80
-
-    df[f"macd_tor_{name}"] = df[f"macd_tor_{name}"].fillna(method="ffill")
-
-    return [f"macd_tor_{name}", f"macd_tor_diff{name}", f"macd_tor_dea_{name}"]
-
-
-def my_macd(df, abase, sfreq, bfreq, type=1, score=10):
-    """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
-        on daily chart, useable freqs are 12*60, 24*60 ,5*60
-
-        IMPORTNAT:
-        Use a very responsive indicator for EMA! Currently, ema is the most responsive
-        Use a very smoother indicator for smooth! Currently, Supersmoother 3p is the most smoothest.
-        NOT other way around
-        Laguerre filter is overall very good, but is neither best at any discipline. Hence using EMA+ supersmoother 3p is better.
-        Butterwohle is also very smooth, but it produces 1 more curve at turning point. Hence super smoother is better for this job.
-
-
-        Works good on high volatile time, works bad on flat times.
-        TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
-        """
-    name = f"{abase}.{type, sfreq, bfreq,type}"
-    df[f"zldif_{name}"] = 0
-    df[f"zldea_{name}"] = 0
-    if type == 0:  # standard macd with ma. conventional ma is very slow
-        df[f"ema1_{name}"] = df[abase].rolling(sfreq).mean()
-        df[f"ema2_{name}"] = df[abase].rolling(bfreq).mean()
-        df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
-        df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq / 2))
-        df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
-        df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
-        df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
-    if type == 1:  # standard macd but with zlema
-        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
-        df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
-        df[f"zldiff_ss_big_{name}"] = supersmoother_3p(df[f"zldif_{name}"], int(sfreq))
-        df[f"zldea_{name}"] = df[f"zldif_{name}"] - df[f"zldiff_ss_big_{name}"]
-        df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
-        df.loc[(df[f"zldea_{name}"] < 0), f"zlmacd_{name}"] = -score
-    elif type == 2:  # macd where price > ema1 and ema2
-        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
-        df.loc[(df[abase] > df[f"ema1_{name}"]) & (df[abase] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
-        df.loc[(df[abase] < df[f"ema1_{name}"]) & (df[abase] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
-    elif type == 3:  # standard macd : ema1 > ema2. better than type 2 because price is too volatile
-        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df[abase]), bfreq, 1.8)
-        df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
-        df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
-    elif type == 4:  # macd with lowpass constructed from highpass. This basically replaces abv_ma
-        df[f"ema1_{name}"] = df[abase] - highpass(df[abase], int(sfreq))
-        df[f"ema2_{name}"] = df[abase] - highpass(df[abase], int(bfreq))
-        df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]), f"zlmacd_{name}"] = score
-        df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]), f"zlmacd_{name}"] = -score
-
-        # patch other
-        # df.loc[(df[f"ema1_{name}"] < df[f"ema2_{name}"]) & (df[f"ema1_{name}"] > df[f"ma120"]) & (df[f"ema2_{name}"] > df["ma120"]) , f"zlmacd_{name}"] = score
-        # df.loc[(df[f"ema1_{name}"] > df[f"ema2_{name}"]) & (df[f"ema1_{name}"] < df[f"ma120"]) & (df[f"ema2_{name}"] < df["ma120"]) , f"zlmacd_{name}"] = -score
-
-    elif type == 5:  # price and tor
-        df[f"ema1_{name}"] = zlema((df[abase]), sfreq, 1.8)
-        df[f"ema2_{name}"] = zlema((df["turnover_rate"]), sfreq, 1.8)
-        df[f"zldif_{name}"] = df[f"ema1_{name}"] - df[f"ema2_{name}"]
-        df[f"zldea_{name}"] = df[f"zldif_{name}"] - supersmoother_3p(df[f"zldif_{name}"], int(sfreq))
-        df.loc[(df[f"zldea_{name}"] > 0), f"zlmacd_{name}"] = score
-        df.loc[(df[f"zldea_{name}"] <= 0), f"zlmacd_{name}"] = -score
-    df[f"zlmacd_{name}"] = df[f"zlmacd_{name}"].fillna(method="ffill")
-    return [f"zlmacd_{name}", f"ema1_{name}", f"ema2_{name}", f"zldif_{name}", f"zldea_{name}"]
-
-
-def my_ismax(df, abase, q=0.95, score=10):
-    """
-    the bigger the difference abase/e_max, the closer they are together. the smaller the difference they far away they are
-    """
-    name = f"{abase}"
-    df[f"ismax_{name}"] = (df[abase] / df["e_max"]).between(q, q + 0.05).astype(int) * score
-    df[f"ismax_{name}"] = df[f"ismax_{name}"].replace(to_replace=0, value=-score)
-    return [f"ismax_{name}", ]
-
-
-def my_ismin(df, abase, q=0.95, score=10):
-    """
-    the bigger the difference emin/abase, the closer they are together. the smaller the difference they far away they are
-    """
-    name = f"{abase}"
-    df[f"ismin_{name}"] = (df["e_min"] / df[abase]).between(q, q + 0.05).astype(int) * score
-    df[f"ismin_{name}"] = df[f"ismin_{name}"].replace(to_replace=0, value=-score)
-    return [f"ismin_{name}", ]
-
-
-def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
-    """can be used on any indicator
-    gq=Generic quantile
-    0. create an oscilator of that indicator
-    1. create expanding mean of that indicator
-    2. create percent=today_indicator/e_indicator
-    3. assign rolling quantile quantile of percent
-
-    This appoach needs to be mean stationary !!!! otherwise quantile makes nosense
-    """
-    #init
-    name = f"{abase}.auto{norm_freq}.type{type}"
-    if f"norm_{name}" not in df.columns:
-        #3 choices. cg_oscilator, rsi, (today-yesterday)/today
-        if type==1:
-            df[f"norm_{name}"]= cg_Oscillator(df[abase], norm_freq)
-        elif type==2:
-            df[f"norm_{name}"]=talib.RSI(df[abase], norm_freq)
-        elif type==3:
-            #this is the same as ROCP rate of change percent
-            df[f"norm_{name}"]= (df[abase]-df[abase].shift(1))/df[abase].shift(1)
-        elif type==4:
-            df[f"norm_{name}"]= df[abase].pct_change(norm_freq)
-
-    #create expanding quantile
-    for q in [q_low, q_high]:
-        if f"q{q}_{name}" not in df.columns:
-            df[f"q{q}_{name}"] = df[f"norm_{name}"].expanding(240).quantile(q)
-
-    #assign todays value to a quantile
-    df[f"in_q{q_low, q_high}_{name}"]=((df[f"q{q_low}_{name}"] <= df[f"norm_{name}"]) & (df[f"norm_{name}"] < df[f"q{q_high}_{name}"])).astype(int)*score
-    df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
-    return [f"in_q{q_low, q_high}_{name}", ]
-
-
-
-
-
-
-
-
-
-
-
-
-def find_peaks_array(s, n=60):
-    # Generate a noisy AR(1) sample
-    np.random.seed(0)
-    xs = [0]
-    for r in s:
-        xs.append(xs[-1] * 0.9 + r)
-    df = pd.DataFrame(xs, columns=[s.name])
-    # Find local peaks
-    df[f'bot{n}'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
-    df[f'peak{n}'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
-    df[f"bot{n}"].update(df[f"peak{n}"].notna())
-    return df[f"bot{n}"]
-
-
-
-def extrema_helper(df, abase, distance=1, height="", order=20, signal=100):
-    from scipy.signal import argrelmin,argrelmax,peak_prominences
-
-    def outlier_remove(array, n_neighbors=20, match=1):
-        from sklearn.neighbors import LocalOutlierFactor
-
-        X = [[x] for x in array]
-        clf = LocalOutlierFactor(n_neighbors=n_neighbors)
-        a_predict = clf.fit_predict(X)
-
-        a_result = []
-        for predict, value in zip(a_predict, array):
-            print(f"predict", predict, value)
-            if predict == match:
-                a_result.append(value)
-        return a_result
-    """
-    rules
-    0. Basically: Starting a new trend requires BOTH high and low to be consistent
-    1. If only one deviates, it continues the previous trend.
-    2. the result is a signal that is very safe and does not take risk.
-    
-    
-    1. only one outlier allowed. if second time the low is not strictly higher than last one, it a downtrend.
-    2. if A extrema has no confirmation, and the B has 2. B dominates
-    3. Extrema with the most recent information dominates
-    
-    """
-
-    #init
-    x = df[abase]
-    lp= df["lp"]
-
-    #peaks, _ = find_peaks(x,prominence=0,width=60)
-    bottom = argrelmin(x.to_numpy(),order=order)[0]
-    peaks = argrelmax(x.to_numpy(),order=order)[0]
-
-    #data cleaning
-    bottom_noutlier=outlier_remove(bottom,n_neighbors=20,match=1)
-    bottom_outlier=outlier_remove(bottom,n_neighbors=2,match=-1)
-
-    #prominence in case needed
-    prominences = peak_prominences(x, peaks)[0]
-    contour_heights = x[peaks] - prominences
-
-    #1. iteration assign value/pct_chg of extrema
-    for counter,(label, extrema) in enumerate({"bott":bottom,"peakk":peaks}.items()):
-        df[f"{label}_pvalue"]=df.loc[extrema,"close"]
-        df[f"{label}_fvalue"]=df[f"{label}_pvalue"].fillna(method="ffill")
-        df[f"{label}_value_pct_chg"]=df[f"{label}_fvalue"].pct_change()
-
-    h_peak = df[f"peakk_value_pct_chg"]
-    h_bott = df[f"bott_value_pct_chg"]
-
-    #2. iteration assign signal
-    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
-        df[f"{label}_diff"]=0
-
-        #for now the peak and bott are actually the SAME
-        if label =="peakk":
-            df.loc[ (h_peak>0.05) | (df["close"]/df[f"peakk_fvalue"] >1.05) ,f"{label}_diff"]=signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-            df.loc[ (h_bott<-0.05) | (df["close"] / df[f"bott_fvalue"]<0.95) ,f"{label}_diff"]=-signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-        elif label=="bott":
-            df.loc[(h_peak > 0.05) | (df["close"]/df[f"peakk_fvalue"] >1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"]<0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-
-        df[f"{label}_diff"]=df[f"{label}_diff"].replace(0,np.nan).fillna(method="ffill")
-
-    #simualte past iteration
-    matplotlib.use("TkAgg")
-    for counter,(index,df) in enumerate(LB.custom_expand(df,1000).items()):
-        if counter%20!=0:
-            continue
-
-        print(counter,index)
-
-        #array of extrema without nan = shrink close only to extrema
-        s_bott_pvalue=df["bott_pvalue"].dropna()
-        s_peakk_pvalue=df["peakk_pvalue"].dropna()
-
-        dict_residuals_bott={}
-        dict_residuals_peakk={}
-        dict_regression_bott={}
-        dict_regression_peakk={}
-
-        # do regression with extrema with all past extrema. The regression with lowest residual wins
-        for counter,_ in enumerate(s_bott_pvalue):
-            if counter >3:
-
-                #bott
-                s_part_pvalue=s_bott_pvalue.tail(counter)
-                distance=index - s_part_pvalue.index[0]
-                #s_part_pvalue[index]=df.at[index,"close"]
-                s_bott_lg,residual=LB.get_linear_regression_s_full(s_part_pvalue.index,s_part_pvalue)
-                dict_residuals_bott[counter]=residual/distance**2
-                dict_regression_bott[counter]=(s_part_pvalue,s_bott_lg)
-
-                #peak
-                s_part_pvalue = s_peakk_pvalue.tail(counter)
-                distance = index - s_part_pvalue.index[0]
-                #s_part_pvalue[index] = df.at[index, "close"]
-                s_bott_lg, residual = LB.get_linear_regression_s_full(s_part_pvalue.index, s_part_pvalue)
-                dict_residuals_peakk[counter] = residual / distance**2
-                dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
-
-        #find the regression with least residual
-        from operator import itemgetter
-        n=1
-        dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key = itemgetter(1), reverse = True)[-n:])
-        dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key = itemgetter(1), reverse = True)[-n:])
-
-        #plot them
-        for key,residual in dict_min_residuals_bott.items():
-            _,s_bott_lg=dict_regression_bott[key]
-            plt.plot(s_bott_lg)
-
-        for key, residual in dict_min_residuals_peakk.items():
-            _,s_peakk_lg=dict_regression_peakk[key]
-            plt.plot(s_peakk_lg)
-
-        #plot chart
-        plt.plot(df["close"])
-        #plt.show()
-        plt.savefig(f"tesplot/{index}.jpg")
-        plt.clf()
-        plt.close()
-
-    #add macd signal for comparison
-    label=my_macd(df=df,sfreq=360,bfreq=500,abase="close",type=4,score=signal)
-    label=label[0]
-
-    plt.plot(x)
-    plt.plot(df[label])
-
-    plt.plot(df["bott_diff"])
-    plt.plot(df["peakk_diff"])
-
-    plt.plot(df["bott_pvalue"],"1")
-    plt.plot(df["peakk_pvalue"],"1")
-
-    plt.show()
-
-
-def my_find_peakks(df, abase, a_n=[60]):
-    """
+    Second longer version of finding extrema and using it to calculate high and lows
     Strengh of resistance support are defined by:
     1. how long it remains a resistance or support (remains good for n = 20,60,120,240?)
     2. How often the price can not break through it. (occurence)
@@ -549,7 +117,7 @@ def my_find_peakks(df, abase, a_n=[60]):
     plt.show()
 
 
-def find_flat(df, abase):
+def generic_comparison(df, abase):
     """
     go thorugh ALL possible indicators and COMBINE them together to an index that defines up, down trend or no trend.
 
@@ -626,9 +194,9 @@ def find_flat(df, abase):
 
         """http://www.fmlabs.com/reference/PriceOscillatorPct.htm"""
         df[f"ppo{freq}"] = talib.PPO(df["close"], freq, freq * 2)
-        df["test"] = find_peaks_array(df[f"ppo{freq}"], freq)
-        df["test"] = df["test"].fillna(method="ffill")
-        print(df["test"].notna())
+        # df["test"] = find_peaks_array(df[f"ppo{freq}"], freq)
+        # df["test"] = df["test"].fillna(method="ffill")
+        # print(df["test"].notna())
 
         """http://www.fmlabs.com/reference/PriceOscillatorPct.htm"""
         df[f"roc{freq}"] = talib.ROC(df["close"], freq)
@@ -674,7 +242,7 @@ def find_flat(df, abase):
 
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
-def atest(asset="E", step=1, d_queries={}, kwargs={"func": my_macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
+def atest(asset="E", step=1, d_queries={}, kwargs={"func": macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
     """
     This is a general statistic test creator
     1. provide all cases
@@ -779,18 +347,18 @@ def atest_manu(fname="macd", a_abase=["close"]):
         #setting generation
         a_kwargs = []
         if fname == "macd":
-            func = my_macd
+            func = macd
             d_steps = {"F": 1, "FD": 2, "G": 1, "I": 2, "E": 6}
             for sfreq, bfreq in LB.custom_pairwise_combination([5, 10, 20, 40, 60, 80, 120, 180, 240, 320, 400, 480], 2):
                 if sfreq < bfreq:
                     a_kwargs.append({"abase": abase, "sfreq": sfreq, "bfreq": bfreq, "type": 1, "score": 1})
         elif fname == "is_max":
-            func = my_ismax
+            func = ismax
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
             for q in np.linspace(0, 1,11):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
         elif fname == "is_min":
-            func = my_ismin
+            func = ismin
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
             for q in np.linspace(0, 1,11):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
@@ -802,7 +370,42 @@ def atest_manu(fname="macd", a_abase=["close"]):
 
 
 def atest_auto(type=4):
+    def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
+        """can be used on any indicator
+        gq=Generic quantile
+        0. create an oscilator of that indicator
+        1. create expanding mean of that indicator
+        2. create percent=today_indicator/e_indicator
+        3. assign rolling quantile quantile of percent
 
+        This appoach needs to be mean stationary !!!! otherwise quantile makes nosense
+        """
+        # init
+        name = f"{abase}.auto{norm_freq}.type{type}"
+        if f"norm_{name}" not in df.columns:
+            # 3 choices. cg_oscilator, rsi, (today-yesterday)/today
+            if type == 1:
+                df[f"norm_{name}"] = cg_Oscillator(df[abase], norm_freq)
+            elif type == 2:
+                df[f"norm_{name}"] = talib.RSI(df[abase], norm_freq)
+            elif type == 3:
+                # this is the same as ROCP rate of change percent
+                df[f"norm_{name}"] = (df[abase] - df[abase].shift(1)) / df[abase].shift(1)
+            elif type == 4:
+                df[f"norm_{name}"] = df[abase].pct_change(norm_freq)
+
+        # create expanding quantile
+        for q in [q_low, q_high]:
+            if f"q{q}_{name}" not in df.columns:
+                df[f"q{q}_{name}"] = df[f"norm_{name}"].expanding(240).quantile(q)
+
+        # assign todays value to a quantile
+        df[f"in_q{q_low, q_high}_{name}"] = ((df[f"q{q_low}_{name}"] <= df[f"norm_{name}"]) & (df[f"norm_{name}"] < df[f"q{q_high}_{name}"])).astype(int) * score
+        df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
+        return [f"in_q{q_low, q_high}_{name}", ]
+
+
+    #atest_auto starts here
     for asset in ["G"]: #,"FD","G","I","E"
         #get example column of this asset
         a_example_column = DB.get_example_column(asset=asset, numeric_only=True)
@@ -829,7 +432,7 @@ def atest_auto(type=4):
 
 
 
-def start_season(df, n=1, type="year"):
+def asset_start_season(df, n=1, type="year"):
     """
     Hypothesis Question: if first n month return is positive, how likely is the whole year positive?
 
@@ -908,7 +511,7 @@ def start_season(df, n=1, type="year"):
 
 
 
-def start_tester(asset="I", a_n=[1, 2, 3, 4,5,6,7,8,9,10,11,12], type="monthofyear"):
+def asset_start_season_initiator(asset="I", a_n=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], type="monthofyear"):
 
     if asset == "I":
         d_queries_ts_code={"I":["category != '债券指数' "]}
@@ -925,7 +528,7 @@ def start_tester(asset="I", a_n=[1, 2, 3, 4,5,6,7,8,9,10,11,12], type="monthofye
 
             for ts_code, df_asset in d_preload.items():
                 print(f"start_tester {ts_code} {n}")
-                s=start_season(df=df_asset, n=n, type=type)
+                s=asset_start_season(df=df_asset, n=n, type=type)
                 s["ts_code"]=ts_code
                 a_result.append(s)
             df_result=pd.DataFrame(a_result)
@@ -946,7 +549,7 @@ def start_tester(asset="I", a_n=[1, 2, 3, 4,5,6,7,8,9,10,11,12], type="monthofye
 
 
 
-def prob_gain_asset(asset="E"):
+def asset_prob_gain_asset(asset="E"):
     """
     Answers this question:
     1. If % of previous n days is up/down, what is probability for next n day to be up/down
@@ -1003,7 +606,7 @@ def prob_gain_asset(asset="E"):
 
 
 
-def extrema():
+def asset_extrema():
     """
     This test tries to combine two rules.
     1. The long term trend longer the better
@@ -1032,16 +635,164 @@ def extrema():
     A: sometimes you have to skip last couple high/lows because they are a new trend
     """
 
-    df_asset=DB.get_asset(ts_code="399001.SZ", asset="I")
-    df_asset=LB.ohlcpp(df_asset)
-    df_asset=df_asset.reset_index()
+    df=DB.get_asset(ts_code="399001.SZ", asset="I")
+    df=LB.ohlcpp(df)
+    df=df.reset_index()
 
-    df_asset["hp"]= highpass(df_asset["close"], 20)
-    df_asset["lp"]=df_asset["close"]-df_asset["hp"]
+    df["hp"]= highpass(df["close"], 20)
+    df["lp"]=df["close"]-df["hp"]
 
-    df_asset=extrema_helper(df_asset, "close", order=40, signal=3000)
+    order=20
+    signal=100
+    distance=1
+    abase="close"
 
-def intraday_analysis():
+    from scipy.signal import argrelmin, argrelmax, peak_prominences
+
+    def outlier_remove(array, n_neighbors=20, match=1):
+        from sklearn.neighbors import LocalOutlierFactor
+
+        X = [[x] for x in array]
+        clf = LocalOutlierFactor(n_neighbors=n_neighbors)
+        a_predict = clf.fit_predict(X)
+
+        a_result = []
+        for predict, value in zip(a_predict, array):
+            print(f"predict", predict, value)
+            if predict == match:
+                a_result.append(value)
+        return a_result
+
+    """
+    rules
+    0. Basically: Starting a new trend requires BOTH high and low to be consistent
+    1. If only one deviates, it continues the previous trend.
+    2. the result is a signal that is very safe and does not take risk.
+
+
+    1. only one outlier allowed. if second time the low is not strictly higher than last one, it a downtrend.
+    2. if A extrema has no confirmation, and the B has 2. B dominates
+    3. Extrema with the most recent information dominates
+
+    """
+
+    # init
+    x = df[abase]
+    lp = df["lp"]
+
+    # peaks, _ = find_peaks(x,prominence=0,width=60)
+    bottom = argrelmin(x.to_numpy(), order=order)[0]
+    peaks = argrelmax(x.to_numpy(), order=order)[0]
+
+    # data cleaning
+    bottom_noutlier = outlier_remove(bottom, n_neighbors=20, match=1)
+    bottom_outlier = outlier_remove(bottom, n_neighbors=2, match=-1)
+
+    # prominence in case needed
+    prominences = peak_prominences(x, peaks)[0]
+    contour_heights = x[peaks] - prominences
+
+    # 1. iteration assign value/pct_chg of extrema
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{label}_pvalue"] = df.loc[extrema, "close"]
+        df[f"{label}_fvalue"] = df[f"{label}_pvalue"].fillna(method="ffill")
+        df[f"{label}_value_pct_chg"] = df[f"{label}_fvalue"].pct_change()
+
+    h_peak = df[f"peakk_value_pct_chg"]
+    h_bott = df[f"bott_value_pct_chg"]
+
+    # 2. iteration assign signal
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{label}_diff"] = 0
+
+        # for now the peak and bott are actually the SAME
+        if label == "peakk":
+            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+        elif label == "bott":
+            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+
+        df[f"{label}_diff"] = df[f"{label}_diff"].replace(0, np.nan).fillna(method="ffill")
+
+    # simualte past iteration
+    matplotlib.use("TkAgg")
+    for counter, (index, df) in enumerate(LB.custom_expand(df, 1000).items()):
+        if counter % 20 != 0:
+            continue
+
+        print(counter, index)
+
+        # array of extrema without nan = shrink close only to extrema
+        s_bott_pvalue = df["bott_pvalue"].dropna()
+        s_peakk_pvalue = df["peakk_pvalue"].dropna()
+
+        dict_residuals_bott = {}
+        dict_residuals_peakk = {}
+        dict_regression_bott = {}
+        dict_regression_peakk = {}
+
+        # do regression with extrema with all past extrema. The regression with lowest residual wins
+        for counter, _ in enumerate(s_bott_pvalue):
+            if counter > 3:
+                # bott
+                s_part_pvalue = s_bott_pvalue.tail(counter)
+                distance = index - s_part_pvalue.index[0]
+                # s_part_pvalue[index]=df.at[index,"close"]
+                s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                dict_residuals_bott[counter] = residual / distance ** 2
+                dict_regression_bott[counter] = (s_part_pvalue, s_bott_lg)
+
+                # peak
+                s_part_pvalue = s_peakk_pvalue.tail(counter)
+                distance = index - s_part_pvalue.index[0]
+                # s_part_pvalue[index] = df.at[index, "close"]
+                s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                dict_residuals_peakk[counter] = residual / distance ** 2
+                dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
+
+        # find the regression with least residual
+        from operator import itemgetter
+        n = 1
+        dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+        dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+
+        # plot them
+        for key, residual in dict_min_residuals_bott.items():
+            _, s_bott_lg = dict_regression_bott[key]
+            plt.plot(s_bott_lg)
+
+        for key, residual in dict_min_residuals_peakk.items():
+            _, s_peakk_lg = dict_regression_peakk[key]
+            plt.plot(s_peakk_lg)
+
+        # plot chart
+        plt.plot(df["close"])
+        # plt.show()
+        plt.savefig(f"tesplot/{index}.jpg")
+        plt.clf()
+        plt.close()
+
+    # add macd signal for comparison
+    label = macd(df=df, freq=360, freq2=500, abase="close", type=4, score=signal)
+    label = label[0]
+
+    plt.plot(x)
+    plt.plot(df[label])
+
+    plt.plot(df["bott_diff"])
+    plt.plot(df["peakk_diff"])
+
+    plt.plot(df["bott_pvalue"], "1")
+    plt.plot(df["peakk_pvalue"], "1")
+
+    plt.show()
+
+
+
+
+
+def asset_intraday_analysis():
     """
     The result of intraday analysis:
     -Highest deviation at first 15 min of trading day
@@ -1084,7 +835,7 @@ def intraday_analysis():
         for intraday in a_intraday:
             df_day=get_asset(ts_code=ts_code,asset=asset)
             df_filter = df[df["intraday"] == intraday]
-            df_filter["trade_date"]=df_filter["day"].apply(LB.trade_date_switcher)
+            df_filter["trade_date"]=df_filter["day"].apply(LB.switch_trade_date)
             df_filter["trade_date"]=df_filter["trade_date"].astype(int)
             df_final=pd.merge(LB.ohlcpp(df=df_day), df_filter, on="trade_date", suffixes=["_d", "_15m"], sort=False)
 
@@ -1108,38 +859,6 @@ def intraday_analysis():
             a_results.append(s)
         df_predict_result=pd.DataFrame(a_results)
         df_predict_result.to_csv(f"intraday_prediction_result_{ts_code}.csv")
-
-
-def daily_stocks_abve():
-    """this tells me how difficult my goal is to select the stocks > certain pct_chg every day
-                get 1% everyday, 33% of stocks
-                2% everyday 25% stocks
-                3% everyda 19% stocks
-                4% everyday 12% stocks
-                5% everyday 7% stocks
-                6% everyday 5%stocks
-                7% everyday 3% stocks
-                8% everday  2.5% Stocks
-                9% everday  2% stocks
-                10% everday, 1,5% Stocks  """
-
-    df_asset = DB.preload("E", step=2)
-    df_result = pd.DataFrame()
-    for ts_code, df in df_asset.items():
-        print("ts_code", ts_code)
-        for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
-            df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
-            df_result.at[ts_code,f"pct_chg_open > {pct} pct"]=len(df_copy)/len(df)
-
-            df_copy = df[(100 * (df["pct_chg_close"] - 1) > pct)]
-            df_result.at[ts_code, f"pct_chg_close > {pct} pct"] = len(df_copy) / len(df)
-
-            df_copy = df[(((df["close"]/df["open"]) - 1)*100 > pct)] #trade
-            df_result.at[ts_code, f"trade > {pct} pct"] = len(df_copy) / len(df)
-
-            df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
-            df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
-    df_result.to_csv("test.csv")
 
 
 # WHO WAS GOOD DURING THAT TIME PERIOD
@@ -1523,7 +1242,7 @@ def asset_candlestick_analysis_multiple():
     path = "Market/CN/Atest/candlestick/summary.csv"
     df_all_result.to_csv(path, index=True)
 
-def distribution(asset="I",column="close",bins=10):
+def asset_distribution(asset="I", column="close", bins=10):
     d_preload=DB.preload(asset=asset,step=5)
 
     for freq in [10,20,40,60,120,240,500]:
@@ -1542,6 +1261,59 @@ def distribution(asset="I",column="close",bins=10):
                     df_result.at[ts_code,f"c{c1,c2}"]=len(df[df["norm"].between(c1,c2)])
 
             LB.to_csv_feather(df_result,a_path=a_path,skip_feather=True)
+
+
+
+
+
+
+def date_daily_stocks_abve():
+    """this tells me how difficult my goal is to select the stocks > certain pct_chg every day
+                get 1% everyday, 33% of stocks
+                2% everyday 25% stocks
+                3% everyda 19% stocks
+                4% everyday 12% stocks
+                5% everyday 7% stocks
+                6% everyday 5%stocks
+                7% everyday 3% stocks
+                8% everday  2.5% Stocks
+                9% everday  2% stocks
+                10% everday, 1,5% Stocks  """
+
+    df_asset = DB.preload("E", step=2)
+    df_result = pd.DataFrame()
+    for ts_code, df in df_asset.items():
+        print("ts_code", ts_code)
+        for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
+            df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
+            df_result.at[ts_code,f"pct_chg_open > {pct} pct"]=len(df_copy)/len(df)
+
+            df_copy = df[(100 * (df["pct_chg_close"] - 1) > pct)]
+            df_result.at[ts_code, f"pct_chg_close > {pct} pct"] = len(df_copy) / len(df)
+
+            df_copy = df[(((df["close"]/df["open"]) - 1)*100 > pct)] #trade
+            df_result.at[ts_code, f"trade > {pct} pct"] = len(df_copy) / len(df)
+
+            df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
+            df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
+    df_result.to_csv("test.csv")
+
+def date_volatility():
+    """one day pct_chg std
+    Hypothesis: if one day pct_chg.std of all stocks is small market is stable
+    result:generally, all stats are only high at crazy time. Not very usefule or predictive.
+    """
+    d_date = DB.preload(asset='E', on_asset=False)
+    df_result = pd.DataFrame()
+    for trade_date, df_date in d_date.items():
+        print(trade_date)
+        df_result.at[trade_date, "close"] = df_date["close"].mean()
+        df_result.at[trade_date, "mean"] = df_date["pct_chg"].mean()
+        df_result.at[trade_date, "std"] = df_date["pct_chg"].std()
+        df_result.at[trade_date, "sharp"] = df_date["pct_chg"].mean() / df_date["pct_chg"].std()
+    for i in [5, 10, 20, 60, 240]:
+        df_result[f"std{i}"] = df_result["std"].rolling(i).mean()
+    df_result.to_csv("volatilty.csv")
 
 if __name__ == '__main__':
     # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
@@ -1572,7 +1344,3 @@ if __name__ == '__main__':
     # start_year_relation(df_sh,month=1)
     #pr.disable()
     #pr.print_stats(sort='file')
-
-
-
-

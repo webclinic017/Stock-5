@@ -1,6 +1,5 @@
 import operator
 from multiprocessing import Process
-
 import tushare as ts
 from datetime import datetime
 import pandas as pd
@@ -12,13 +11,10 @@ import smtplib
 from email.message import EmailMessage
 import math
 import re
-
 import itertools
 from win32com.client import Dispatch
 import traceback
-
 import _API_Tushare
-
 import atexit
 from time import time, strftime, localtime
 import time
@@ -34,12 +30,12 @@ ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 
-#decorator
+#decorator TODO maybe remove if no one else uses
 def trade_date_norm(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
             if "date" in kwargs:
-                kwargs["date"]=trade_date_switcher(kwargs["date"])
+                kwargs["date"]=switch_trade_date(kwargs["date"])
             return func(*args, **kwargs)
         except Exception as e:
             return
@@ -78,7 +74,7 @@ def deco_except_empty_df(func):
     return this_function_will_never_be_seen
 
 
-def wrap_line(func):
+def deco_wrap_line(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         print("=" * 50)
         result = func(*args, **kwargs)
@@ -92,54 +88,19 @@ def today():
     return str(datetime.now().date()).replace("-", "")
 
 
-def name_norm(d_locals, func_name):
-    """
-        format of all names are like this:
-        abase1.min(freq5.7, colpct_chg, ).macd(var1value1,var2value2)
-        """
-
-    def d_to_str(d):
-        return ", ".join([f"{key}{item.__name__ if callable(item) else item}" for key,item in d.items() if item not in [np.nan, None, ""]])
-
-    if func_name in [np.nan, None, ""] :
-        print(d_locals)
-        raise AssertionError
-
-    d_clean = {key: value for key, value in d_locals.items() if key not in ["df", "abase", "inplace", "inspect", "Columns", "Index"]}
-
-    variables = d_to_str(d_clean)
-    if "abase" in d_locals:#derivation function based on an existing abase
-
-        if variables:
-            return f"{d_locals['abase']}.{func_name}({variables})"
-        else:
-            return f"{d_locals['abase']}.{func_name}"
-    else:#creational function, hardcoded, without abase
-
-        if variables:
-            return f"{func_name}({variables})"
-        else:
-            return f"{func_name}"
-
-
-
-
-
-
-
-def indi_name(abase, deri, d_variables={}):
-    variables = ""
-    for key, enum_val in d_variables.items():
-        if key not in ["df", "ibase"]:
-            # if issubclass(enum_val, enum.Enum):
-            try:
-                variables = f"{variables}{key}={enum_val.value},"
-            except:
-                variables = f"{variables}{key}={enum_val},"
-    if variables:
-        return f"{abase}.{deri}({variables})"
-    else:
-        return f"{abase}.{deri}"
+# def indi_name(abase, deri, d_variables={}):
+#     variables = ""
+#     for key, enum_val in d_variables.items():
+#         if key not in ["df", "ibase"]:
+#             # if issubclass(enum_val, enum.Enum):
+#             try:
+#                 variables = f"{variables}{key}={enum_val.value},"
+#             except:
+#                 variables = f"{variables}{key}={enum_val},"
+#     if variables:
+#         return f"{abase}.{deri}({variables})"
+#     else:
+#         return f"{abase}.{deri}"
 
 
 def fibonacci(n):
@@ -168,15 +129,7 @@ def fibonacci_weight(n):
     return array
 
 
-# trend exchange. How long a trend lasts in average
-def trend_swap(df, column, value):
-    try:
-        df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()
-        df_average_bull = df_average_bull.reset_index(level=0, drop=True)
-        mean_cross_over_days = df_average_bull.loc[value].mean()
-        return mean_cross_over_days
-    except:
-        return np.nan
+
 
 
 def empty_df(query):
@@ -301,7 +254,7 @@ def add_column(df, add_to, add_after, position):  # position 1 means 1 after add
     df.insert(df.columns.get_loc(add_after) + position, add_to, "", allow_duplicates=False)
 
 
-def columns_remove(df, columns_array):
+def remove_columns(df, columns_array):
     for column in columns_array:
         try:
             df.drop(column, axis=1, inplace=True)
@@ -309,45 +262,33 @@ def columns_remove(df, columns_array):
             pass
 
 
-def ent(data):
-    import scipy.stats
-    """Calculates entropy of the passed pd.Series
-    =randomness of the close price distribution
-    =Entropy should be same as calculating the high pass
-    =Sounds good, but not really useful
-    """
 
-    p_data = data.value_counts()  # counts occurrence of each value
-    return scipy.stats.entropy(p_data)  # get entropy from counts
-
-def polyfit(df, degree=1, column="close"):
-    s_index = df[column].index
-    y = df[column]
-    weights = np.polyfit(s_index, y, degree)
-    data = pd.Series(index=s_index, data=0)
-    for i, polynom in enumerate(weights):
-        pdegree = degree - i
-        data = data + (polynom * (s_index ** pdegree))
-    return data
-
-
-def get_linear_regression_s(s_index, s_data):
-    z = np.polyfit(s_index, s_data, 1)
-    return pd.Series(index=s_index, data=s_index * z[0] + z[1])
-
-def get_linear_regression_s_full(s_index, s_data):
-    full = np.polyfit(s_index, s_data, 1,full=True)
+def polyfit_full(s_index, s_data, degree=1):
+    full = np.polyfit(s_index, s_data, degree,full=True)
     z=full[0]
     residuals=full[1]
     return [pd.Series(index=s_index, data=s_index * z[0] + z[1]),residuals]
 
+def polyfit_slope(s_index, s_data, degree=1):
+    return np.polyfit(s_index, s_data, degree)[0]  # if degree is 1, then [0] is slope
 
-def get_linear_regression_variables(s_index, s_data):
-    return np.polyfit(s_index, s_data, 1)
+# def get_linear_regression_variables(s_index, s_data):
+#     return np.polyfit(s_index, s_data, 1)
+
+# def polyfit(s_index, s_data,degree=1):
+#     z = np.polyfit(s_index, s_data, degree)
+#     return pd.Series(index=s_index, data=s_index * z[0] + z[1])
 
 
-def get_linear_regression_slope(s_index, s_data):
-    return np.polyfit(s_index, s_data, 1)[0]  # if degree is 1, then [0] is slope
+# def polyfit(df, degree=1, column="close"):
+#     s_index = df[column].index
+#     y = df[column]
+#     weights = np.polyfit(s_index, y, degree)
+#     data = pd.Series(index=s_index, data=0)
+#     for i, polynom in enumerate(weights):
+#         pdegree = degree - i
+#         data = data + (polynom * (s_index ** pdegree))
+#     return data
 
 
 def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan because std returns nan too often
@@ -402,16 +343,8 @@ def groups_d_to_string_iterable(d_groups: dict):
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
 
-
-def line_print(text, lines=40):
-    print("=" * lines)
-    print(text)
-    print("=" * lines)
-
-
 def shutdown_windows():
     os.system('shutdown -s')
-
 
 def sound(file="error.mp3"):
     playsound(f"Media/Sound/{file}")
@@ -510,29 +443,18 @@ def c_root_beta():
     return "E:\Beta/"
 
 def c_assets():
-    return [e.value for e in Assets]
-
+    return ["I","E","FD"]
 
 def c_assets_big():
     return c_assets() + ["G", "F"]
 
-
-class Assets(enum.Enum):
-    I = 'I'
-    E = 'E'
-    FD = 'FD'
-
-
 def c_bfreq():
-    return [e.value for e in BFreq]
+    return [1,2,5,10,20,60,120,240]
 
+def c_sfreq():
+    return [2,20,240]
 
-def c_G_queries():
-    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','market'] "]}
-
-def c_I_queries():
-    return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
-
+#deprecated, only there for deprecated dependency
 class BFreq(enum.Enum):
     f1 = 1
     f2 = 2
@@ -544,17 +466,18 @@ class BFreq(enum.Enum):
     f240 = 240
     #f500 = 500
 
-
-def c_sfreq():
-    return [e.value for e in SFreq]
-
-
+#deprecated, only there for deprecated dependency
 class SFreq(enum.Enum):
     # f1 = 1
     f2 = 2
     f20 = 20
     f240 = 240
 
+def c_G_queries():
+    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','market'] "]}
+
+def c_I_queries():
+    return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
 
 def c_group_score_weight():
     return {"area": 0.10,
@@ -578,10 +501,8 @@ def c_assets_fina_function_dict():
             "balancesheet": _API_Tushare.my_balancesheet,
             "cashflow": _API_Tushare.my_cashflow}
 
-
 def c_industry_level():
     return ['1', '2', '3']
-
 
 def c_op():
     return {"plus": operator.add,
@@ -660,7 +581,6 @@ def c_candle():
             }
 
 
-# TODO transform hard coded to soft coded
 def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
     import DB
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
@@ -721,11 +641,9 @@ def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
 
-
-@wrap_line
+@deco_wrap_line
 def log(message, elapsed=None):
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
-
 
 def endlog():
     sound("finished_all.mp3")
@@ -766,15 +684,13 @@ def std(xs):
     std = math.sqrt(variance)
     return std
 
-def ts_code_switcher(ts_code):
+def switch_ts_code(ts_code):
     dict_replace={".XSHE":".SZ", ".XSHG":".SH",".SZ":".XSHE",".SH":".XSHG"}
     for key,value in dict_replace.items():
         if key in ts_code:
             return re.sub(key,dict_replace[key],ts_code)
 
-
-
-def trade_date_switcher(trade_date):
+def switch_trade_date(trade_date):
     if "-" in str(trade_date):
         return str(trade_date).replace("-","")
     else:
@@ -880,15 +796,12 @@ def custom_pairwise_cartesian(a_array,n):
     """product with itself"""
     return list(itertools.product(a_array,repeat=n))
 
-
-def drange(start,end,step):
-    return [x/100 for x in range(start,end,step)]
-
-
 # for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
 
+def drange(start,end,step):
+    return [x/100 for x in range(start,end,step)]
 
 
 def print_iterables(d):
@@ -906,35 +819,12 @@ def ohlcpp(df):
 def pp(s):
     return len(s[s>0])/len(s)
 
-def btest_quantile(series):
-    """this function should not exist. it helps in btest to eval quantil str in one line"""
-    array=list(series)
-    d_result={"left":array[0],"right":array[1]}
-    return d_result
+# def btest_quantile(series):
+#     """this function should not exist. it helps in btest to eval quantil str in one line"""
+#     array=list(series)
+#     d_result={"left":array[0],"right":array[1]}
+#     return d_result
 
-def convert_index(df,column):
-    import DB
-    df_sh=pd.DataFrame()
-    df_sh["index_helper"]=DB.Global.d_index["000001.SH"].index
-    df_sh["index_helper"]=df_sh["index_helper"].astype(str)
-
-    def my_converter(val):
-        val=str(val).replace("-","")
-        if len(val)==6:#yyyymm
-            true_index=df_sh["index_helper"].str.slice(0,6)==(str(val))
-            df=df_sh[true_index]
-
-            df=df.tail(1)
-            if df.empty:
-                return val+"01"
-            else:
-                last_day_of_month=df["index_helper"].iat[-1]
-                val=last_day_of_month
-        elif len(val)==4:#yyyy
-            return my_converter(val+"12")
-        return val
-    df[column]=df[column].apply(my_converter)
-    """converts string or interger index to date format"""
 
 # inside functions
 class interrupt_class:  # static method inside class is required to break the loop because two threads

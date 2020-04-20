@@ -1,26 +1,10 @@
-import math
-import pandas as pd
-import time
 import numpy as np
-from matplotlib import pyplot as plt
 from scipy.stats import gmean
-
 import DB
 import LB
-import os
-import datetime
-import glob
-import inspect
-import talib
-import itertools
-from multiprocessing import Process
-from scipy import signal
-import inspect
 import matplotlib.pyplot as plt
-import enum
 import Plot
-from enum import auto
-from sklearn.preprocessing import MinMaxScaler
+from scipy.signal import argrelextrema
 from LB import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -33,97 +17,121 @@ For all functions that create series
 
 """Point: normalizer for all alpha functions to avoid repetition in code"""
 
+def alpha_name(d_locals, func_name):
+    """
+        format of all names are like this:
+        abase1.min(freq5.7, colpct_chg, ).macd(var1value1,var2value2)
+        """
 
-def alpha_norm1(func):
+    def d_to_str(d):
+        return ", ".join([f"{key}={item.__name__ if callable(item) else item}" for key,item in d.items() if item not in [np.nan, None, ""]])
+
+    if func_name in [np.nan, None, ""] :
+        print(d_locals)
+        raise AssertionError
+
+    d_clean = {key: value for key, value in d_locals.items() if key not in ["df", "abase", "inplace", "inspect", "Columns", "Index"]}
+    variables = d_to_str(d_clean)
+    if "abase" in d_locals:#derivation function based on an existing abase
+        if variables:
+            return f"{d_locals['abase']}.{func_name}({variables})"
+        else:
+            return f"{d_locals['abase']}.{func_name}"
+    else:#creational function, hardcoded, without abase
+        if variables:
+            return f"{func_name}({variables})"
+        else:
+            return f"{func_name}"
+
+def alpha_wrap(func):
     """
     this constrains that all alpha functions must use kwargs
     standardizes for all alpha creation
     """
 
     def invisible(*args, **kwargs):
-        try:
-            # 1. create standard name for all functions based on variables
-            if "inplace" not in kwargs:
-                kwargs["inplace"] = False
-            kwargs["name"] = LB.name_norm(kwargs, func.__name__)
+        # 1. create standard name for all functions based on variables
+        if "inplace" not in kwargs:
+            kwargs["inplace"] = False
+        kwargs["name"] = alpha_name(kwargs, func.__name__)
 
-            # 2. swap DF if not modify inplace
-            if kwargs["inplace"]:
-                # do nothing, modify in place
-                pass
-            else:
-                # inplace holds the original df to be later compared with
-                # df is just a copy in order not to modify inplace
-                kwargs["inplace"] = kwargs["df"].copy()
-                kwargs["df"] = kwargs["df"].copy()
-            kwargs["cols"] = kwargs["df"].columns
-            return func(*args, **kwargs)
-        except:
-            print(f"!!! ERROR at {func.__name__}")
-            traceback.print_stack()
+        # 2. swap DF if not modify inplace
+        if kwargs["inplace"]:
+            # do nothing, modify in place
+            pass
+        else:
+            # inplace holds the original df to be later compared with
+            # df is just a copy in order not to modify inplace
+            kwargs["inplace"] = kwargs["df"].copy()
+            kwargs["df"] = kwargs["df"].copy()
+        kwargs["cols"] = kwargs["df"].columns
+        return func(*args, **kwargs)
 
     # change func name to original name
     result = invisible
     result.__name__ = func.__name__
     return result
 
-
-def alpha_norm2(d_locals):
+def alpha_return(d_locals):
     if "inplace" not in d_locals:
         print(d_locals)
         raise AssertionError
 
     df = d_locals["df"]
     new_cols = list(df.columns.difference(d_locals["cols"]))
-
     # not inplace=return series
     if type(d_locals["inplace"]) == pd.DataFrame:
-        return df[new_cols]
+        if len(new_cols)==1:
+            return df[new_cols[0]]
+        elif len(new_cols)>1:
+            return df[new_cols]
 
     # inplace=return name
     else:
         if len(new_cols) == 0:
             return d_locals["name"]
         elif len(new_cols) == 1:
+            print("shoud be here")
             return new_cols[0]
         elif len(new_cols) > 1:
-            return new_cols[0]
+            print(f"more than 1{len(new_cols)}",new_cols)
+            return new_cols
 
 
 """Point: vanilla functions = creation = hardcoded = no abase"""
 
 
-@alpha_norm1
+@alpha_wrap
 def co_pct_chg(df, inplace, name, cols):
     df[name] = (df["open"] / df["close"].shift(1))
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def pjup(df, inplace, name, cols):  # TODO test if 2 pct gap is better
     df[name] = 0
     df[name] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def pjdown(df, inplace, name, cols):
     df[name] = 0
     df[name] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -2)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def period(df, inplace, name, cols):
     df[name] = range(1, len(df) + 1)
     print(df[name])
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def ivola(df, inplace, name, cols):
     df[name] = df[["close", "high", "low", "open"]].std(axis=1)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 """Point: custom generic vector functions """
@@ -131,94 +139,108 @@ def ivola(df, inplace, name, cols):
 
 # past n days until today. including today
 # pct_chg always +1
-@alpha_norm1
+@alpha_wrap
 def pgain(df, abase, freq, inplace, name, cols):
     df[name] = 1 + df[abase].pct_change(periods=freq)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 # future n days from today on. e.g. open.fgain1 for 20080101 is 20080102/20080101
 # CAUTION. if today is signal day, you trade TOMORROW and sell ATOMORROW. Which means you need the fgain1 from tomorrow
 # day1: Signal tells you to buy. day2: BUY. day3. SELL
-@alpha_norm1
+@alpha_wrap
 def fgain(df, abase, freq, inplace, name, cols):
     df[name] = df[f"{abase}.pgain{freq.value}"].shift(-int(freq))
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def pct_chg(df, abase, freq, inplace, name, cols):
     df[name] = (1 + df[abase].pct_change())
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 # possible another version is x.mean()**2/x.std()
-@alpha_norm1
+@alpha_wrap
 def sharp(df, abase, freq, inplace, name, cols):
     df[name] = df[abase].rolling(freq).apply(lambda x: x.mean() / x.std())
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
+@alpha_wrap
+def extrema_rdm(df,abase, inplace,name,cols,n=60):
+    """finds extrema values using random noisy sample"""
+    np.random.seed(0)
+    xs = [0]
+    for r in s:
+        xs.append(xs[-1] * 0.9 + r)
+    df = pd.DataFrame(xs, columns=[s.name])
+    # Find local peaks
+    df[f'bot{n}'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
+    df[f'peak{n}'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
+    df[f"bot{n}"].update(df[f"peak{n}"].notna())
+    return alpha_return(locals())
 
-@alpha_norm1
+@alpha_wrap
 def comp_chg(df, abase, inplace, name, cols):
     """this comp_chg is for version pct_chg in form of 30 means 30%"""
     df[name] = (1 + (df[abase] / 100)).cumprod()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 """NOTE!: This function requires df to have range index and not date!"""
 
 
-@alpha_norm1
+@alpha_wrap
 def poly_fit(df, abase, inplace, name, cols, degree=1):
     weights = np.polyfit(df[abase].index, df[abase], degree)
     data = pd.Series(index=df[abase].index, data=0)
     for i, polynom in enumerate(weights):
         data += (polynom * (df[abase].index ** (degree - i)))
     df[name] = data
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def norm(df, abase, inplace, name, cols, min=0, max=1):
     series_min = df[abase].min()
     series_max = df[abase].max()
     df[name] = (((max - min) * (df[abase] - series_min)) / (series_max - series_min)) + min
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def FT(df, abase, inplace, name, cols, min=0, max=1, ):
+@alpha_wrap
+def FT(df, abase, inplace, name, cols, min=0, max=1):
     """Fisher Transform vector
     Mapps value to -inf to inf.
     Creates sharp distance between normal value and extrem values
+    Always normalize before using FT
     """
-    # s=normalize_vector(s, min=min, max=max)
-    expression = (1.000001 + df[abase]) / (1.000001 - df[abase])
-    df[name] = 0.5 * np.log(expression)
-    return alpha_norm2(locals())
+    s = norm(df=df, abase=abase, min=min, max=max, inplace=False)
+    df[name] = 0.5 * np.log((1.000001 + s) / (1.000001 - s))
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def IFT(df, abase, inplace, name, cols, min=0, max=1):
     """Inverse Fisher Transform vector
     Mapps value to -1 to 1.
     Creates smooth distance between normal value and extrem values
+    Always normalie before using FT
     """
-    # normalize_vector(result, min=min, max=max)
-    exp = np.exp(df[abase] * 2)
+    s = norm(df=df, abase=abase, min=min, max=max, inplace=False)
+    exp = np.exp(s * 2)
     df[name] = (exp - 1) / (exp + 1)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 """Point: generic apply functions (no generic norm needed)"""
 
 
-def poly_fit_apply(s):
+def poly_fit_apply(s,degree=1):
     """Trend apply = 1 degree polynomials"""
     """ maybe normalize s before apply"""
     index = range(0, len(s))
-    return LB.get_linear_regression_slope(index, s)
+    return LB.polyfit_slope(index, s, degree=degree)
 
 
 def norm_apply(series, min=0, max=1):
@@ -268,150 +290,123 @@ def mean_std_diff_apply(series):
 
 
 # close_today - close_ndays_ago
-@alpha_norm1
+@alpha_wrap
 def mom(df, abase, freq, inplace, name, cols):
     df[name] = talib.MOM(df[abase], timeperiod=freq)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def rsi(df, abase, freq, inplace, name, cols):
     df[name] = talib.RSI(df[abase], timeperiod=freq)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 # ((close_today - close_ndays ago)/close_ndays_ago) * 100
-@alpha_norm1
+@alpha_wrap
 def rocr(df, abase, freq, inplace, name, cols):
     df[name] = talib.ROCR(df[abase], timeperiod=freq)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
+
+
+@alpha_wrap
+def cmo(df, abase, freq, inplace, name, cols):
+    df[name] = talib.CMO(df[abase], freq)
+    return alpha_return(locals())
 
 
 # ((slowMA-fastMA)*100)/fastMA
-@alpha_norm1
+@alpha_wrap
 def ppo(df, abase, freq, freq2, inplace, name, cols):
     df[name] = talib.PPO(df[abase], freq, freq2)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def cmo(df, abase, freq, inplace, name, cols):
-    df[name] = talib.CMO(df[abase], freq)
-    return alpha_norm2(locals())
-
-
-@alpha_norm1
+@alpha_wrap
 def apo(df, abase, freq, freq2, inplace, name, cols):
     df[name] = talib.APO(df[abase], freq, freq2)
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
 """Point: pandas Series rolling/expanding alphas"""
 
 
-@alpha_norm1
+@alpha_wrap
 def max(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).max()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def min(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).min()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def median(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).median()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def var(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).var()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def std(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).std()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def skew(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).skew()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def kurt(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).kurt()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def sum(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).sum()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def count(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).count()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def mean(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).mean()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def cov(df, abase, freq, re, inplace, name, cols):
     df[name] = re(df[abase], freq).cov()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
+
+"""If it doesnt work, both df might have different index"""
+@alpha_wrap
+def corr(df, abase, freq, re, ts_code, inplace, name, cols):
+    df_corr=DB.get_fast_load(ts_code)
+    df[name] = re(df[abase], freq,min_periods=5).corr(df_corr[abase])
+    return alpha_return(locals())
 
 
-# @alpha_norm2 TODO global access
-# def corr(df, abase, freq, re, corr_ts_code,inplace,name,cols):
-#     df[name] = re(df[abase], freq).corr()
-#     return alpha_norm2(locals())
+"""Point: complex functions """
 
-
-# input a dict with all variables. Output a list of all possible combinations
-def explode_settings(d_one_indicator_variables):
-    # 1. only get values form above dict
-    # 2. create cartesian product of the list
-    # 3. create dict out of list
-
-    # first list out all possible choices
-    for key, value in d_one_indicator_variables.items():
-        print(f"Input ---> {key}: {value}")
-
-    a_product_result = []
-    for one_combination in itertools.product(*d_one_indicator_variables.values()):
-        d_result = dict(zip(d_one_indicator_variables.keys(), one_combination))
-        a_product_result.append(d_result)
-    print(f"there are that many combinations: {len(a_product_result)}")
-    return a_product_result
-
-
-def function_all_combinations(func):
-    signature = inspect.getfullargspec(func).annotations
-    result_dict = {}
-    # get function annotation with variable and type
-    for variable, enum_or_class in signature.items():
-        if issubclass(enum_or_class, enum.Enum):  # ignore everything else that is not a enum. All Variable types MUST be custom defined Enum
-            result_dict[variable] = enum_or_class
-    return explode_settings(result_dict)
-
-
-"""complex functions """
-
-
+"""overall test function to compare other function"""
 def MESA(df):
     """Using Sine, leadsine to find turning points"""
     ts_code = "000002.SZ"
@@ -531,7 +526,7 @@ def MESA(df):
     plt.close()
 
 
-@alpha_norm1
+@alpha_wrap
 def ema(df, abase, freq, inplace, name, cols):
     """Iterative EMA. Should be same as talib and any other standard EMA. Equals First order polynomial filter. Might be not as good as higher order polynomial filters
         1st order ema = alpha * f * z/(z-(1-alpha))
@@ -562,10 +557,10 @@ def ema(df, abase, freq, inplace, name, cols):
             result = alpha * s.iloc[i] + (1 - alpha) * result1  # ehlers formula
             a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def ema_re(df, abase, freq, inplace, name, cols):
     """rekursive EMA. Should be same as talib and any other standard EMA"""
     s = df[abase]
@@ -588,36 +583,14 @@ def ema_re(df, abase, freq, inplace, name, cols):
     my_ema_helper(s, freq)  # run through and calculate
     final_result = [np.nan] * (freq - 1) + a_result  # fill first n values with nan
     df[name] = final_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def zlema_re(df, abase, freq, gain, inplace, name, cols):
-    """rekursive Zero LAG EMA. from john ehlers"""
-    s = df[abase]
-    a_result = []
-
-    def my_ec_helper(s, n, gain):
-        if len(s) > n:
-            k = 2 / (n + 1)
-            last_day_ema = my_ec_helper(s[:-1], n, gain)
-            today_close = s.iloc[-1]
-            result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
-            a_result.append(result)
-            return result
-        else:
-            result = s.mean()
-            a_result.append(result)
-            return result
-
-    my_ec_helper(s, freq, gain)  # run through and calculate
-    final_result = [np.nan] * (freq - 1) + a_result  # fill first n values with nan
-    df[name] = a_result
-    return alpha_norm2(locals())
 
 
-@alpha_norm1
-def zlema(df, abase, freq, gain, inplace, name, cols):
+
+@alpha_wrap
+def zlema(df, abase, freq, inplace, name, cols, gain=0):
     """iterative Zero LAG EMA. from john ehlers"""
     s = df[abase]
     a_result = []
@@ -638,10 +611,34 @@ def zlema(df, abase, freq, gain, inplace, name, cols):
                 result = k * (close + gain * (close - result1)) + (1 - k) * result1  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
+
+@alpha_wrap
+def zlema_re(df, abase, freq,  inplace, name, cols, gain=0):
+    """rekursive Zero LAG EMA. from john ehlers"""
+    s = df[abase]
+    a_result = []
+
+    def my_ec_helper(s, n, gain):
+        if len(s) > n:
+            k = 2 / (n + 1)
+            last_day_ema = my_ec_helper(s[:-1], n, gain)
+            today_close = s.iloc[-1]
+            result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
+            a_result.append(result)
+            return result
+        else:
+            result = s.mean()
+            a_result.append(result)
+            return result
+
+    my_ec_helper(s, freq, gain)  # run through and calculate
+    final_result = [np.nan] * (freq - 1) + a_result  # fill first n values with nan
+    df[name] = a_result
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def butterworth_2p(df, abase, freq, inplace, name, cols):
     """2 pole iterative butterworth. from john ehlers
     butterworth and super smoother are very very similar
@@ -675,10 +672,10 @@ def butterworth_2p(df, abase, freq, inplace, name, cols):
                 result = coeff1 * (close + 2 * close1 + close2) + coeff2 * result1 + coeff3 * result2  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def butterworth_3p(df, abase, freq, inplace, name, cols):
     """3 pole iterative butterworth. from john ehlers"""
     s = df[abase]
@@ -713,10 +710,10 @@ def butterworth_3p(df, abase, freq, inplace, name, cols):
                 result = coeff1 * (close + 3 * close1 + 3 * close2 + close3) + coeff2 * result1 + coeff3 * result2 + coeff4 * result3  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def supersmoother_2p(df, abase, freq, inplace, name, cols):
     """2 pole iterative Super Smoother. from john ehlers"""
     s = df[abase]
@@ -745,10 +742,10 @@ def supersmoother_2p(df, abase, freq, inplace, name, cols):
                 result = c1 * (close + close1) / 2 + c2 * result1 + c3 * resul2  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def supersmoother_3p(df, abase, freq, inplace, name, cols):
     """3 pole iterative Super Smoother. from john ehlers
         lags more than 2p , is a little bit smoother. I think 2p is better
@@ -782,10 +779,10 @@ def supersmoother_3p(df, abase, freq, inplace, name, cols):
                 result = coeff1 * close + coeff2 * result1 + coeff3 * result2 + coeff4 * result3  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def inst_trend(df, abase, freq, inplace, name, cols):
     """http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/iTrend_Ind.html
     """
@@ -812,10 +809,10 @@ def inst_trend(df, abase, freq, inplace, name, cols):
                 result = (alpha - (alpha / 2) ** 2) * close + (0.5 * alpha ** 2) * close1 - (alpha - (3 * alpha ** 2) / 4) * close2 + 2 * (1 - alpha) * result1 - (1 - alpha) ** 2 * result2
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def laguerre_filter_unstable(df, abase, inplace, name, cols):
     """ Non linear laguere is a bit different than standard laguere
         http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
@@ -859,12 +856,14 @@ def laguerre_filter_unstable(df, abase, inplace, name, cols):
         else:
             L3[i] = (- gamma) * L2[i] + L2[i - 1] + gamma * L3[i - 1]
 
-    df[name] = (pd.Series(L0) + 2 * pd.Series(L1) + 2 * pd.Series(L2) + pd.Series(L3)) / 6
-    return alpha_norm2(locals())
+    result = (pd.Series(L0) + 2 * pd.Series(L1) + 2 * pd.Series(L2) + pd.Series(L3)) / 6
+    df[name]=result.to_numpy()
+
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def ehlers_filter_unstable(df, abase, freq, inplace, name, cols):
+@alpha_wrap
+def ehlers_filter(df, abase, freq, inplace, name, cols):
     """
     version1: http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
     version2:  http://www.mesasoftware.com/papers/EhlersFilters.pdf
@@ -901,10 +900,10 @@ def ehlers_filter_unstable(df, abase, freq, inplace, name, cols):
             result = num / sumcoeff if sumcoeff != 0 else 0
             a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def cybercycle(df, abase, freq, inplace, name, cols):
     """Sometimes also called simple cycle. Is an oscilator. not quite sure what it does. maybe alpha between 0 and 1. the bigger the smoother
     https://www.mesasoftware.com/papers/TheInverseFisherTransform.pdf
@@ -934,12 +933,12 @@ def cybercycle(df, abase, freq, inplace, name, cols):
                 result = (1 - 0.5 * alpha) ** 2 * (smooth - 2 * smooth1 + smooth2) + 2 * (1 - alpha) * result1 - (1 - alpha) ** 2 * result2  # ehlers formula
                 a_result.append(result)
 
-    cycle = pd.Series(data=a_result)
-    df[name] = (cycle)  # according to formula. IFT should be used here, but then my amplitude is too small, so I left it away
-    return alpha_norm2(locals())
+
+    df[name] = a_result  # according to formula. IFT should be used here, but then my amplitude is too small, so I left it away
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def extract_trend(df, abase, freq, inplace, name, cols):
     """it is exactly same as bandpass filter except the last two lines """
     s = df[abase]
@@ -968,13 +967,13 @@ def extract_trend(df, abase, freq, inplace, name, cols):
                 result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
 
-    df[name] = pd.Series(data=a_result)
+    df[name] = a_result
     df[name] = df[name].rolling(2 * freq).mean()
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def mode_decomposition(df, abase, s_high, s_low, freq, inplace, name, cols):
+@alpha_wrap
+def mode_deco(df, abase, freq, inplace, name, cols):
     """https://www.mesasoftware.com/papers/EmpiricalModeDecomposition.pdf
     it is exactly same as bandpass filter except the last 10 lines
     I dont understand it really. Bandpass fitler is easier, more clear than this. Maybe I am just wrong
@@ -1005,11 +1004,11 @@ def mode_decomposition(df, abase, s_high, s_low, freq, inplace, name, cols):
                 result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
 
-    df[f"{name}_trend"] = pd.Series(data=a_result)
-    df[f"{name}_trend"] = df[f"{name}_trend"].rolling(2 * freq).mean()
+    df[f"{name}[trend]"] = pd.Series(data=a_result)
+    df[f"{name}[trend]"] = df[f"{name}[trend]"].rolling(2 * freq).mean()
 
-    a_peak = list(s_high.shift(1))
-    a_valley = list(s_low.shift(1))
+    a_peak = list(df["high"].shift(1))
+    a_valley = list(df["low"].shift(1))
     for i in range(0, len(s)):
         if a_result[i] == np.nan:
             pass
@@ -1023,12 +1022,14 @@ def mode_decomposition(df, abase, s_high, s_low, freq, inplace, name, cols):
             if result1 < result and result1 < result2:
                 a_valley[i] = result1
 
-    df[f"{name}_avg_peak"] = pd.Series(a_peak).rolling(freq).mean()
-    df[f"{name}_avg_valley"] = pd.Series(a_valley).rolling(freq).mean()
-    return alpha_norm2(locals())
+    df[f"{name}[avg_peak]"] = a_peak
+    df[f"{name}[avg_peak]"] = df[f"{name}[avg_peak]"].rolling(freq).mean()
+    df[f"{name}[avg_valley]"] = a_valley
+    df[f"{name}[avg_valley]"] = df[f"{name}[avg_valley]"].rolling(freq).mean()
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def cycle_measure(df, abase, freq, inplace, name, cols):
     """http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/Cycle_Measure.html
 
@@ -1040,6 +1041,7 @@ def cycle_measure(df, abase, freq, inplace, name, cols):
 
     a_inphase = []
     value3 = s - s.shift(freq)
+    print(type(value3),"wjhat")
 
     # calculate inphase
     for i in range(0, len(s)):
@@ -1067,15 +1069,15 @@ def cycle_measure(df, abase, freq, inplace, name, cols):
                 quadrature = s[0:1].mean()
                 a_quadrature.append(quadrature)
             else:
-                value3 = value3.iloc[i]
+                value3_1 = value3.iloc[i]
                 value3_2 = value3.iloc[i - 2]
-                quadrature = value3_2 - Qmult * value3 + Qmult * quadrature2
+                quadrature = value3_2 - Qmult * value3_1 + Qmult * quadrature2
                 a_quadrature.append(quadrature)
     df[name] = a_quadrature
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def highpass(df, abase, freq, inplace, name, cols):
     """high pass. from john ehlers. if frequency too short like n = 2, then it will produce overflow.
     basically you can use high pass filter as an RSI
@@ -1107,11 +1109,19 @@ def highpass(df, abase, freq, inplace, name, cols):
     # first n highpass are always too high. make them none in order not to disturb corret values
     # a_result[:n*2] = [np.nan] * n*2
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
+@alpha_wrap
+def lowpass(df, abase, freq, inplace, name, cols):
+    """constructed from highpass
+    """
+    s = df[abase]
+    hp=highpass(df=df,abase=abase,freq=freq,inplace=False)
+    df[name]=df[abase]-hp
+    return alpha_return(locals())
 
-@alpha_norm1
-def roofing_filter(df, abase, hp_freq, ss_freq, inplace, name, cols):
+@alpha_wrap
+def roofing_filter(df, abase, hpfreq, ssfreq, inplace, name, cols):
     """  usually hp_n > ss_n. highpass period should be longer than supersmother period.
 
      1. apply high pass filter
@@ -1119,17 +1129,17 @@ def roofing_filter(df, abase, hp_freq, ss_freq, inplace, name, cols):
      """
     s = df[abase]
     a_result = []
-    s_hp = highpass(s, hp_freq)
+    s_hp = highpass(df=df,abase=abase, freq=hpfreq,inplace=False).tolist()
 
-    a1 = np.exp(-1.414 * 3.1459 / ss_freq)
-    b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / ss_freq)
+    a1 = np.exp(-1.414 * 3.1459 / ssfreq)
+    b1 = 2 * a1 * math.cos(1.414 * np.radians(180) / ssfreq)
     c2 = b1
     c3 = -a1 * a1
     c1 = 1 - c2 - c3
     for i in range(0, len(s)):
-        if i < ss_freq - 1:
+        if i < ssfreq - 1:
             a_result.append(np.nan)
-        elif i == ss_freq - 1 or i == ss_freq:
+        elif i == ssfreq - 1 or i == ssfreq:
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
         else:
@@ -1144,10 +1154,10 @@ def roofing_filter(df, abase, hp_freq, ss_freq, inplace, name, cols):
                 result = c1 * (hp + hp1) / 2 + c2 * result1 + c3 * result2  # ehlers formula
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def bandpass_filter(df, abase, freq, inplace, name, cols):
     """ http://www.mesasoftware.com/seminars/ColleaguesInTrading.pdf
         Can help MACD reduce whipsaw
@@ -1207,10 +1217,10 @@ def bandpass_filter(df, abase, freq, inplace, name, cols):
                 result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
     df[name] = a_result
-    return alpha_norm2(locals())
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def bandpass_filter_with_lead(df, abase, freq, inplace, name, cols):
     s = df[abase]
     delta = 0.9
@@ -1238,13 +1248,13 @@ def bandpass_filter_with_lead(df, abase, freq, inplace, name, cols):
                 result = 0.5 * (1 - alpha) * (close - close2) + beta * (1 + alpha) * result1 - alpha * result2
                 a_result.append(result)
 
-    df[name] = pd.Series(a_result)
-    df[f"{name}_lead"] = (freq / 6.28318) * (df[name] - df[name].shift(1))
-    return alpha_norm2(locals())
+    df[name] = a_result
+    df[f"{name}[lead]"] = (freq / 6.28318) * (df[name] - df[name].shift(1))
+    return alpha_return(locals())
 
 
-@alpha_norm1
-def laguerre_RSI(df, abase, inplace, name, cols):
+@alpha_wrap
+def laguerre_RSI_unstable(df, abase, inplace, name, cols):
     """
     http://www.mesasoftware.com/papers/TimeWarp.pdf
     Same as laguerre filter, laguerre RSI has unstable period
@@ -1305,11 +1315,12 @@ def laguerre_RSI(df, abase, inplace, name, cols):
     df_helper.loc[df_helper["L2"] >= df_helper["L3"], "CU"] = df_helper["CU"] + df_helper["L2"] - df_helper["L3"]
     df_helper.loc[df_helper["L2"] < df_helper["L3"], "CD"] = df_helper["CD"] + df_helper["L3"] - df_helper["L2"]
 
-    df[name] = df_helper["CU"] / (df_helper["CU"] + df_helper["CD"])
-    return alpha_norm2(locals())
+    result = df_helper["CU"] / (df_helper["CU"] + df_helper["CD"])
+    df[name]=result.tolist()
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def cg_Oscillator(df, abase, freq, inplace, name, cols):
     """http://www.mesasoftware.com/papers/TheCGOscillator.pdf
     Center of gravity
@@ -1336,11 +1347,12 @@ def cg_Oscillator(df, abase, freq, inplace, name, cols):
                     denom = denom + close
             result = -num / denom if denom != 0 else 0
             a_result.append(result)
-    df[abase] = a_result
-    return alpha_norm2(locals())
+
+    df[name] = a_result
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def RVI(df, abase, freq, inplace, name, cols):
     """
         http://www.stockspotter.com/Files/rvi.pdf
@@ -1386,12 +1398,12 @@ def RVI(df, abase, freq, inplace, name, cols):
                 result = 0
             a_result.append(result)
 
-    df[name] = pd.Series(a_result)
-    df[f"{name}_sig"] = (RVI + 2 * RVI.shift(1) + 2 * RVI.shift(2) + RVI.shift(3)) / 6
-    return alpha_norm2(locals())
+    df[name] = a_result
+    df[f"{name}[sig]"] = (df[name] + 2 * df[name].shift(1) + 2 * df[name].shift(2) + df[name].shift(3)) / 6
+    return alpha_return(locals())
 
 
-@alpha_norm1
+@alpha_wrap
 def leading(df, abase, freq, inplace, name, cols):
     """
         http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/Leading_Ind.html
@@ -1435,14 +1447,29 @@ def leading(df, abase, freq, inplace, name, cols):
                 a_netlead.append(result)
 
     df[name] = a_result
-    df[f"{name}_netlead"] = a_netlead
-    return alpha_norm2(locals())
+    df[f"{name}[netlead]"] = a_netlead
+    return alpha_return(locals())
 
+@alpha_wrap
+def ismax(df, abase, emax,inplace, name, cols, q=0.80, score=10):
+    """
+    the bigger the difference abase/e_max, the closer they are together. the smaller the difference they far away they are
+    """
+    df[f"{name}"] = (df[abase] / df[emax]).between(q, q + 0.05).astype(int) * score
+    df[f"{name}"] = df[f"{name}"].replace(to_replace=0, value=-score)
+    return alpha_return(locals())
 
-"""Point: complex functions """
+@alpha_wrap
+def ismin(df, abase, emin,inplace, name, cols, q=0.80, score=10):
+    """
+    the bigger the difference emin/abase, the closer they are together. the smaller the difference they far away they are
+    """
+    df[f"{name}"] = (df[emin] / df[abase]).between(q, q + 0.05).astype(int) * score
+    df[f"{name}"] = df[f"{name}"].replace(to_replace=0, value=-score)
+    return alpha_return(locals())
 
-
-@alpha_norm1
+"""currently un touched. add back later"""
+@alpha_wrap
 def cdl(df, abase):
     a_positive_columns = []
     a_negative_columns = []
@@ -1465,54 +1492,35 @@ def cdl(df, abase):
 
     df[abase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
     # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
-    columns_remove(df, a_positive_columns + a_negative_columns)
+    remove_columns(df, a_positive_columns + a_negative_columns)
     return abase
 
 
-@alpha_norm1
-def crossma(df, abase, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(abase=abase, deri="crossma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, abase, 1)
-    df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
-    df[add_to] = (df[add_to].diff()).fillna(0)
-    return add_to
+@alpha_wrap
+def crossma(df, abase, freq, freq2, inplace,name,cols):
+    df[name] = (df[abase].rolling(freq).mean() > df[abase].rolling(freq2).mean()).astype(float)
+    df[name] = (df[name].diff()).fillna(0)
+    return alpha_return(locals())
 
+@alpha_wrap
+def overma(df, abase, freq, freq2,inplace,name,cols):
+    df[name] = (df[abase].rolling(freq).mean() > df[abase].rolling(freq2).mean()).astype(float)
+    return alpha_return(locals())
 
-@alpha_norm1
-def overma(df, abase, Sfreq1: SFreq, Sfreq2: SFreq):
-    add_to = LB.indi_name(abase=abase, deri="overma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, abase, 1)
-    df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
-    return add_to
-
-
-@alpha_norm1
-def zlmacd(df, abase, sfreq, bfreq, smfreq):
-    name = f"{sfreq, bfreq, smfreq}"
-    df[f"zlema1_{name}"] = my_best_ec((df[abase]), sfreq)
-    df[f"zlema2_{name}"] = my_best_ec((df[abase]), bfreq)
-
-    df[f"zldif_{name}"] = df[f"zlema1_{name}"] - df[f"zlema2_{name}"]
-    # df[f"zldea_{name}"]= df[f"zldif_{name}"] -df[f"zldif_{name}"].rolling(smfreq).mean() # ma as smoother, but tradeoff is lag
-    df[f"zldea_{name}"] = df[f"zldif_{name}"] - my_best_ec(df[f"zldif_{name}"], smfreq)
-
-    df.loc[df[f"zldea_{name}"] > 0, f"zlmacd_{name}"] = 10
-    df.loc[df[f"zldea_{name}"] <= 0, f"zlmacd_{name}"] = -10
-
-
-@alpha_norm1
-def my_ec_it(s, n, gain):
+@alpha_wrap
+def my_ec_it(df, abase, freq,inplace,name,cols, gain=0):
+    s=df[abase]
     a_result = []
-    k = 2 / (n + 1)
+    k = 2 / (freq + 1)
     counter = 0
     for i in range(0, len(s)):
-        if i < n - 1:
+        if i < freq - 1:
             counter += 1
             a_result.append(np.nan)
-        elif i == n - 1:
+        elif i == freq - 1:
             result = s[0:i].mean()  # mean of an array
             a_result.append(result)
-        elif i > n - 1:
+        elif i > freq - 1:
             last_day_ema = a_result[-1]
             if np.isnan(last_day_ema):  # if the first n days are also nan
                 result = s[0:i].mean()  # mean of an array
@@ -1521,27 +1529,117 @@ def my_ec_it(s, n, gain):
                 today_close = s.iloc[i]
                 result = k * (today_close + gain * (today_close - last_day_ema)) + (1 - k) * last_day_ema  # ehlers formula
                 a_result.append(result)
-
-    return a_result
-
-
-@alpha_norm1
-def my_best_ec(s, n, gain_limit=50):
-    least_error = 1000000
-    best_gain = 0
-    for value1 in range(-gain_limit, gain_limit, 4):
-
-        gain = value1 / 10
-        ec = my_ec_it(s, n, gain)
-        error = (s - ec).mean()
-        print(value1, len(s), len(ec), (error), n)
-        if abs(error) < least_error:
-            least_error = abs(error)
-            best_gain = gain
-    best_ec = my_ec_it(s, n, best_gain)
-    return best_ec
+    df[name]=a_result
+    return alpha_return(locals())
 
 
+@alpha_wrap
+def overslope(df, abase, freq, freq2, inplace, name, cols, degree=1):
+    """using 1 polynomial slope as trend cross over. It is much more stable and smoother than using ma
+        slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
+    """
+
+    df[f"{name}[slope1]"] = df[abase].rolling(freq).apply(poly_fit_apply, kwargs={"degree":degree},raw=False)
+    df[f"{name}[slope2]"] = df[abase].rolling(freq2).apply(poly_fit_apply, kwargs={"degree":degree}, raw=False)
+
+    # df[f"slopediff_{name}"] = df[f"{name}[slope1]"] - df[f"{name}[slope2]"]
+    # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)
+
+    df[f"{name}"] = 0
+    df.loc[(df[f"{name}[slope1]"] > df[f"{name}[slope2]"]) & (df[f"{name}[slope1]"] > 0), f"{name}"] = 10
+    df.loc[(df[f"{name}[slope1]"] <= df[f"{name}[slope2]"]) & (df[f"{name}[slope1]"] <= 0), f"{name}"] = -10
+    return alpha_return(locals())
+
+
+@alpha_wrap
+def macd_tor(df, abase, freq, inplace, name, cols):
+    """
+    is not very useful since price/vol relationship is rather random
+    So even if price and volume deviates/converges, it doesnt say anything about the future price
+    """
+
+    df[f"{name}[ema_abase]"] = zlema((df[abase]), freq, 1.8)
+    df[f"{name}[ema_tor]"] = zlema((df["turnover_rate"]), freq, 1.8)
+
+    # df[f"{name}[ema_abase]"] = df[abase] - highpass(df[abase], int(sfreq))
+    # df[f"{name}[ema_tor]"] = df[abase] - highpass(df[abase], int(sfreq))
+
+    df[f"{name}[dif]"] = df[f"{name}[ema_abase]"] - df[f"{name}[ema_tor]"]
+    df[f"{name}[dif]"] = df[f"{name}[dif]"] * 1
+
+    df[f"{name}[dea]"] = df[f"{name}[dif]"] - supersmoother_3p(df[f"{name}[dif]"], int(freq / 2))
+    df[f"{name}[dea]"] = df[f"{name}[dea]"] * 1
+
+    df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = 80
+    df.loc[(df[f"{name}[dea]"] <= 0), f"{name}"] = -80
+
+    df[f"{name}"] = df[f"{name}"].fillna(method="ffill")
+    return alpha_return(locals())
+
+
+@alpha_wrap
+def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
+    """ using ehlers zero lag EMA used as MACD cross over signal instead of conventional EMA
+        on daily chart, useable freqs are 12*60, 24*60 ,5*60
+
+        IMPORTNAT:
+        Use a very responsive indicator for EMA! Currently, ema is the most responsive
+        Use a very smoother indicator for smooth! Currently, Supersmoother 3p is the most smoothest.
+        NOT other way around
+        Laguerre filter is overall very good, but is neither best at any discipline. Hence using EMA+ supersmoother 3p is better.
+        Butterwohle is also very smooth, but it produces 1 more curve at turning point. Hence super smoother is better for this job.
+
+
+        Works good on high volatile time, works bad on flat times.
+        TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
+        """
+
+    df[f"{name}[dif]"] = 0
+    df[f"{name}[dea]"] = 0
+    if type == 0:  # standard macd with ma. conventional ma is very slow
+        df[f"{name}[ema1]"] = df[abase].rolling(freq).mean()
+        df[f"{name}[ema2]"] = df[abase].rolling(freq2).mean()
+        df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
+        df[f"{name}[dif.ss]"] = supersmoother_3p(df=df,abase=f"{name}[dif]",freq=int(freq/2), inplace=False)
+        df[f"{name}[dea]"] = df[f"{name}[dif]"] - df[f"{name}[dif.ss]"]
+        df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
+        df.loc[(df[f"{name}[dea]"] < 0), f"{name}"] = -score
+    if type == 1:  # standard macd but with zlema
+        df[f"{name}[ema1]"] = zlema(df=df,abase=abase, freq=freq, gain=1.8,inplace=False)
+        df[f"{name}[ema2]"] = zlema(df=df,abase=abase, freq=freq2, gain=1.8,inplace=False)
+        df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
+        df[f"{name}[dif.ss]"] = supersmoother_3p(df=df,abase=f"{name}[dif]",freq=int(freq/2), inplace=False)
+        df[f"{name}[dea]"] = df[f"{name}[dif]"] - df[f"{name}[dif.ss]"]
+        df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
+        df.loc[(df[f"{name}[dea]"] < 0), f"{name}"] = -score
+    elif type == 2:  # macd where price > ema1 and ema2
+        df[f"{name}[ema1]"] = zlema(df=df, abase=abase, freq=freq, gain=1.8, inplace=False)
+        df[f"{name}[ema2]"] = zlema(df=df, abase=abase, freq=freq2, gain=1.8, inplace=False)
+        df.loc[(df[abase] > df[f"{name}[ema1]"]) & (df[abase] > df[f"{name}[ema2]"]), f"{name}"] = score
+        df.loc[(df[abase] < df[f"{name}[ema1]"]) & (df[abase] < df[f"{name}[ema2]"]), f"{name}"] = -score
+    elif type == 3:  # standard macd : ema1 > ema2. better than type 2 because price is too volatile
+        df[f"{name}[ema1]"] = zlema(df=df, abase=abase, freq=freq, gain=1.8, inplace=False)
+        df[f"{name}[ema2]"] = zlema(df=df, abase=abase, freq=freq2, gain=1.8, inplace=False)
+        df.loc[(df[f"{name}[ema1]"] > df[f"{name}[ema2]"]), f"{name}"] = score
+        df.loc[(df[f"{name}[ema1]"] < df[f"{name}[ema2]"]), f"{name}"] = -score
+    elif type == 4:  # macd with lowpass constructed from highpass. This basically replaces abv_ma
+        df[f"{name}[ema1]"] = lowpass(df=df,abase=abase,freq=freq,inplace=False)
+        df[f"{name}[ema2]"] = lowpass(df=df,abase=abase,freq=freq2,inplace=False)
+        df.loc[(df[f"{name}[ema1]"] > df[f"{name}[ema2]"]), f"{name}"] = score
+        df.loc[(df[f"{name}[ema1]"] < df[f"{name}[ema2]"]), f"{name}"] = -score
+    elif type == 5:  # price and tor
+        df[f"{name}[ema1]"] = zlema(df=df, abase=abase, freq=freq, gain=1.8, inplace=False)
+        df[f"{name}[ema2]"] = zlema(df=df, abase="turnover_rate", freq=freq, gain=1.8, inplace=False)
+        df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
+        df[f"{name}[dea]"] = df[f"{name}[dif]"] - supersmoother_3p(df=df,abase=f"{name}[dif]", freq=int(freq),inplace=False)
+        df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
+        df.loc[(df[f"{name}[dea]"] <= 0), f"{name}"] = -score
+
+    df[f"{name}"] = df[f"{name}"].fillna(method="ffill")
+    return alpha_return(locals())
+
+
+"""Point: Not implemented"""
 def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 10}, df_asset=pd.DataFrame(), delay=3):
     """
     KEY DIFFERENCE BETWEEN THESE TWO CALCULATION:
@@ -1754,6 +1852,107 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
 
     return df_asset
 
+"""dont remember which trend was the latest"""
+def trend2(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
+    a_all = [1,5,10,20,60,120,240,500]
+    a_small = [str(x) for x in a_all][:-1]
+    a_big = [str(x) for x in a_all][1:]
+
+    rsi_name = indi_name(abase=abase, deri=f"{market_suffix}rsi")
+    phase_name = indi_name(abase=abase, deri=f"{market_suffix}phase")
+    rsi_abv = indi_name(abase=abase, deri=f"{market_suffix}rsi_abv")
+    turnpoint_name = indi_name(abase=abase, deri=f"{market_suffix}turnpoint")
+    under_name = indi_name(abase=abase, deri=f"{market_suffix}under")
+    trend_name = indi_name(abase=abase, deri=f"{market_suffix}{ADeri.trend.value}")
+
+    func = talib.RSI
+    # RSI and CMO are the best. CMO is a modified RSI
+    # RSI,CMO,MOM,ROC,ROCR100,TRIX
+
+    # df[f"detrend{abase}"] = signal.detrend(data=df[abase])
+    for i in a_all:  # RSI 1
+        try:
+            if i == 1:
+                df[f"{rsi_name}{i}"] = (df[abase].pct_change() > 0).astype(int)
+                print(df[f"{rsi_name}{i}"].dtype)
+                # df[ rsi_name + "1"] = 0
+                # df.loc[(df["pct_chg"] > 0.0), rsi_name + "1"] = 1.0
+            else:
+                df[f"{rsi_name}{i}"] = func(df[abase], timeperiod=i) / 100
+                # df[f"{rsi_name}{i}"] = func(df[f"{rsi_name}{i}"], timeperiod=i) / 100
+
+                # normalization causes error
+                # df[f"{rsi_name}{i}"] = (df[f"{rsi_name}{i}"]-df[f"{rsi_name}{i}"].min())/ (df[f"{rsi_name}{i}"].max()-df[f"{rsi_name}{i}"].min())
+        except Exception as e:  # if error happens here, then no need to continue
+            print("error", e)
+            df[trend_name] = np.nan
+            return trend_name
+
+    # Create Phase
+    for i in [str(x) for x in a_all]:
+        maximum = (thresh_log * math.log((int(i))) + thresh_rest)
+        minimum = 1 - maximum
+
+        high_low, high_high = list(df[f"{rsi_name}{i}"].quantile([0.70, 1]))
+        low_low, low_high = list(df[f"{rsi_name}{i}"].quantile([0, 0.30]))
+
+        # df[f"{phase_name}{i}"] = [1 if high_high > x > high_low else 0 if low_low < x < low_high else np.nan for x in df[f"{rsi_name}{i}"]]
+
+    # rsi high abve low
+    for freq_small, freq_big in zip(a_small, a_big):
+        df[f"{rsi_abv}{freq_small}"] = (df[f"{rsi_name}{freq_small}"] > df[f"{rsi_name}{freq_big}"]).astype(int)
+
+    # one loop to create trend from phase
+    for freq_small, freq_big in zip(a_small, a_big):
+        trendfreq_name = f"{trend_name}{freq_big}"  # freg_small is 2, freq_big is 240
+        # the following reason is that none of any single indicator can capture all. one need a second dimension to create a better fuzzy logic
+
+        # 2. find all points where freq_small is higher/over/abv freq_big
+        df[f"{trendfreq_name}"] = np.nan
+        df[f"{turnpoint_name}{freq_small}helper"] = df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]
+
+        freq_small_top_low, freq_small_top_high = list(df[f"{rsi_name}{freq_small}"].quantile([0.97, 1]))
+        freq_small_bot_low, freq_small_bot_high = list(df[f"{rsi_name}{freq_small}"].quantile([0, 0.03]))
+
+        freq_big_top_low, freq_big_top_high = list(df[f"{rsi_name}{freq_big}"].quantile([0.96, 1]))
+        freq_big_bot_low, freq_big_bot_high = list(df[f"{rsi_name}{freq_big}"].quantile([0, 0.04]))
+
+        # if bottom big and small freq are at their alltime rare high
+        # df.loc[(df[f"{rsi_name}{freq_big}"] > freq_big_top_low), f"{trendfreq_name}"] = 0
+        # df.loc[(df[f"{rsi_name}{freq_big}"] < freq_big_bot_high), f"{trendfreq_name}"] = 1
+
+        # df.loc[(df[f"{rsi_name}{freq_small}"] > freq_small_top_low), f"{trendfreq_name}"] = 0
+        # df.loc[(df[f"{rsi_name}{freq_small}"] < freq_small_bot_high), f"{trendfreq_name}"] = 1
+
+        # small over big
+        df.loc[(df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]) > 1.01, f"{trendfreq_name}"] = 1
+        df.loc[(df[f"{rsi_name}{freq_small}"] / df[f"{rsi_name}{freq_big}"]) < 0.99, f"{trendfreq_name}"] = 0
+
+        # 2. find all points that have too big distant between rsi_freq_small and rsi_freq_big. They are the turning points
+        # top_low, top_high = list(df[f"{turnpoint_name}{freq_small}helper"].quantile([0.98, 1]))
+        # bot_low, bot_high = list(df[f"{turnpoint_name}{freq_small}helper"].quantile([0, 0.02]))
+        # df.loc[ (df[f"{turnpoint_name}{freq_small}helper"]) < bot_high, f"{trendfreq_name}"] = 1
+        # df.loc[ (df[f"{turnpoint_name}{freq_small}helper"]) > top_low, f"{trendfreq_name}"] = 0
+
+        # 3. Create trend based on these two combined
+        df[trendfreq_name] = df[trendfreq_name].fillna(method='ffill')
+        # df.loc[(df[phase_name + freq_big] == 1) & (df[phase_name + freq_small] == 1), trendfreq_name] = 0
+        # df.loc[(df[phase_name + freq_big] == 0) & (df[phase_name + freq_small] == 0), trendfreq_name] = 1
+
+        # fill na based on the trigger points. bfill makes no sense here
+        # df[trendfreq_name].fillna(method='ffill', inplace=True)
+        # TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
+
+    # remove RSI and phase Columns to make it cleaner
+    a_remove = []
+    for i in a_all:
+        # a_remove.append(market_suffix + "rsi" + str(i))
+        # a_remove.append(market_suffix + "phase" + str(i))
+        pass
+    LB.remove_columns(df, a_remove)
+
+    # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
+    return trend_name
 
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
 # 1.Step Create RSI or Abv_ma
@@ -1814,14 +2013,13 @@ def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str =
         # a_remove.append(market_suffix + "rsi" + str(i))
         # a_remove.append(market_suffix + "phase" + str(i))
         pass
-    LB.columns_remove(df, a_remove)
+    LB.remove_columns(df, a_remove)
 
     # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
     df[trend_name] = df[f"{trend_name}2"] * 0.80 + df[f"{trend_name}5"] * 0.12 + df[f"{trend_name}10"] * 0.04 + df[f"{trend_name}20"] * 0.02 + df[f"{trend_name}60"] * 0.01 + df[f"{trend_name}240"] * 0.01
     return trend_name
 
 
-"""Point: Not implemented"""
 
 
 def linear_kalman_filter():
@@ -1891,10 +2089,38 @@ def DFT_MUSIC():
     """
 
 
+
+"""alpha aggregation/analysis = not creating but analyzing alphas"""
+# trend exchange. How long a trend lasts in average
+def trend_swap(df, column, value):
+    try:
+        df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()
+        df_average_bull = df_average_bull.reset_index(level=0, drop=True)
+        mean_cross_over_days = df_average_bull.loc[value].mean()
+        return mean_cross_over_days
+    except:
+        return np.nan
+
+
+def entropy(data):
+    import scipy.stats
+    """Calculates entropy of the passed pd.Series
+    =randomness of the close price distribution
+    =Entropy should be same as calculating the high pass
+    =Sounds good, but not really useful
+    """
+    p_data = data.value_counts()  # counts occurrence of each value
+    return scipy.stats.entropy(p_data)  # get entropy from counts
+
+
 if __name__ == '__main__':
     df = DB.get_asset()
-    df = LB.ohlcpp(df).reset_index()
-    # df["lol_inplace"]=period(df=df,inplace=False)
-    name = poly_fit(df=df, abase="close", inplace=True, degree=4)
-    Plot.plot_chart(df, ["close", name])
+    df = LB.ohlcpp(df)
+    Plot.plot_polynomials(df)
+
+    emax=max(df=df,abase="close",freq=240,re=pd.Series.expanding,inplace=True)
+    name1= ismax(df=df, abase="close",emax=emax, inplace=True)
+    Plot.plot_chart(df, ["close",name1])
     pass
+
+

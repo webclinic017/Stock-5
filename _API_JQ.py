@@ -1,6 +1,9 @@
 import tushare as ts
 import pandas as pd
 import time
+
+from jqdatasdk import macro, query
+
 import LB
 import traceback
 from jqdatasdk import *
@@ -52,7 +55,7 @@ def my_cctv_news(day):
 
 
 def my_margin(date=""):
-    date=LB.trade_date_switcher(str(date))
+    date=LB.switch_trade_date(str(date))
     df= finance.run_query(query(finance.STK_MT_TOTAL).filter(finance.STK_MT_TOTAL.date == date).limit(10))
     #df["date"]=df["date"].apply(LB.trade_date_switcher)
     return df
@@ -64,7 +67,7 @@ def my_get_bars(jq_code,freq):
 if __name__ == '__main__':
     pass
 
-    df=my_get_bars(LB.ts_code_switcher("600519.SH"))
+    df=my_get_bars(LB.switch_ts_code("600519.SH"))
     print(df)
 
     # df=break_jq_limit_helper_xueqiu(code="002501.XSHE")
@@ -86,3 +89,70 @@ if __name__ == '__main__':
     # for code in a_global_index:
     #     df = finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code, finance.GLOBAL_IDX_DAILY.day > "2015-01-01" ))
     #     print(df["day"])
+
+
+def my_macro_run(query_content):
+    macro.run_query(query(query_content))
+
+
+def my_macro(macro_query):
+    query_result = query(macro_query)
+    df = macro.run_query(query_result)
+
+    query_from = str(query_result).split("FROM")[1]
+    query_from = query_from.replace(" ", "")
+    query_from = query_from.replace('"', '')
+
+    index_label = "stat_quarter"
+    if "QUARTER" in query_from:
+        index_label = "stat_quarter"
+    elif "MONTH" in query_from:
+        index_label = "stat_month"
+    elif "YEAR" in query_from:
+        index_label = "stat_year"
+    else:
+        columns = df.columns
+        if "stat_quarter" in columns:
+            index_label = "stat_quarter"
+        elif "stat_month" in columns:
+            index_label = "stat_month"
+        elif "stat_year" in columns:
+            index_label = "stat_year"
+        elif "stat_date" in columns:
+            index_label = "stat_date"
+        else:
+            index_label = "day"
+
+    if "MAC_CPI_MONTH" == query_from:
+        df = df[df["area_name"] == "全国"]
+
+    print(f"index: {index_label}. query_:{query_from}")
+    convert_index(df, index_label)
+    df.sort_values(index_label, inplace=True)
+    return [query_from, index_label, df]
+    # df.to_csv(f"jq/{query_from}.csv", index=False,encoding="utf-8_sig")
+
+
+def convert_index(df,column):
+    """converts string or interger index to date format"""
+    import DB
+    df_sh=pd.DataFrame()
+    df_sh["index_helper"]=DB.Global.d_assets["000001.SH"].index
+    df_sh["index_helper"]=df_sh["index_helper"].astype(str)
+
+    def my_converter(val):
+        val=str(val).replace("-","")
+        if len(val)==6:#yyyymm
+            true_index=df_sh["index_helper"].str.slice(0,6)==(str(val))
+            df=df_sh[true_index]
+
+            df=df.tail(1)
+            if df.empty:
+                return val+"01"
+            else:
+                last_day_of_month=df["index_helper"].iat[-1]
+                val=last_day_of_month
+        elif len(val)==4:#yyyy
+            return my_converter(val+"12")
+        return val
+    df[column]=df[column].apply(my_converter)
