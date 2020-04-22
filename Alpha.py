@@ -166,19 +166,23 @@ def sharp(df, abase, freq, inplace, name, cols):
     df[name] = df[abase].rolling(freq).apply(lambda x: x.mean() / x.std())
     return alpha_return(locals())
 
+
+
+
 @alpha_wrap
 def extrema_rdm(df,abase, inplace,name,cols,n=60):
     """finds extrema values using random noisy sample"""
+    s=df[abase]
     np.random.seed(0)
     xs = [0]
     for r in s:
         xs.append(xs[-1] * 0.9 + r)
     df = pd.DataFrame(xs, columns=[s.name])
-    # Find local peaks
-    df[f'bot{n}'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
-    df[f'peak{n}'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
-    df[f"bot{n}"].update(df[f"peak{n}"].notna())
+    df[f'{name}[min]'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
+    df[f'{name}[max]'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
+    df[f"{name}[minmax]"]=df[f'{name}[min]'].replace(df[f"{name}[max]"].notna().to_dict())
     return alpha_return(locals())
+
 
 @alpha_wrap
 def comp_chg(df, abase, inplace, name, cols):

@@ -112,6 +112,10 @@ def my_fund_daily(ts_code="",start_date="",end_date=""):
 def my_fund_nav(ts_code="",market="O"):
     return get(func=pro.fund_nav, fname="pro.fund_nav", kwargs=locals())
 
+def my_fund_portfolo(ts_code=""):
+    return get(func=pro.fund_portfolio, fname="pro.fund_portfolio", kwargs=locals())
+
+
 def my_fx_daily(ts_code="", trade_date="", start_date="", end_date=""):
     """limited to 1000 rows"""
     return get(func=pro.fx_daily, fname="pro.fx_daily", kwargs=locals())
@@ -140,5 +144,5 @@ def my_cctv_news(date=""):
     return get(func=pro.cctv_news, fname="pro.cctv_news", kwargs=locals())
 
 if __name__ == '__main__':
-    df=my_pro_bar(ts_code="600519.SH",asset="E",freq="30min",start_date="20200408",end_date="20200408")
+    df=my_fund_portfolo(ts_code="501018.SH")
     print(df)

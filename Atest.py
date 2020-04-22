@@ -11,7 +11,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 
-from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
+#from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
 
 sys.setrecursionlimit(1000000)
 
@@ -833,7 +833,7 @@ def asset_intraday_analysis():
         #2.part:prediction. first 15 min predict today
         a_results=[]
         for intraday in a_intraday:
-            df_day=get_asset(ts_code=ts_code,asset=asset)
+            df_day=DB.get_asset(ts_code=ts_code,asset=asset)
             df_filter = df[df["intraday"] == intraday]
             df_filter["trade_date"]=df_filter["day"].apply(LB.switch_trade_date)
             df_filter["trade_date"]=df_filter["trade_date"].astype(int)
@@ -1315,6 +1315,10 @@ def date_volatility():
         df_result[f"std{i}"] = df_result["std"].rolling(i).mean()
     df_result.to_csv("volatilty.csv")
 
+
+
+
+
 if __name__ == '__main__':
     # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
     #     atest_manu(fname="gq_rsi", a_abase=[column])
@@ -1328,8 +1332,7 @@ if __name__ == '__main__':
     # df=DB.get_asset()
     # Plot.plot_distribution(df,abase="pct_chg")
 
-    df_600519=DB.get_asset(ts_code="600276.SH")
-    Plot.plot_distribution(df_600519,"close")
+
 
     # for asset in ["E","I","G"]:
     #     for column in ["pct_chg"]:
