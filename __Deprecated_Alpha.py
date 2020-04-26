@@ -294,7 +294,7 @@ def ivola(df: pd.DataFrame, abase: str = "ivola"):
 def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
     add_to = f"{abase}.sharp{freq.value}"
     add_column(df, add_to, abase, 1)
-    df[add_to] = df[abase].rolling(freq.value).apply(Alpha.sharp_apply)
+    df[add_to] = df[abase].rolling(freq.value).apply(Alpha.apply_sharp)
     return add_to
 
 

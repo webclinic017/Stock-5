@@ -1,4 +1,3 @@
-import Alpha
 import _API_Tushare
 import LB
 import os.path
@@ -8,8 +7,6 @@ from tqdm import tqdm
 import Alpha
 import Atest
 import _API_JQ
-
-from Alpha import sharp_apply, gmean_apply, mean_apply, std_apply, mean_std_diff_apply
 from LB import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -53,7 +50,7 @@ def update_date_seasonal_stats(group_instance="asset_E"):
 
     # create and sort single groups
     for group in a_groups:
-        df_result = df_group[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", gmean_apply, mean_apply, std_apply, mean_std_diff_apply])
+        df_result = df_group[[group[1], "pct_chg"]].groupby(group[1]).agg(["mean", "std", Alpha.apply_gmean, Alpha.apply_mean, Alpha.apply_std, Alpha.apply_mean_std_diff])
         df_result.to_excel(pdwriter, sheet_name=group[1], index=True, encoding='utf-8_sig')
 
     pdwriter.save()
@@ -132,9 +129,21 @@ def update_ts_code(asset="E", market="CN", big_update=True):
             #df["exchange"] = ["创业板" if x[0:3] in ["300"] else "中小板" if x[0:3] in ["002"] else "主板" if x[0:2] in ["00", "60"] else float("nan") for x in df.index]
 
             # add SW industry info for each stock
-            for level in c_industry_level():
-                df_industry_member = get_ts_code(a_asset=[f"industry{level}"])
-                df[f"industry{level}"] = df_industry_member[f"industry{level}"]
+            for level in [1,2,3]:
+                df_industry_member = get_ts_code(a_asset=[f"sw_industry{level}"])
+                df[f"sw_industry{level}"] = df_industry_member[f"sw_industry{level}"]
+
+            # add JQ industry info for each stock
+            for level in [1, 2,]:
+                df_industry_member = get_ts_code(a_asset=[f"jq_industry{level}"])
+                df_industry_member=df_industry_member[ ~df_industry_member.index.duplicated(keep="first")]
+                print(df_industry_member)
+                df[f"jq_industry{level}"] = df_industry_member[f"jq_industry{level}"]
+
+            # add ZJ industry info for each stock
+            for level in [1]:
+                df_industry_member = get_ts_code(a_asset=[f"zj_industry{level}"])
+                df[f"zj_industry{level}"] = df_industry_member[f"zj_industry{level}"]
 
             # add concept
             df_concept = get_ts_code(a_asset=["concept"])
@@ -190,22 +199,38 @@ def update_ts_code(asset="E", market="CN", big_update=True):
 
             # 中债，国债
             # only yield curve, no daily data
-        elif (asset == "industry"):
-            for level in c_industry_level():
-                # industry member list
-                df_member = _API_Tushare.my_index_classify(f"L{level}")
-                df_member = df_member.rename(columns={"industry_name": f"industry{level}"}).set_index("index_code")
+        elif (asset in ["sw_industry1","sw_industry2","sw_industry3"]):
+            # industry member list
+            level=asset[-1]
+            df_member = _API_Tushare.my_index_classify(f"L{level}")
+            df_member = df_member.rename(columns={"industry_name": f"{asset}"}).set_index("index_code")
 
-                # industry instance
-                a_df_instances = []
-                for index in df_member.index:
-                    df_instance = _API_Tushare.my_index_member(index)
-                    df_instance.rename(columns={"con_code": "ts_code"}, inplace=True)
-                    a_df_instances.append(df_instance)
-                df = pd.concat(a_df_instances, sort=False)
-                df = pd.merge(df, df_member, how="left", on=["index_code"], suffixes=[False, False], sort=False)
-                df = df.set_index("ts_code", drop=True)
-                LB.to_csv_feather(df, a_path=LB.a_path(f"Market/{market}/General/ts_code_industry{level}"))
+            # industry instance
+            a_df_instances = []
+            for index in df_member.index:
+                df_instance = _API_Tushare.my_index_member(index)
+                df_instance.rename(columns={"con_code": "ts_code"}, inplace=True)
+                a_df_instances.append(df_instance)
+            df = pd.concat(a_df_instances, sort=False)
+            df = pd.merge(df, df_member, how="left", on=["index_code"], suffixes=[False, False], sort=False)
+            df = df.set_index("ts_code", drop=True)
+            LB.to_csv_feather(df, a_path=LB.a_path(f"Market/{market}/General/ts_code_{asset}"))
+            return
+        elif (asset in ["zj_industry1", "jq_industry1","jq_industry2"]):
+            d_name={"zj_industry1":"zjw", "jq_industry1":"jq_l1","jq_industry2":"jq_l2"}
+            df_member=_API_JQ.my_get_industries(name=d_name[asset])
+            a_df_instances=[]
+            for industry_code in df_member.index:
+                a_industry=_API_JQ.my_get_industry_stocks(industry_code)
+                a_industry=[LB.switch_ts_code(x) for x in a_industry]
+                df_industry=pd.DataFrame(index=a_industry)
+                df_industry.index.name="ts_code"
+                df_industry["index_code"]=industry_code
+                df_industry[asset]=df_member.at[industry_code,"name"]
+                df_industry["start_date"]=df_member.at[industry_code,"start_date"]
+                a_df_instances.append(df_industry)
+            df = pd.concat(a_df_instances, sort=False)
+            LB.to_csv_feather(df, a_path=LB.a_path(f"Market/{market}/General/ts_code_{asset}"))
             return
         elif asset == "concept":
             df_member = _API_Tushare.my_concept()
@@ -246,23 +271,6 @@ def update_ts_code(asset="E", market="CN", big_update=True):
     LB.to_csv_feather(df, a_path)
 
 
-# @LB.deco_only_big_update
-# def update_general_industry(level, market="CN", big_update=True):
-#     # industry member list
-#     df_member = API_Tushare.my_index_classify(f"L{level}")
-#     df_member = df_member.rename(columns={"industry_name": f"industry{level}"}).set_index("index_code")
-#
-#     # industry instance
-#     a_df_instances=[]
-#     for index in df_member.index:
-#         df_instance = API_Tushare.my_index_member(index)
-#         df_instance.rename(columns={"con_code":"ts_code"},inplace=True)
-#         a_df_instances.append(df_instance)
-#     df_instances=pd.concat(a_df_instances,sort=False)
-#     df_instances=pd.merge(df_instances,df_member,how="left",  on=["index_code"], suffixes=[False, False],sort=False)
-#     df_instances=df_instances.set_index("ts_code",drop=True)
-#     LB.to_csv_feather(df_instances, a_path=LB.a_path(f"Market/{market}/General/ts_code_industry{level}"))
-#
 
 def update_assets_EIFD_D(asset="E", freq="D", market="CN", step=1, big_update=True):
     def merge_saved_df_helper(df, df_saved):
@@ -448,7 +456,7 @@ def update_assets_EIFD_D_rolling(df, asset, bfreq=c_bfreq()):
     # gmean
     for freq in [LB.BFreq.f20, LB.BFreq.f60, LB.BFreq.f240][::-1]:
         df[f"gmean{freq}"] = 1 + (df["pct_chg"] / 100)
-        df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(sharp_apply, raw=False)
+        df[f"gmean{freq}"] = df[f"gmean{freq}"].rolling(240).apply(Alpha.apply_sharp, raw=False)
 
     # Testing - 高送转
     #1. total share/ first day share
@@ -503,7 +511,7 @@ def update_assets_EIFD_D_expanding(df, asset):
     df["e_gmean"] = df["e_gmean"].expanding(240).apply(gmean, raw=False)
 
     #sharp ratio
-    df["e_sharp"] = df["pct_chg"].expanding(240).apply(Alpha.sharp_apply, raw=False)
+    df["e_sharp"] = df["pct_chg"].expanding(240).apply(Alpha.apply_sharp, raw=False)
     #e_sharp and e_gmean are pretty similar
 
     # 2. times above ma, bigger better
@@ -544,6 +552,10 @@ def update_assets_EIFD_D_expanding(df, asset):
     df["e_min"] = df["close"].expanding(240).min()
     df["e_min_pct"] = (df["close"] / df["e_min"]).between(0.9, 1.1).astype(int)
     df["e_min_pct"] = df["e_min_pct"].expanding(240).mean()
+
+
+    #beat index
+    #TODO. check if from begin of IPO, this stock has beating the index and its IPO
 
 
 def break_tushare_limit_helper(func, kwargs, limit=1000):
@@ -1624,7 +1636,14 @@ if __name__ == '__main__':
 
         #update_all_in_one_hk()
         #convert_asset_xueqiu()
-        update_date(asset="E",start_date="20150101",end_date="20190801")
+        # update_ts_code(asset="sw_industry1")
+        # update_ts_code(asset="sw_industry2")
+        # update_ts_code(asset="sw_industry3")
+        # update_ts_code(asset="jq_industry1")
+        # update_ts_code(asset="jq_industry2")
+        # update_ts_code(asset="zj_industry1")
+        update_ts_code(asset="E")
+        #update_date(asset="E",start_date="20150101",end_date="20190801")
         #convert_asset_xueqiu()
         #update_date_news_tushare_cctv()
         # for api in ["tushare","jq","tushare_cctv"]:

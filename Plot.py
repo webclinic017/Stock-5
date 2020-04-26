@@ -118,9 +118,11 @@ def plot_autocorrelation(series):
     autocorrelation_plot(series.dropna())
     plt.show()
 
-def plot_chart(df, columns):
+def plot_chart(df, columns, d_special):
     df_copy = df[columns].copy().reset_index(drop=True)
     df_copy.plot(legend=True)
+    for col,special in d_special.items():
+        plt.plot(df_copy[col],special)
     plt.show()
 
 def plot_peaks(df, abase, distance=120, height=""):

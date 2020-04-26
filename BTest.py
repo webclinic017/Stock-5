@@ -165,8 +165,12 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     df_overview.at[0, "all_sharp"] = df_port_c["all_pct_chg"].mean()/df_port_c["all_pct_chg"].std()  # everyday
     # df_overview.at[0, "asset_sell_pct_chg_std"] = s_sell_comp.std()
     # df_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
-    df_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"] if not df_port_c.empty else np.nan
-
+    if not df_port_c.empty:
+        df_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
+        df_overview.at[0, "all_comp_chg/sh_index"] = df_port_c.at[len(df_port_c) - 1, "all_comp_chg"] / df_port_c.at[len(df_port_c) - 1, "comp_chg_000001.SH"]
+    else:
+        df_overview.at[0, "all_comp_chg"] =np.nan
+        df_overview.at[0, "all_comp_chg/sh_index"] =np.nan
 
     #correlation
     df_overview.at[0, "port_corr_pearson"] = df_port_c["all_pct_chg"].corr(df_port_c[f"pct_chg{beta_against}"], method="pearson")
@@ -852,11 +856,12 @@ if __name__ == '__main__':
         pr.enable()
 
         #btest_validation(column="bull")
-        #btest_manu()
+        btest_manu()
         #btest_overview_master(mode="manu",pair=1)
         for n in (1,):
         #     #btest_overview_master(mode="auto",pair=n)
-            btest_auto(pair=n)
+            #btest_auto(pair=n)
+            pass
 
 
         pr.disable()

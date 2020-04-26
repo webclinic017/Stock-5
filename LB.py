@@ -474,7 +474,7 @@ class SFreq(enum.Enum):
     f240 = 240
 
 def c_G_queries():
-    return {"G": ["on_asset == 'E'", "group in ['industry1','industry2','concept','market'] "]}
+    return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','concept','market'] "]}
 
 def c_I_queries():
     return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
@@ -482,10 +482,10 @@ def c_I_queries():
 def c_group_score_weight():
     return {"area": 0.10,
             "market": 0.40,
-            "industry1": 0.20,
-            "industry2": 0.20,
+            "sw_industry1": 0.20,
+            "sw_industry2": 0.20,
             "state_company": 0.05,
-            "is_hs": 0.05}  # "industry3": 0.20,
+            "is_hs": 0.05}  # "sw_industry3": 0.20,
 
 
 def c_date_oth():
@@ -501,8 +501,6 @@ def c_assets_fina_function_dict():
             "balancesheet": _API_Tushare.my_balancesheet,
             "cashflow": _API_Tushare.my_cashflow}
 
-def c_industry_level():
-    return ['1', '2', '3']
 
 def c_op():
     return {"plus": operator.add,
@@ -588,7 +586,7 @@ def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
     if "E" in assets:
         df_ts_code_E = DB.get_ts_code(["E"],market=market)
 
-        a_columns=[x for x in df_ts_code_E.columns if x in ["industry1","industry2","industry3","area","market","is_hs","state_company","concept"]]
+        a_columns=[x for x in df_ts_code_E.columns if x in ["sw_industry1","sw_industry2","sw_industry3","zj_industry1","jq_industry1","jq_industry2","area","market","is_hs","state_company","concept"]]
         # d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
         #        "industry2": list(df_ts_code_E["industry2"].unique()),
         #        "industry3": list(df_ts_code_E["industry3"].unique()),
@@ -767,10 +765,8 @@ def custom_quantile(df, column, p_setting=[0,0.2,0.4,0.6,0.8,1], key_val=True):
     return d_df
 
 
-
 def custom_expand(df, min_freq):
     d_result = {}
-    step_counter=0
     for counter, expanding_index in enumerate(df.index):
         if counter >= min_freq:
             d_result[expanding_index] = df.loc[df.index[0]:expanding_index]
@@ -819,6 +815,10 @@ def ohlcpp(df):
 def pp(s):
     return len(s[s>0])/len(s)
 
+def df_between(df, start_date, end_date):
+    df.index=df.index.astype(str)
+    return df[(df.index >= start_date) & (df.index <= end_date)]
+
 # def btest_quantile(series):
 #     """this function should not exist. it helps in btest to eval quantil str in one line"""
 #     array=list(series)
@@ -849,6 +849,9 @@ def interrupt_confirmed():
 
 if __name__ == '__main__':
     pass
+    import DB
+    df=DB.get_asset()
+    print(df_between(df, "20150101", "20160101"))
 
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     start = time.time()

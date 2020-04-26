@@ -242,7 +242,8 @@ def generic_comparison(df, abase):
 
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
-def atest(asset="E", step=1, d_queries={}, kwargs={"func": macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}):
+# kwargs= {"func": Alpha.macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}
+def atest(asset="E", step=1, d_queries={}, kwargs={}):
     """
     This is a general statistic test creator
     1. provide all cases

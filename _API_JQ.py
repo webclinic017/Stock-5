@@ -15,81 +15,29 @@ for i in range(10):
     except:
         pass
 
-def break_jq_limit_helper_finance(code, limit=5000):
-    """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
-    #first call
-    df=finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code ))
-    len_df_this = len(df)
-    df_last = df
 
-    while len_df_this == limit:  # TODO if this is fixed or add another way to loop
-        day = df_last.at[len(df_last) - 1, "day"]
-        df_this=finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code, finance.GLOBAL_IDX_DAILY.day > day ))
-        if (df_this.equals(df_last)):
-            break
-        df = df.append(df_this, sort=False, ignore_index=True).drop_duplicates(subset="day")
-        len_df_this = len(df_this)
-        df_last = df_this
-    return df
-
-
-def break_jq_limit_helper_xueqiu(code, limit=3000):
-    """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
-    #first call
-    df=finance.run_query(query(finance.STK_XUEQIU_PUBLIC).filter(finance.STK_XUEQIU_PUBLIC.code == code ))
-    len_df_this = len(df)
-    df_last = df
-
-    while len_df_this >= limit:  # TODO if this is fixed or add another way to loop
-        day = df_last.at[len(df_last) - 1, "day"]
-        df_this=finance.run_query(query(finance.STK_XUEQIU_PUBLIC).filter(finance.STK_XUEQIU_PUBLIC.code == code, finance.STK_XUEQIU_PUBLIC.day > day ))
-        if (df_this.equals(df_last)):
-            break
-        df = df.append(df_this, sort=False, ignore_index=True).drop_duplicates(subset="day")
-        len_df_this = len(df_this)
-        df_last = df_this
-    return df
-
-def my_cctv_news(day):
-    return finance.run_query(query(finance.CCTV_NEWS).filter(finance.CCTV_NEWS.day == day))
-
-
-def my_margin(date=""):
-    date=LB.switch_trade_date(str(date))
-    df= finance.run_query(query(finance.STK_MT_TOTAL).filter(finance.STK_MT_TOTAL.date == date).limit(10))
-    #df["date"]=df["date"].apply(LB.trade_date_switcher)
-    return df
-
-def my_get_bars(jq_code,freq):
-    df=get_bars(security=jq_code,count=5000000,unit=freq,fields=["date","open","high","low","close"])
-    return df
-
-if __name__ == '__main__':
-    pass
-
-    df=my_get_bars(LB.switch_ts_code("600519.SH"))
-    print(df)
-
-    # df=break_jq_limit_helper_xueqiu(code="002501.XSHE")
-    # df["trade_date"]=df["day"].apply(LB.trade_date_switcher)
-    # df["trade_date"]=df["trade_date"].astype(int)
-    # df_asset=DB.get_asset("002501.SZ")
-    # df_asset=LB.ohlc(df_asset)
-    # df=pd.merge(df_asset,df,how="left",on="trade_date")
-    # df.to_csv("xueqiu.csv")
-    # df = get_concept_stocks(concept_code="GN185")
-    # print(df)
-    # df.to_csv("concept.csv",encoding='utf-8_sig')
-    # a_global_index = ["800000.XHKG", "INX", "KS11", "FTSE", "RTS", "MIB", "GDAXI", "N225", "IBEX", "FCHI", "IBOV", "MXX", "GSPTSE"]
-    # for code in a_global_index:
-    #     df= break_jq_limit_helper_finance(code=code, limit=5000)
-    #     print(len(df))
-
-    # a_global_index = ["800000.XHKG", "INX", "KS11", "FTSE", "RTS", "MIB", "GDAXI", "N225", "IBEX", "FCHI", "IBOV", "MXX", "GSPTSE"]
-    # for code in a_global_index:
-    #     df = finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code, finance.GLOBAL_IDX_DAILY.day > "2015-01-01" ))
-    #     print(df["day"])
-
+def get(func, fname, kwargs, df_fallback=pd.DataFrame()):
+    for _ in range(200):
+        try:
+            result = func(**kwargs)
+            if result is None:
+                print("JQ", fname, "NONE", kwargs)
+            elif type(result)==list:
+                if len(result)==0:
+                    print("JQ", fname, "LIST EMPTY", kwargs)
+                else:
+                    print("JQ", fname, "LIST SUCCESS", kwargs)
+            elif type(result)==pd.DataFrame:
+                if result.empty:
+                    print("JQ", fname, "DF EMPTY", kwargs)
+                    return df_fallback
+                else:
+                    print("JQ", fname, "DF SUCCESS", kwargs)
+            return result
+        except Exception as e:
+            print("JQ", fname, "ERROR", kwargs)
+            traceback.print_exc()
+            time.sleep(10)
 
 def my_macro_run(query_content):
     macro.run_query(query(query_content))
@@ -156,3 +104,87 @@ def convert_index(df,column):
             return my_converter(val+"12")
         return val
     df[column]=df[column].apply(my_converter)
+
+def break_jq_limit_helper_finance(code, limit=5000):
+    """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
+    #first call
+    df=finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code ))
+    len_df_this = len(df)
+    df_last = df
+
+    while len_df_this == limit:  # TODO if this is fixed or add another way to loop
+        day = df_last.at[len(df_last) - 1, "day"]
+        df_this=finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code, finance.GLOBAL_IDX_DAILY.day > day ))
+        if (df_this.equals(df_last)):
+            break
+        df = df.append(df_this, sort=False, ignore_index=True).drop_duplicates(subset="day")
+        len_df_this = len(df_this)
+        df_last = df_this
+    return df
+
+
+def break_jq_limit_helper_xueqiu(code, limit=3000):
+    """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
+    #first call
+    df=finance.run_query(query(finance.STK_XUEQIU_PUBLIC).filter(finance.STK_XUEQIU_PUBLIC.code == code ))
+    len_df_this = len(df)
+    df_last = df
+
+    while len_df_this >= limit:  # TODO if this is fixed or add another way to loop
+        day = df_last.at[len(df_last) - 1, "day"]
+        df_this=finance.run_query(query(finance.STK_XUEQIU_PUBLIC).filter(finance.STK_XUEQIU_PUBLIC.code == code, finance.STK_XUEQIU_PUBLIC.day > day ))
+        if (df_this.equals(df_last)):
+            break
+        df = df.append(df_this, sort=False, ignore_index=True).drop_duplicates(subset="day")
+        len_df_this = len(df_this)
+        df_last = df_this
+    return df
+
+def my_cctv_news(day):
+    return finance.run_query(query(finance.CCTV_NEWS).filter(finance.CCTV_NEWS.day == day))
+
+
+def my_margin(date=""):
+    date=LB.switch_trade_date(str(date))
+    df= finance.run_query(query(finance.STK_MT_TOTAL).filter(finance.STK_MT_TOTAL.date == date).limit(10))
+    #df["date"]=df["date"].apply(LB.trade_date_switcher)
+    return df
+
+def my_get_bars(jq_code,freq):
+    df=get_bars(security=jq_code,count=5000000,unit=freq,fields=["date","open","high","low","close"])
+    return df
+
+def my_get_industries(name="zjw"):
+    return get(func=get_industries,fname="get_industries",kwargs={"name":name})
+
+def my_get_industry_stocks(industry_code):
+    return get(func=get_industry_stocks,fname="get_industry_stocks",kwargs={"industry_code":industry_code})
+
+
+if __name__ == '__main__':
+    df=my_get_industries("zjw")
+
+
+
+
+
+    # df=break_jq_limit_helper_xueqiu(code="002501.XSHE")
+    # df["trade_date"]=df["day"].apply(LB.trade_date_switcher)
+    # df["trade_date"]=df["trade_date"].astype(int)
+    # df_asset=DB.get_asset("002501.SZ")
+    # df_asset=LB.ohlc(df_asset)
+    # df=pd.merge(df_asset,df,how="left",on="trade_date")
+    # df.to_csv("xueqiu.csv")
+    # df = get_concept_stocks(concept_code="GN185")
+    # print(df)
+    # df.to_csv("concept.csv",encoding='utf-8_sig')
+    # a_global_index = ["800000.XHKG", "INX", "KS11", "FTSE", "RTS", "MIB", "GDAXI", "N225", "IBEX", "FCHI", "IBOV", "MXX", "GSPTSE"]
+    # for code in a_global_index:
+    #     df= break_jq_limit_helper_finance(code=code, limit=5000)
+    #     print(len(df))
+
+    # a_global_index = ["800000.XHKG", "INX", "KS11", "FTSE", "RTS", "MIB", "GDAXI", "N225", "IBEX", "FCHI", "IBOV", "MXX", "GSPTSE"]
+    # for code in a_global_index:
+    #     df = finance.run_query(query(finance.GLOBAL_IDX_DAILY).filter(finance.GLOBAL_IDX_DAILY.code == code, finance.GLOBAL_IDX_DAILY.day > "2015-01-01" ))
+    #     print(df["day"])
+

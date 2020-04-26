@@ -5,6 +5,8 @@ import LB
 import matplotlib.pyplot as plt
 import Plot
 from scipy.signal import argrelextrema
+from scipy.signal import argrelmin
+from scipy.signal import argrelmax
 from LB import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -167,11 +169,11 @@ def sharp(df, abase, freq, inplace, name, cols):
     return alpha_return(locals())
 
 
-
-
 @alpha_wrap
 def extrema_rdm(df,abase, inplace,name,cols,n=60):
-    """finds extrema values using random noisy sample"""
+    """finds extrema values using random noisy sample.
+    Todo not finished
+    """
     s=df[abase]
     np.random.seed(0)
     xs = [0]
@@ -181,6 +183,65 @@ def extrema_rdm(df,abase, inplace,name,cols,n=60):
     df[f'{name}[min]'] = df.iloc[argrelextrema(df[s.name].values, np.less_equal, order=n)[0]][s.name]
     df[f'{name}[max]'] = df.iloc[argrelextrema(df[s.name].values, np.greater_equal, order=n)[0]][s.name]
     df[f"{name}[minmax]"]=df[f'{name}[min]'].replace(df[f"{name}[max]"].notna().to_dict())
+    return alpha_return(locals())
+
+@alpha_wrap
+def minima(df, abase, inplace, name, cols, n=60):
+    #find minimum
+    min_index = argrelmin(df[abase].to_numpy(), order=n)[0]
+
+    #get index of these minimum
+    index=pd.Series(df.index).loc[min_index]
+
+    #assign minimum x with y values
+    df.loc[index,name]=df.loc[index,"close"]
+    return alpha_return(locals())
+
+@alpha_wrap
+def maxima(df, abase, inplace, name, cols, n=60):
+    #find minimum
+    min_index = argrelmax(df[abase].to_numpy(), order=n)[0]
+
+    #get index of these minimum
+    index=pd.Series(df.index).loc[min_index]
+
+    #assign minimum x with y values
+    df.loc[index,name]=df.loc[index,"close"]
+    return alpha_return(locals())
+
+@alpha_wrap
+def extrema(df, abase, inplace, name, cols, n=60):
+    helper_min=minima(df=df,abase=abase,n=n,inplace=False)
+    helper_max=maxima(df=df,abase=abase,n=n,inplace=False)
+    helper_max.update(helper_min.dropna())
+    df[f"{name}"] =helper_max
+    return alpha_return(locals())
+
+@alpha_wrap
+def extrema_distance(df, abase, inplace, name, cols):
+    df[name] = np.nan
+    # count distance to last extrema
+    for trade_date, df_expand in LB.custom_expand(df=df, min_freq=240).items():
+        index = df_expand[abase].last_valid_index()
+        if index not in [None, np.nan, ""]:
+            numb_today = df_expand.index.get_loc(trade_date)
+            numb_last_extrem = df_expand.index.get_loc(index)
+            df.at[trade_date, name] = numb_today - numb_last_extrem #distance
+    return alpha_return(locals())
+
+@alpha_wrap
+def extrema_diff(df, abase, inplace, name, cols, n=60,n2=120):
+    """this function finds second priority extrema
+    n=sfreq, n2=bfreq
+    1st priority= in n and n2
+    2nd prioirty= in n but not n2
+    """
+    #find extrema for n and n2
+    extrema_n=maxima_l(df=df, abase=abase, n=n, inplace=False).dropna()
+    extrema_n2=maxima_l(df=df, abase=abase, n=n2, inplace=False).dropna()
+    #find extrema in n but not n2
+    a_index=[x for x  in extrema_n.index if x not in extrema_n2.index]
+    df.loc[a_index,f"{name}"]=df[abase]
     return alpha_return(locals())
 
 
@@ -240,50 +301,44 @@ def IFT(df, abase, inplace, name, cols, min=0, max=1):
 """Point: generic apply functions (no generic norm needed)"""
 
 
-def poly_fit_apply(s,degree=1):
+def apply_poly_fit(s, degree=1):
     """Trend apply = 1 degree polynomials"""
     """ maybe normalize s before apply"""
     index = range(0, len(s))
     return LB.polyfit_slope(index, s, degree=degree)
 
 
-def norm_apply(series, min=0, max=1):
+def apply_norm(series, min=0, max=1):
     series_min = series.min()
     series_max = series.max()
     new_series = (((max - min) * (series - series_min)) / (series_max - series_min)) + min
     return new_series.iat[-1]
 
 
-def FT_APPYL(s):
+def apply_FT(s):
     """Fisher Transform apply"""
     return FT(s).iat[-1]
 
-
-def IFT_Apply(s):
+def apply_IFT(s):
     """Inverse Fisher Transform Apply"""
     return IFT(s).iat[-1]
 
-
-def sharp_apply(series):
+def apply_sharp(series):
     try:
         return series.mean() / series.std()
     except Exception as e:
         return np.nan
 
-
-def gmean_apply(series):
+def apply_gmean(series):
     return gmean((series / 100) + 1)
 
-
-def mean_apply(series):
+def apply_mean(series):
     return ((series / 100) + 1).mean()
 
-
-def std_apply(series):
+def apply_std(series):
     return ((series / 100) + 1).std()
 
-
-def mean_std_diff_apply(series):
+def apply_mean_std_diff(series):
     new_series = (series / 100) + 1
     series_mean = new_series.mean()
     series_std = new_series.std()
@@ -1543,8 +1598,8 @@ def overslope(df, abase, freq, freq2, inplace, name, cols, degree=1):
         slope is slower, less whipsaw than MACD, but since MACD is quicker, we can accept the whipsaw. In general usage better then slopecross
     """
 
-    df[f"{name}[slope1]"] = df[abase].rolling(freq).apply(poly_fit_apply, kwargs={"degree":degree},raw=False)
-    df[f"{name}[slope2]"] = df[abase].rolling(freq2).apply(poly_fit_apply, kwargs={"degree":degree}, raw=False)
+    df[f"{name}[slope1]"] = df[abase].rolling(freq).apply(apply_poly_fit, kwargs={"degree":degree}, raw=False)
+    df[f"{name}[slope2]"] = df[abase].rolling(freq2).apply(apply_poly_fit, kwargs={"degree":degree}, raw=False)
 
     # df[f"slopediff_{name}"] = df[f"{name}[slope1]"] - df[f"{name}[slope2]"]
     # df[f"slopedea_{name}"] = df[f"slopediff_{name}"] - my_best_ec(df[f"slopediff_{name}"], smfreq)
@@ -2094,7 +2149,7 @@ def DFT_MUSIC():
 
 
 
-"""alpha aggregation/analysis = not creating but analyzing alphas"""
+"""alpha aggregation + analysis = not creating but analyzing alphas"""
 # trend exchange. How long a trend lasts in average
 def trend_swap(df, column, value):
     try:
@@ -2117,14 +2172,23 @@ def entropy(data):
     return scipy.stats.entropy(p_data)  # get entropy from counts
 
 
-if __name__ == '__main__':
-    df = DB.get_asset()
-    df = LB.ohlcpp(df)
-    Plot.plot_polynomials(df)
 
-    emax=max(df=df,abase="close",freq=240,re=pd.Series.expanding,inplace=True)
-    name1= ismax(df=df, abase="close",emax=emax, inplace=True)
-    Plot.plot_chart(df, ["close",name1])
+
+
+if __name__ == '__main__':
+    df = DB.get_asset(ts_code="399006.SZ",asset="I")
+    df = LB.ohlcpp(df)
+
+
+    #mini=minima(df=df, abase="close", n=60, inplace=True)
+    #maxi=maxima(df=df, abase="close", n=60, inplace=True)
+    #extrema=extrema_diff(df=df, abase="close", n=60, n2=120,inplace=True)
+    maxima_l=maxima(df=df, abase="close", n=120, inplace=True)
+    minima_l=minima(df=df, abase="close", n=120, inplace=True)
+    maxima_d=extrema_distance(df=df, abase=maxima_l, inplace=True)
+    minima_d=extrema_distance(df=df, abase=minima_l, inplace=True)
+    df["diff"]=df[maxima_d]-df[minima_d]
+    Plot.plot_chart(df, ["close", "diff",maxima_d,minima_d,maxima_l,minima_l], {maxima_l: "x",minima_l:"o"})
     pass
 
 
