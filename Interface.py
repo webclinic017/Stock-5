@@ -27,7 +27,11 @@ class Feather_opener(QWidget):
         self.show()
 
     def choose_clicked(self):
-        path,format_egal = QFileDialog.getOpenFileName(self, 'Input Dialog',                                        'D:\Stock\Market\CN', "*.feather")
+        input_text = self.input.text()
+        if input_text:
+            path, format_egal = QFileDialog.getOpenFileName(self, 'Input Dialog', input_text, "*.feather")
+        else:
+            path, format_egal = QFileDialog.getOpenFileName(self, 'Input Dialog', 'D:\Stock\Market\CN', "*.feather")
 
         if path not in [None,""]:
             self.input.setText(path)

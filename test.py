@@ -48,7 +48,7 @@ def asset_beat_index(start_date="00000000",end_date=LB.today()):
     df_industry3_code=DB.get_ts_code(a_asset=[f"industry3"])
 
     #preload
-    d_index=DB.preload(asset="I",step=1,d_queries_ts_code=LB.c_I_queries())
+    d_index=DB.preload(asset="I", step=1, d_queries_ts_code=LB.c_index_queries())
     d_e=DB.preload(step=1)
     df_result=pd.DataFrame()
 
@@ -142,7 +142,7 @@ def year_beat_index():
     df_industry3_code = DB.get_ts_code(a_asset=[f"industry3"])
 
     # preload index
-    d_index = DB.preload(asset="I", step=1, d_queries_ts_code=LB.c_I_queries())
+    d_index = DB.preload(asset="I", step=1, d_queries_ts_code=LB.c_index_queries())
     d_index_y={}
     for key,df in d_index.items():
         df_year=LB.timeseries_to_year(df)
@@ -308,4 +308,4 @@ def pattern_bull():
 
 
 
-pattern_bull()
+

@@ -24,7 +24,7 @@ from playsound import playsound
 from numba import jit
 import numba
 import enum
-
+import time
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
@@ -303,7 +303,7 @@ def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan becau
 
 
 def open_file(filepath):
-    filepath = f"D:/GoogleDrive/私人/私人 Stock 2.0/{filepath}"
+    filepath = f"{filepath}"
     if platform.system() == 'Darwin':  # macOS
         subprocess.call(('open', filepath))
     elif platform.system() == 'Windows':  # Windows
@@ -355,7 +355,7 @@ def a_path(path: str = ""):
 
 
 def handle_save_exception(e, path):
-    if type(e) in [FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
+    if type(e) in [UnicodeDecodeError,FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -366,6 +366,7 @@ def handle_save_exception(e, path):
         close_file(path)
         time.sleep(10)
     else:
+        sound("error.mp3")
         traceback.print_exc()
 
 
@@ -381,10 +382,14 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
             except Exception as e:
                 handle_save_exception(e, a_path[0])
     if not skip_feather:
-        try:
-            df.to_feather(a_path[1])
-        except Exception as e:
-            handle_save_exception(e, a_path[1])
+        for _ in range(10):
+            try:
+                df.to_feather(a_path[1])
+                break
+            except Exception as e:
+                handle_save_exception(e, a_path[1])
+
+
 
 
 def to_excel(path, d_df, index=True):
@@ -424,13 +429,12 @@ def send_mail(trade_string="what to buy and sell"):
     print("successfuly send...")
 
 
-def multi_process(func, a_kwargs, a_steps=[]):
+def multi_process(func, a_kwargs, a_partial=[]):
     a_process = []
-    for step in a_steps:
-        new_dict = a_kwargs.copy()
-        new_dict.update({"step": step})
-        p = Process(target=func, kwargs=new_dict)
-        a_process.append(p)
+    for d_partial in a_partial:
+        new_dict = a_kwargs.copy()#maybe deepcopy
+        new_dict.update(d_partial)
+        a_process.append(Process(target=func, kwargs=new_dict))
     [process.start() for process in a_process]
     [process.join() for process in a_process]
 
@@ -474,10 +478,13 @@ class SFreq(enum.Enum):
     f240 = 240
 
 def c_G_queries():
-    return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','concept','market'] "]}
+    return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','zj_industry1','jq_industry1','jq_industry2','concept','market'] "]}
 
-def c_I_queries():
+def c_index_queries():
     return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
+
+def c_index():
+    return ['000001.SH','399001.SZ','399006.SZ']
 
 def c_group_score_weight():
     return {"area": 0.10,
@@ -788,9 +795,11 @@ def custom_pairwise_permutation(a_array, n):
     """dont care about order:  e.g. (1,0),(0,1)"""
     return list(itertools.permutations(a_array, n))
 
-def custom_pairwise_cartesian(a_array,n):
-    """product with itself"""
+def custom_pairwise_cartesian(a_array,n=1):
+    """cartesian product with itself"""
     return list(itertools.product(a_array,repeat=n))
+
+
 
 # for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
@@ -811,9 +820,7 @@ def print_iterables(d):
 def ohlcpp(df):
     return df[["ts_code","period","open","high","low","close","pct_chg"]]
 
-"""past positive: how many past days are positive"""
-def pp(s):
-    return len(s[s>0])/len(s)
+
 
 def df_between(df, start_date, end_date):
     df.index=df.index.astype(str)
@@ -847,11 +854,42 @@ def interrupt_confirmed():
     else:
         return False
 
+
+time_count = np.nan
+def time_counter(msg=""):
+    return
+    global time_count
+    if np.isnan(time_count):
+        time_count = time.time()
+        print("time_counter", msg)
+    else:
+        now = time.time()
+        elapsed = now - time_count
+        time_count=now
+        print("time_counter", msg, " : ", elapsed)
+
+def feather_csv_converter(path):
+    df=pd.read_feather(path)
+    csv_path=path.replace(".feather",".csv")
+    df.to_csv(csv_path,encoding="utf-8_sig")
+    open_file(csv_path)
+
+
 if __name__ == '__main__':
     pass
     import DB
-    df=DB.get_asset()
-    print(df_between(df, "20150101", "20160101"))
+
+
+    market=r"CN"
+    asset=r"E"
+    freq=r"D"
+    ts_code=r"000002.SZ"
+    path=r"Market/"+market+r"/Asset/"+asset+r"/"+freq+r"/"+ts_code
+    path=r"Market/CN/Asset/E/D/000002.SZ.feather"
+    #path=f"Market//{market}//Asset//{asset}//{freq}//{ts_code}"
+    #path=f"Market\{market}\Asset\{asset}\{freq}\{ts_code}"
+    #path=f"Market\\{market}\\Asset\\{asset}\\{freq}\\{ts_code}"
+    feather_csv_converter(path)
 
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     start = time.time()

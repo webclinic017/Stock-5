@@ -8,6 +8,7 @@ from scipy.stats.mstats import gmean
 import sys
 import os
 import matplotlib
+import itertools
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 
@@ -203,7 +204,7 @@ def generic_comparison(df, abase):
 
         """0 to 100 rsi"""
         df[f"rsi{freq}"] = talib.RSI(df["close"], freq)
-        df[f"rsi{freq}"] = supersmoother_3p(df[f"rsi{freq}"], int(freq / 4))
+        df[f"rsi{freq}"] = ss3(df[f"rsi{freq}"], int(freq / 4))
         df[f"rsi{freq}_diff"] = df[f"rsi{freq}"].diff()
 
         df[f"rsi{freq}_trend"] = 10
@@ -243,18 +244,24 @@ def generic_comparison(df, abase):
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
 # kwargs= {"func": Alpha.macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}
-def atest(asset="E", step=1, d_queries={}, kwargs={}):
+def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
     """
     This is a general statistic test creator
     1. provide all cases
     2. The little difference between this and brute force: bruteforce only creates indicator, but not assign buy/sell signals with 10 or -10
     Variables on how to loop over are in the function. apply function variables are in the dict kwargs
+
+    Tomorrow
+    tomorrow is a bit tricky here: it describes how many days to look forward
+    It should be paired using past days
+
+    So it is better to be modeled here in atest rather than in auto
     """
     d_preload = DB.preload(asset=asset, step=step, period_abv=240, d_queries_ts_code=d_queries)
 
-    for one_kwarg in kwargs["a_kwargs"]:
+    for counter_outer, one_kwarg in enumerate(kwargs["a_kwargs"]):
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        a_path = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}")
+        a_path = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
         if os.path.exists(a_path[0]):
             print(f"path exists: {a_path[0]}")
             continue
@@ -266,79 +273,110 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}):
             try:
                 func_return_column = kwargs["func"](df=df_asset, **one_kwarg)[0]
 
-                """could also add pearson, but since outcome is binary, no need for pearson"""
-                df_asset["tomorrow1"] = 1 + df_asset["open.fgain1"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
+
+                """
+                -CAN NOT use sharp here Because len are different. smaller period will always have different std and hence different sharp
+                -could also add pearson, but since outcome is binary, no need for pearson"""
+
+                #init: calculate future price in theory by using tomorrow variable
+                #Very important: shift always -1 because wait for night to see the signal. fgain choices are limited by creation
+                df_asset[f"tomorrow{tomorrow}"] = df_asset[f"open.fgain(freq={tomorrow})"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
+
+                #general
                 df_result.at[ts_code, "period"] = len(df_asset)
-                df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset["tomorrow1"].dropna())
-                df_result.at[ts_code, "sharp"] = asset_sharp = (df_asset["tomorrow1"]).mean()/(df_asset["tomorrow1"]).std()
-                df_result.at[ts_code, "general_daily_winrate"] = ((df_asset["tomorrow1"] > 1).astype(int)).mean()
+                #df_result.at[ts_code, "sharp"] = asset_sharp = (df_asset[f"tomorrow{tomorrow}"]).mean()/(df_asset[f"tomorrow{tomorrow}"]).std()
+                df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset[f"tomorrow{tomorrow}"].dropna())
+                df_result.at[ts_code, "daily_winrate"] = ((df_asset[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
 
-                df_macd_buy = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
-                df_result.at[ts_code, "uptrend_gmean"] = gmean(df_macd_buy["tomorrow1"].dropna()) / asset_gmean
-                df_result.at[ts_code, "uptrend_sharp"] = (df_macd_buy["tomorrow1"].mean()) / (df_macd_buy["tomorrow1"].std()) /asset_sharp
-                df_result.at[ts_code, "uptrend_daily_winrate"] = ((df_macd_buy["tomorrow1"] > 1).astype(int)).mean()
-                df_result.at[ts_code, "uptrend_occ"] = len(df_macd_buy)/len(df_asset)
+                #if strategy signals buy
+                df_long = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
+                #df_result.at[ts_code, "long_sharp_"] = (df_long[f"tomorrow{tomorrow}"].mean()) / (df_long[f"tomorrow{tomorrow}"].std()) /asset_sharp
+                df_result.at[ts_code, "long_gmean_"] = gmean(df_long[f"tomorrow{tomorrow}"].dropna()) /asset_gmean
+                df_result.at[ts_code, "long_daily_winrate"] = ((df_long[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
+                df_result.at[ts_code, "long_occ"] = len(df_long)/len(df_asset)
 
-                df_macd_sell = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
-                df_result.at[ts_code, "downtrend_gmean"] = gmean(df_macd_sell["tomorrow1"].dropna()) / asset_gmean
-                df_result.at[ts_code, "downtrend_sharp"] = (df_macd_sell["tomorrow1"].mean()) / (df_macd_sell["tomorrow1"].std()) / asset_sharp
-                df_result.at[ts_code, "downtrend_daily_winrate"] = ((df_macd_sell["tomorrow1"] > 1).astype(int)).mean()
-                df_result.at[ts_code, "downtrend_occ"] = len(df_macd_sell) / len(df_asset)
+                #if strategy signals sell
+                df_short = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
+                #df_result.at[ts_code, "short_sharp_"] = (df_short[f"tomorrow{tomorrow}"].mean()) / (df_short[f"tomorrow{tomorrow}"].std()) / asset_sharp
+                df_result.at[ts_code, "short_gmean_"] = gmean(df_short[f"tomorrow{tomorrow}"].dropna()) / asset_gmean
+                df_result.at[ts_code, "short_daily_winrate"] = ((df_short[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
+                df_result.at[ts_code, "short_occ"] = len(df_short) / len(df_asset)
+
+
             except Exception as e:
                 print("exception at func execute", e)
                 continue
 
+        #create sample
+        if counter_outer==len(kwargs["a_kwargs"])-1:
+            key=[x for x in d_preload.keys()]
+            df_sample = d_preload[key[0]]
+            a_path_sample = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/SAMPLE_{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
+            LB.to_csv_feather(df=df_sample, a_path=a_path_sample, skip_feather=True)
+
+
         # important check only if up/downtrend_gmean are not nan. Which means they actually exist for this strategy.
-        df_result.loc[df_result["uptrend_gmean"].notna(), "up_better_mean"] = (df_result.loc[df_result["uptrend_gmean"].notna(), "uptrend_gmean"] > df_result.loc[df_result["uptrend_gmean"].notna(), "gmean"]).astype(int)
-        df_result.loc[df_result["downtrend_gmean"].notna(), "down_better_mean"] = (df_result.loc[df_result["downtrend_gmean"].notna(), "downtrend_gmean"] > df_result.loc[df_result["downtrend_gmean"].notna(), "gmean"]).astype(int)
-        df_result["up_down_gmean_diff"] = df_result["uptrend_gmean"] - df_result["downtrend_gmean"]
-        LB.to_csv_feather(df=df_result,a_path=a_path, skip_feather=True)
+        for one in ["long","short"]:
+            for two in ["gmean"]:#"sharp"
+                df_result.loc[df_result[f"{one}_{two}_"].notna(), f"{one}_{two}_better"] = (df_result.loc[df_result[f"{one}_{two}_"].notna(), f"{one}_{two}_"] > 1).astype(int)
+                df_result[f"{one}_{two}_std"]=df_result[f"{one}_{two}_"].std()
+
         # very slow witgh DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
+        LB.to_csv_feather(df=df_result,a_path=a_path, skip_feather=True)
 
     # create summary for all
-    df_summary = pd.DataFrame()
-    df_uptrend_gmean = pd.DataFrame()
-    df_downtrend_gmean = pd.DataFrame()
-    df_up_better_mean = pd.DataFrame()
-    df_down_better_mean = pd.DataFrame()
+
+    d_summary={"summary":pd.DataFrame()}
+    for one, two, three in itertools.product(["long", "short"],["gmean", ],  ["", "better", "std"]): #sharp
+        name = f"{one}_{two}_{three}"
+        print(name)
+        d_summary[name]=pd.DataFrame()
+
+
     abase=one_kwarg['abase'] #abase should not change during iteration.otherwise unstable
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        a_path =LB.a_path( f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_{param_string}")
+        a_path =LB.a_path( f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
 
         print(f"summarizing {a_path[0]}")
-        df_macd = pd.read_csv(a_path[0])
-        df_summary.at[a_path[0], "gmean"] = df_macd["gmean"].mean()
-        df_summary.at[a_path[0], "general_daily_winrate"] = df_macd["general_daily_winrate"].mean()
-        df_summary.at[a_path[0], "uptrend_gmean"] = uptrend_gmean = df_macd["uptrend_gmean"].mean()
-        df_summary.at[a_path[0], "uptrend_daily_winrate"] = df_macd["uptrend_daily_winrate"].mean()
-        df_summary.at[a_path[0], "uptrend_occ"]=df_macd["uptrend_occ"].mean()
-        df_summary.at[a_path[0], "downtrend_gmean"] = downtrend_gmean = df_macd["downtrend_gmean"].mean()
-        df_summary.at[a_path[0], "downtrend_daily_winrate"] = df_macd["downtrend_daily_winrate"].mean()
-        df_summary.at[a_path[0], "downtrend_occ"] = df_macd["downtrend_occ"].mean()
-        df_summary.at[a_path[0], "up_better_mean"] = up_better_mean = df_macd["up_better_mean"].mean()
-        df_summary.at[a_path[0], "down_better_mean"] = down_better_mean = df_macd["down_better_mean"].mean()
-        df_summary.at[a_path[0], "up_down_gmean_diff"] = df_macd["up_down_gmean_diff"].mean()
+        df_saved = pd.read_csv(a_path[0])
+        d_summary["summary"].at[a_path[0], "daily_winrate"] = df_saved["daily_winrate"].mean()
+
+        d_summary["summary"].at[a_path[0], "long_occ"] = df_saved["long_occ"].mean()
+        d_summary["summary"].at[a_path[0], "short_occ"] = df_saved["short_occ"].mean()
+        d_summary["summary"].at[a_path[0], f"long_daily_winrate"] = df_saved["long_daily_winrate"].mean()
+        d_summary["summary"].at[a_path[0], f"short_daily_winrate"] = df_saved["short_daily_winrate"].mean()
+        #d_summary["summary"].at[a_path[0], "sharp"] = df_saved["sharp"].mean()
+        d_summary["summary"].at[a_path[0], "gmean"] = df_saved["gmean"].mean()
+
+        d_helper={}
+        for one in ["long","short"]:
+            for two in ["gmean"]:#sharp
+                for three in ["","better","std"]:
+                    d_summary["summary"].at[a_path[0], f"{one}_{two}_{three}"] = d_helper[f"{one}_{two}_{three}"] = df_saved[f"{one}_{two}_{three}"].mean()
+
 
         # create heatmap only if two frequencies are involved in creation
         #if up/downtrend exists, is it better than mean?
-        if "sfreq" in one_kwarg and "bfreq" in one_kwarg:
-            df_uptrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = uptrend_gmean
-            df_downtrend_gmean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = downtrend_gmean
-            df_up_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = up_better_mean
-            df_down_better_mean.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = down_better_mean
-        elif kwargs['fname']== "my_gq":
-            df_uptrend_gmean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = uptrend_gmean
-            df_downtrend_gmean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = downtrend_gmean
-            df_up_better_mean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = up_better_mean
-            df_down_better_mean.at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = down_better_mean
+        # if "sfreq" in one_kwarg and "bfreq" in one_kwarg:
+        #     df_long_sharp.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = long_sharp
+        #     df_short_sharp.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = short_sharp
+        #     df_long_sharp_better.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = long_sharp_better
+        #     df_short_sharp_better.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = short_sharp_better
 
-    d_summary = {"Overview": df_summary}
-    d_summary["uptrend_gmean"] = df_uptrend_gmean
-    d_summary["downtrend_gmean"] = df_downtrend_gmean
-    d_summary["up_better_mean"] = df_up_better_mean
-    d_summary["down_better_mean"] = df_down_better_mean
-    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/{abase}/summary_{asset}_step{step}_{kwargs['fname']}_{param_string}.xlsx", d_df=d_summary)
+        for one in ["long", "short"]:
+            for two in [ "gmean"]:#sharp
+                for three in ["", "better", "std"]:
+                    lol=d_helper[f"{one}_{two}_{three}"]
+                    d_summary[f"{one}_{two}_{three}"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = lol
+
+        # d_summary["short_sharp"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = short_sharp
+        # d_summary["long_sharp_better"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = long_sharp_better
+        # d_summary["short_sharp_better"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = short_sharp_better
+        # d_summary["long_sharp_std"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'], one_kwarg['q_high']}"] = long_sharp_std
+        # d_summary["short_sharp_std"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'], one_kwarg['q_high']}"] = short_sharp_std
+
+    LB.to_excel(path=f"Market/CN/Atest/{kwargs['fname']}/{abase}/SUMMARY_{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}.xlsx", d_df=d_summary)
 
 
 def atest_manu(fname="macd", a_abase=["close"]):
@@ -356,12 +394,12 @@ def atest_manu(fname="macd", a_abase=["close"]):
         elif fname == "is_max":
             func = ismax
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-            for q in np.linspace(0, 1,11):
+            for q in np.linspace(0, 1,6):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
         elif fname == "is_min":
             func = ismin
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-            for q in np.linspace(0, 1,11):
+            for q in np.linspace(0, 1,6):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
 
         #run atest
@@ -371,6 +409,7 @@ def atest_manu(fname="macd", a_abase=["close"]):
 
 
 def atest_auto(type=4):
+    #TODO use p
     def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
         """can be used on any indicator
         gq=Generic quantile
@@ -380,20 +419,24 @@ def atest_auto(type=4):
         3. assign rolling quantile quantile of percent
 
         This appoach needs to be mean stationary !!!! otherwise quantile makes nosense
+        Also: This approach only makes sense on non stationary data!!!
+        On columns like pct_chg it doesnt make any sense
+
         """
         # init
         name = f"{abase}.auto{norm_freq}.type{type}"
         if f"norm_{name}" not in df.columns:
             # 3 choices. cg_oscilator, rsi, (today-yesterday)/today
             if type == 1:
-                df[f"norm_{name}"] = cg_Oscillator(df[abase], norm_freq)
+                df[f"norm_{name}"] = cg(df[abase], norm_freq)
             elif type == 2:
                 df[f"norm_{name}"] = talib.RSI(df[abase], norm_freq)
             elif type == 3:
                 # this is the same as ROCP rate of change percent
                 df[f"norm_{name}"] = (df[abase] - df[abase].shift(1)) / df[abase].shift(1)
             elif type == 4:
-                df[f"norm_{name}"] = df[abase].pct_change(norm_freq)
+                #DONT ADD 1+ here
+                df[f"norm_{name}"] = 1+ df[abase].pct_change(norm_freq)
 
         # create expanding quantile
         for q in [q_low, q_high]:
@@ -401,13 +444,13 @@ def atest_auto(type=4):
                 df[f"q{q}_{name}"] = df[f"norm_{name}"].expanding(240).quantile(q)
 
         # assign todays value to a quantile
-        df[f"in_q{q_low, q_high}_{name}"] = ((df[f"q{q_low}_{name}"] <= df[f"norm_{name}"]) & (df[f"norm_{name}"] < df[f"q{q_high}_{name}"])).astype(int) * score
+        df[f"in_q{q_low, q_high}_{name}"] = ((df[f"q{q_low}_{name}"] <= df[f"norm_{name}"]) & (df[f"norm_{name}"] <= df[f"q{q_high}_{name}"])).astype(int) * score
         df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
         return [f"in_q{q_low, q_high}_{name}", ]
 
 
     #atest_auto starts here
-    for asset in ["G"]: #,"FD","G","I","E"
+    for asset in ["E","I","FD"]: #,"FD","G","I","E"
         #get example column of this asset
         a_example_column = DB.get_example_column(asset=asset, numeric_only=True)
         # remove unessesary columns:
@@ -422,14 +465,15 @@ def atest_auto(type=4):
             a_kwargs = []
             func = auto
             fname=func.__name__
-            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 2}
+            tomorrow=1 #how many days to forward predict. ideally [1,5,10,20,60,240]
+            d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 4}
             for norm_freq in [5,10,20,60,120,240,500]:
                 for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
                     a_kwargs.append({"abase": col, "q_low": q_low, "q_high":q_high,"norm_freq":norm_freq,"score": 1,"type":type})
 
             #run atest
             LB.print_iterables(a_kwargs)
-            atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
+            atest(asset=asset, tomorrow=tomorrow,step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
 
 
 
@@ -640,8 +684,8 @@ def asset_extrema():
     df=LB.ohlcpp(df)
     df=df.reset_index()
 
-    df["hp"]= highpass(df["close"], 20)
-    df["lp"]=df["close"]-df["hp"]
+    df["hp"]= highpass(df=df,abase="close", freq=20,inplace=False)
+    df["lp"]= lowpass(df=df,abase="close", freq=20,inplace=False)
 
     order=20
     signal=100
@@ -1107,9 +1151,10 @@ def asset_bullishness(market="CN"):
     df_cy_index["cy_close"] = df_cy_index["close"]
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
         print("ts_code", ts_code, asset)
-        df_asset = DB.get_asset(ts_code=ts_code, asset=asset,market=market)
-        df_result.at[ts_code, "period"] = len(df_asset)
+
         try:
+            df_asset = DB.get_asset(ts_code=ts_code, asset=asset, market=market)
+            df_result.at[ts_code, "period"] = len(df_asset)
             df_asset = df_asset[(df_asset["period"] > 240)]
         except:
             continue
@@ -1123,6 +1168,7 @@ def asset_bullishness(market="CN"):
 
             # gain / period
             df_result.at[ts_code, "gain"] = df_result.at[ts_code, "comp_gain"] / df_result.at[ts_code, "period"]
+
 
             # Geomean.
             helper = 1 + (df_asset["pct_chg"] / 100)
@@ -1164,6 +1210,11 @@ def asset_bullishness(market="CN"):
             # is_max. How long the current price is around the all time high. higher better
             # df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
             # df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
+
+            # dividend
+            if asset == "E":
+                if "dv_ttm" in df_asset.columns:
+                    df_result.at[ts_code, "dividend(not counted)"] = df_asset["dv_ttm"].mean()
 
     #TODO update it to be exactly same as bullishness rank
     gmean_rank=df_result["geomean"].rank(ascending=False)
@@ -1329,6 +1380,7 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
 
+    #asset_extrema()
     # #prob_gain_asset()
     # df=DB.get_asset()
     # Plot.plot_distribution(df,abase="pct_chg")
@@ -1342,6 +1394,7 @@ if __name__ == '__main__':
     # distribution(asset="E", column="turnover_rate")
 
     #no_better_name()
+    asset_bullishness()
     #atest_auto()
     #start_tester(asset="E",type="monthofyear")
     # df_sh=DB.get_asset("000001.SH",asset="I")

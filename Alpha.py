@@ -7,6 +7,8 @@ import Plot
 from scipy.signal import argrelextrema
 from scipy.signal import argrelmin
 from scipy.signal import argrelmax
+from scipy.stats.mstats import gmean
+import scipy.stats
 from LB import *
 
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -93,10 +95,8 @@ def alpha_return(d_locals):
         if len(new_cols) == 0:
             return d_locals["name"]
         elif len(new_cols) == 1:
-            print("shoud be here")
             return new_cols[0]
         elif len(new_cols) > 1:
-            print(f"more than 1{len(new_cols)}",new_cols)
             return new_cols
 
 
@@ -111,22 +111,19 @@ def co_pct_chg(df, inplace, name, cols):
 
 @alpha_wrap
 def pjup(df, inplace, name, cols):  # TODO test if 2 pct gap is better
-    df[name] = 0
-    df[name] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 2)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
+    df[name] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 3)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return alpha_return(locals())
 
 
 @alpha_wrap
 def pjdown(df, inplace, name, cols):
-    df[name] = 0
-    df[name] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -2)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
+    df[name] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= -3)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
     return alpha_return(locals())
 
 
 @alpha_wrap
 def period(df, inplace, name, cols):
     df[name] = range(1, len(df) + 1)
-    print(df[name])
     return alpha_return(locals())
 
 
@@ -152,7 +149,7 @@ def pgain(df, abase, freq, inplace, name, cols):
 # day1: Signal tells you to buy. day2: BUY. day3. SELL
 @alpha_wrap
 def fgain(df, abase, freq, inplace, name, cols):
-    df[name] = df[f"{abase}.pgain{freq.value}"].shift(-int(freq))
+    df[name] = 1 + df[abase].pct_change(periods=freq).shift(-int(freq))
     return alpha_return(locals())
 
 
@@ -164,9 +161,75 @@ def pct_chg(df, abase, freq, inplace, name, cols):
 
 # possible another version is x.mean()**2/x.std()
 @alpha_wrap
-def sharp(df, abase, freq, inplace, name, cols):
-    df[name] = df[abase].rolling(freq).apply(lambda x: x.mean() / x.std())
+def sharp(df, abase, freq, re, inplace, name, cols):
+    #naive approach=slow
+    #df[name] = re(df[abase],freq).apply(lambda x: x.mean() / x.std())
+
+    #enhanced approach
+    s_mean = re(df[abase],freq).mean()
+    s_std = re(df[abase],freq).std()
+    df[f"{name}"] = s_mean/s_std
     return alpha_return(locals())
+
+@alpha_wrap
+def slope(df, abase, freq, re, inplace, name, cols):
+    df[f"{name}"] = re(df[abase],freq).apply(apply_poly_fit)
+    return alpha_return(locals())
+
+"""This strategy works best, when the trend is up.
+    -if price is low and there is a highpass, this might be the turning point
+    -The lower the price, the higher the highpass, the stronger the signal to break the downtrend
+    -Everything is based on probability. Whipsaw can still happend
+    -But it is way more resilient and reflexive than rsi because it uses two independent variables
+    -This also supports the law of newton, if there is no strong signal for turning point, the current trend will continue
+    -So the highpass needs to be high in order to break the current trend
+    
+    Extra note:
+    -if cj score is high, e.g. 0.8. you buy, the price moves flat and score goes down to .e.g.0.0. This means the signal failed. it was a whipsaw
+    -This function has a lot of potential and can be improved in many ways: unstable period, find a good freq, using lowpass somehow, addin extrema
+    """
+
+@alpha_wrap
+def cj(df, abase, freq, inplace, name, cols):
+    hp = highpass(df=df, abase="close", freq=freq, inplace=False)
+
+    #naive
+    #hp_norm = hp.rolling(freq).apply(apply_norm, raw=False)
+    #abase_norm = df[abase].rolling(freq).apply(apply_norm, raw=False)
+
+    #enhanced hp
+    hp_min = hp.rolling(freq).min()
+    hp_max = hp.rolling(freq).max()
+    enhanced_hp_norm = (( (1 - 0)* (hp - hp_min)) / (hp_max - hp_min)) + 0
+
+    #enhanced abase
+    abase_min = df[abase].rolling(freq).min()
+    abase_max = df[abase].rolling(freq).max()
+    enhanced_abase_norm = (((1 - 0) * (df[abase] - abase_min)) / (abase_max - abase_min)) + 0
+
+    df[f"{name}"] = enhanced_hp_norm - enhanced_abase_norm
+    return alpha_return(locals())
+
+@alpha_wrap
+def entropy(df, abase, freq, re, inplace, name, cols):
+    """Calculates entropy of the passed pd.Series
+    =randomness of the close price distribution, maybe it is different from std
+    =Entropy should be same as calculating the high pass
+    """
+    df[name]= re(df[abase], freq).apply(lambda x: scipy.stats.entropy(x.value_counts()), raw=False)
+    return  alpha_return(locals())
+
+@alpha_wrap
+def abv_ma(df, abase, freq, inplace, name, cols):
+    df[name] = (df[abase] > df[abase].rolling(freq).mean()).astype(int)
+    return alpha_return(locals())
+
+# counts how many past days this indicator was positive
+@alpha_wrap
+def pos(df, abase, freq, inplace, name, cols):
+    df[name] = df[abase].rolling(freq).apply(lambda s: len(s[s>0])/freq)
+    return alpha_return(locals())
+
 
 
 @alpha_wrap
@@ -218,7 +281,7 @@ def extrema(df, abase, inplace, name, cols, n=60):
     return alpha_return(locals())
 
 @alpha_wrap
-def extrema_distance(df, abase, inplace, name, cols):
+def extrema_dis(df, abase, inplace, name, cols):
     df[name] = np.nan
     # count distance to last extrema
     for trade_date, df_expand in LB.custom_expand(df=df, min_freq=240).items():
@@ -230,7 +293,7 @@ def extrema_distance(df, abase, inplace, name, cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def extrema_diff(df, abase, inplace, name, cols, n=60,n2=120):
+def extrema_dif(df, abase, inplace, name, cols, n=60, n2=120):
     """this function finds second priority extrema
     n=sfreq, n2=bfreq
     1st priority= in n and n2
@@ -460,6 +523,29 @@ def cov(df, abase, freq, re, inplace, name, cols):
 def corr(df, abase, freq, re, ts_code, inplace, name, cols):
     df_corr=DB.get_fast_load(ts_code)
     df[name] = re(df[abase], freq,min_periods=5).corr(df_corr[abase])
+    return alpha_return(locals())
+
+"""ab=alpha+beta
+ return = beta * pct_chg + alpha =>   alpha= return - pct_chg*beta"""
+@alpha_wrap
+def ab(df, abase, freq, re, vs, inplace, name, cols):
+
+    df_corr=DB.get_fast_load(vs)
+    if df_corr.empty:
+        df[f"{name}[beta]"] = np.nan
+        df[f"{name}[alpha]"] = np.nan
+    else:
+        df[f"{name}[beta]"] = re(df[abase], freq,min_periods=5).corr(df_corr[abase],pairwise=True)
+        df[f"{name}[alpha]"] = df[abase]- df[f"{name}[beta]"]*df_corr[abase]
+    return alpha_return(locals())
+
+
+@alpha_wrap
+def geomean(df, abase, freq, re, inplace, name, cols):
+    if 0 in df[abase].to_numpy():
+        df[name] = re(1+ (df[abase]/100), freq).apply(gmean, raw=False)
+    else:
+        df[name] = re(df[abase], freq).apply(gmean, raw=False)
     return alpha_return(locals())
 
 
@@ -698,7 +784,7 @@ def zlema_re(df, abase, freq,  inplace, name, cols, gain=0):
 
 
 @alpha_wrap
-def butterworth_2p(df, abase, freq, inplace, name, cols):
+def bw2(df, abase, freq, inplace, name, cols):
     """2 pole iterative butterworth. from john ehlers
     butterworth and super smoother are very very similar
     butter_3p >  butter_2p = ss_2p > ss_3p
@@ -735,7 +821,7 @@ def butterworth_2p(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def butterworth_3p(df, abase, freq, inplace, name, cols):
+def bw3(df, abase, freq, inplace, name, cols):
     """3 pole iterative butterworth. from john ehlers"""
     s = df[abase]
     a_result = []
@@ -773,7 +859,7 @@ def butterworth_3p(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def supersmoother_2p(df, abase, freq, inplace, name, cols):
+def ss2(df, abase, freq, inplace, name, cols):
     """2 pole iterative Super Smoother. from john ehlers"""
     s = df[abase]
     a_result = []
@@ -805,7 +891,7 @@ def supersmoother_2p(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def supersmoother_3p(df, abase, freq, inplace, name, cols):
+def ss3(df, abase, freq, inplace, name, cols):
     """3 pole iterative Super Smoother. from john ehlers
         lags more than 2p , is a little bit smoother. I think 2p is better
     """
@@ -842,7 +928,7 @@ def supersmoother_3p(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def inst_trend(df, abase, freq, inplace, name, cols):
+def instatrend(df, abase, freq, inplace, name, cols):
     """http://www.davenewberg.com/Trading/TS_Code/Ehlers_Indicators/iTrend_Ind.html
     """
     s = df[abase]
@@ -872,7 +958,7 @@ def inst_trend(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def laguerre_filter_unstable(df, abase, inplace, name, cols):
+def laguerre_u(df, abase, inplace, name, cols):
     """ Non linear laguere is a bit different than standard laguere
         http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
 
@@ -922,7 +1008,7 @@ def laguerre_filter_unstable(df, abase, inplace, name, cols):
 
 
 @alpha_wrap
-def ehlers_filter(df, abase, freq, inplace, name, cols):
+def ehlers(df, abase, freq, inplace, name, cols):
     """
     version1: http://www.mesasoftware.com/seminars/TradeStationWorld2005.pdf
     version2:  http://www.mesasoftware.com/papers/EhlersFilters.pdf
@@ -1180,7 +1266,7 @@ def lowpass(df, abase, freq, inplace, name, cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def roofing_filter(df, abase, hpfreq, ssfreq, inplace, name, cols):
+def roofing(df, abase, hpfreq, ssfreq, inplace, name, cols):
     """  usually hp_n > ss_n. highpass period should be longer than supersmother period.
 
      1. apply high pass filter
@@ -1217,7 +1303,7 @@ def roofing_filter(df, abase, hpfreq, ssfreq, inplace, name, cols):
 
 
 @alpha_wrap
-def bandpass_filter(df, abase, freq, inplace, name, cols):
+def bandpass(df, abase, freq, inplace, name, cols):
     """ http://www.mesasoftware.com/seminars/ColleaguesInTrading.pdf
         Can help MACD reduce whipsaw
         NOTE: ONLY works on sinoid charts like price, and not on RSI or oscillator
@@ -1280,7 +1366,7 @@ def bandpass_filter(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def bandpass_filter_with_lead(df, abase, freq, inplace, name, cols):
+def bandpass_lead(df, abase, freq, inplace, name, cols):
     s = df[abase]
     delta = 0.9
     beta = math.cos(np.radians(360) / freq)
@@ -1313,7 +1399,7 @@ def bandpass_filter_with_lead(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def laguerre_RSI_unstable(df, abase, inplace, name, cols):
+def laguerre_rsi_u(df, abase, inplace, name, cols):
     """
     http://www.mesasoftware.com/papers/TimeWarp.pdf
     Same as laguerre filter, laguerre RSI has unstable period
@@ -1380,7 +1466,7 @@ def laguerre_RSI_unstable(df, abase, inplace, name, cols):
 
 
 @alpha_wrap
-def cg_Oscillator(df, abase, freq, inplace, name, cols):
+def cg(df, abase, freq, inplace, name, cols):
     """http://www.mesasoftware.com/papers/TheCGOscillator.pdf
     Center of gravity
 
@@ -1412,7 +1498,7 @@ def cg_Oscillator(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def RVI(df, abase, freq, inplace, name, cols):
+def rvi(df, abase, freq, inplace, name, cols):
     """
         http://www.stockspotter.com/Files/rvi.pdf
         Relative vigor index
@@ -1514,16 +1600,16 @@ def ismax(df, abase, emax,inplace, name, cols, q=0.80, score=10):
     """
     the bigger the difference abase/e_max, the closer they are together. the smaller the difference they far away they are
     """
-    df[f"{name}"] = (df[abase] / df[emax]).between(q, q + 0.05).astype(int) * score
+    df[f"{name}"] = (df[abase] / df[emax]).between(q, 1).astype(int) * score
     df[f"{name}"] = df[f"{name}"].replace(to_replace=0, value=-score)
     return alpha_return(locals())
 
 @alpha_wrap
-def ismin(df, abase, emin,inplace, name, cols, q=0.80, score=10):
+def ismin(df, abase, emin, inplace, name, cols, q=0.80, score=10):
     """
     the bigger the difference emin/abase, the closer they are together. the smaller the difference they far away they are
     """
-    df[f"{name}"] = (df[emin] / df[abase]).between(q, q + 0.05).astype(int) * score
+    df[f"{name}"] = (df[emin] / df[abase]).between(q, 1).astype(int) * score
     df[f"{name}"] = df[f"{name}"].replace(to_replace=0, value=-score)
     return alpha_return(locals())
 
@@ -1626,7 +1712,7 @@ def macd_tor(df, abase, freq, inplace, name, cols):
     df[f"{name}[dif]"] = df[f"{name}[ema_abase]"] - df[f"{name}[ema_tor]"]
     df[f"{name}[dif]"] = df[f"{name}[dif]"] * 1
 
-    df[f"{name}[dea]"] = df[f"{name}[dif]"] - supersmoother_3p(df[f"{name}[dif]"], int(freq / 2))
+    df[f"{name}[dea]"] = df[f"{name}[dif]"] - ss3(df[f"{name}[dif]"], int(freq / 2))
     df[f"{name}[dea]"] = df[f"{name}[dea]"] * 1
 
     df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = 80
@@ -1659,7 +1745,7 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
         df[f"{name}[ema1]"] = df[abase].rolling(freq).mean()
         df[f"{name}[ema2]"] = df[abase].rolling(freq2).mean()
         df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
-        df[f"{name}[dif.ss]"] = supersmoother_3p(df=df,abase=f"{name}[dif]",freq=int(freq/2), inplace=False)
+        df[f"{name}[dif.ss]"] = ss3(df=df, abase=f"{name}[dif]", freq=int(freq / 2), inplace=False)
         df[f"{name}[dea]"] = df[f"{name}[dif]"] - df[f"{name}[dif.ss]"]
         df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
         df.loc[(df[f"{name}[dea]"] < 0), f"{name}"] = -score
@@ -1667,7 +1753,7 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
         df[f"{name}[ema1]"] = zlema(df=df,abase=abase, freq=freq, gain=1.8,inplace=False)
         df[f"{name}[ema2]"] = zlema(df=df,abase=abase, freq=freq2, gain=1.8,inplace=False)
         df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
-        df[f"{name}[dif.ss]"] = supersmoother_3p(df=df,abase=f"{name}[dif]",freq=int(freq/2), inplace=False)
+        df[f"{name}[dif.ss]"] = ss3(df=df, abase=f"{name}[dif]", freq=int(freq / 2), inplace=False)
         df[f"{name}[dea]"] = df[f"{name}[dif]"] - df[f"{name}[dif.ss]"]
         df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
         df.loc[(df[f"{name}[dea]"] < 0), f"{name}"] = -score
@@ -1690,7 +1776,7 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
         df[f"{name}[ema1]"] = zlema(df=df, abase=abase, freq=freq, gain=1.8, inplace=False)
         df[f"{name}[ema2]"] = zlema(df=df, abase="turnover_rate", freq=freq, gain=1.8, inplace=False)
         df[f"{name}[dif]"] = df[f"{name}[ema1]"] - df[f"{name}[ema2]"]
-        df[f"{name}[dea]"] = df[f"{name}[dif]"] - supersmoother_3p(df=df,abase=f"{name}[dif]", freq=int(freq),inplace=False)
+        df[f"{name}[dea]"] = df[f"{name}[dif]"] - ss3(df=df, abase=f"{name}[dif]", freq=int(freq), inplace=False)
         df.loc[(df[f"{name}[dea]"] > 0), f"{name}"] = score
         df.loc[(df[f"{name}[dea]"] <= 0), f"{name}"] = -score
 
@@ -2161,32 +2247,34 @@ def trend_swap(df, column, value):
         return np.nan
 
 
-def entropy(data):
-    import scipy.stats
-    """Calculates entropy of the passed pd.Series
-    =randomness of the close price distribution
-    =Entropy should be same as calculating the high pass
-    =Sounds good, but not really useful
-    """
-    p_data = data.value_counts()  # counts occurrence of each value
-    return scipy.stats.entropy(p_data)  # get entropy from counts
+
 
 
 
 
 
 if __name__ == '__main__':
-    df = DB.get_asset(ts_code="399006.SZ",asset="I")
+    df = DB.get_asset(ts_code="399001.SZ",asset="I")
     df = LB.ohlcpp(df)
 
 
     #mini=minima(df=df, abase="close", n=60, inplace=True)
     #maxi=maxima(df=df, abase="close", n=60, inplace=True)
     #extrema=extrema_diff(df=df, abase="close", n=60, n2=120,inplace=True)
+
+
+    label_240=cj(df=df,abase="close",inplace=True,freq=240)
+    df=df.reset_index()
+    df["close"].plot()
+    df[label_240].plot(secondary_y=True)
+    plt.show()
+    Plot.plot_chart(df, ["close", label_240], {})
+    df.to_csv("test.csv")
+
     maxima_l=maxima(df=df, abase="close", n=120, inplace=True)
     minima_l=minima(df=df, abase="close", n=120, inplace=True)
-    maxima_d=extrema_distance(df=df, abase=maxima_l, inplace=True)
-    minima_d=extrema_distance(df=df, abase=minima_l, inplace=True)
+    maxima_d=extrema_dis(df=df, abase=maxima_l, inplace=True)
+    minima_d=extrema_dis(df=df, abase=minima_l, inplace=True)
     df["diff"]=df[maxima_d]-df[minima_d]
     Plot.plot_chart(df, ["close", "diff",maxima_d,minima_d,maxima_l,minima_l], {maxima_l: "x",minima_l:"o"})
     pass

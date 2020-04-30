@@ -2,11 +2,125 @@ import DB
 import LB
 from jqdatasdk import *
 import _API_JQ
+import Plot
+import numpy as np
+import pandas as pd
+import Alpha
 
 from _API_JQ import my_macro
 
 auth('13817373362', '373362')
 
+def unstable_period():
+    """
+    idea: unstable period based on volatility
+    """
+
+    df=DB.get_asset(ts_code="000001.SH",asset="I")
+    df=LB.df_between(df,"20000101",LB.today())
+
+    #volatility measured in 3 ways:
+    df=df.tail(len(df)-5)
+    df=df.reset_index()
+
+    #if standard deviation of last n days is high
+    for freq in [120,240]:
+        df[f"volatility1{freq}"]=df["pct_chg"].rolling(freq).std()
+        df[f"helper1{freq}"] = pd.qcut(x=df[f"volatility1{freq}"], q=10, labels=False)
+
+
+    df["volatility2"]=df["ivola"].pct_change().rolling(120).mean()
+
+
+    #if market gains or loses too much, it is volatile
+    for freq in [120,240]:
+        df[f"volatility3{freq}"]=df[f"close.pgain(freq={freq})"]
+        df[f"helper3{freq}"] = pd.qcut(x=df[f"volatility3{freq}"], q=11, labels=False)
+
+
+
+    #if market beta is high, it is volatile
+    for freq in [500]:
+        df[f"{freq}d_high"]=df["close"].rolling(freq).max()
+        df[f"{freq}d_low"]=df["close"].rolling(freq).min()
+    # volatility decider by distance between last n period high and low
+        df[f"helper4240"] = (df[f"{freq}d_high"] - df[f"{freq}d_low"]) / df[f"{freq}d_low"]
+
+
+    #if only few people in the market wins, it is volatile
+
+    for freq in [120,240]:
+        df[f"helper{freq}"]=df[f"helper4240"]
+        df[f"helper{freq}"] = pd.qcut(x=df[f"helper{freq}"], q=11, labels=False)
+
+        df[f"rolling_freq{freq}"] = df[f"helper{freq}"].replace(to_replace={0: 360, 1: 280, 2: 220, 3: 180, 4: 140, 5: 100, 6: 60, 7: 40, 8:20, 9:10, 10:5})
+        df[f"unstable_ma{freq}"] = np.nan
+        for index in df.index:
+            rolling_freq = df.at[index, f"rolling_freq{freq}"]
+            df.at[index, f"unstable_ma{freq}"] = df.loc[index - rolling_freq:index, "close"].mean()
+
+
+
+    df["helper120"]=df["helper120"]*1000
+    df["helper3120"]=(df["helper3120"]-5).abs()
+    Plot.plot_chart(df,["close",f"helper120","helper4240"], {})
+
+
+
+
+def market_volatility(start_date="20000101"):
+    """
+    this function tries to create an rsi-like indicator to indicate how volatile the market is
+    result:
+    - all methods seems to behave similar, but still have minor difference
+    - Basically, this is the same thing as trend vs cycle mode. If market has low volatility, it is flat, and it is in cycle mode. Else ,it is in trend mode.
+
+    """
+
+
+    df = DB.get_asset(ts_code="000002.SZ",asset="E")
+    #df = LB.df_between(df, start_date, LB.today())
+
+    df = df.tail(len(df) - 5)
+
+    scale=df["close"].max()/10
+
+    for freq in [500]:
+        # method 1: volatility decider by distance between last n period high and low
+        df[f"{freq}d_high"] = df["close"].rolling(freq).max()
+        df[f"{freq}d_low"] = df["close"].rolling(freq).min()
+        df[f"method1_{freq}"] = (df[f"{freq}d_high"] - df[f"{freq}d_low"]) / df[f"{freq}d_low"]
+        df[f"method1_q{freq}"] = pd.qcut(x=df[f"method1_{freq}"], q=11, labels=False) * scale
+
+
+        #method 2: ivola (be care ful because ivola has trend in it)
+        df[f"method2_{freq}"]=df["ivola"].rolling(freq).max()-df["ivola"].rolling(freq).min()
+        df[f"method2_q{freq}"] = pd.qcut(x=df[f"method2_{freq}"], q=11, labels=False)*scale
+
+        #NOT GOOD ENOUGH
+        #method 3: by purely the pct_changed over last n days
+        df[f"method3_{freq}"]=df["close"].pct_change(freq)
+        df[f"method3_q{freq}"] = pd.qcut(x=df[f"method3_{freq}"], q=11, labels=False)*scale
+
+        # NOT GOOD ENOUGH
+        # method 3: use slope
+        df[f"method4_{freq}"] = Alpha.slope(df=df,abase="close",freq=int(freq),re=pd.Series.rolling,inplace=False)
+        df[f"method4_q{freq}"] = pd.qcut(x=df[f"method4_{freq}"], q=11, labels=False) * scale
+
+        #
+        # d_preload_date=DB.preload(asset="E",on_asset=False)
+        # for trade_date, df_date in d_preload_date.items():
+        #     print(trade_date)
+        #
+        #     #method 3: std of pgain120 of all stock on one day
+        #     df.at[trade_date,f"method4_{freq}"]=df_date[f"close.pgain(freq={freq})"].std()
+        # df[f"method4_q{freq}"] = pd.qcut(x=df[f"method4_{freq}"], q=11, labels=False) * scale
+
+        #chooses one of n methods to display
+        x=Alpha.macd(df=df,abase="close",freq=120,freq2=240,type=4,inplace=True)
+        df[x[0]]=df[f"method1_q{freq}"]/(df[x[0]]*1)
+        a_methods=[f"method{x}_q{freq}" for x in [1]]
+        Plot.plot_chart(df,["close",x[0]]+a_methods, {})
 
 def main():
     # init stock market
@@ -156,6 +270,19 @@ def main():
     # scrape all social security report 券商推荐 on one stock and compare
     # A: TODO
 
+    # Q: use global market beta to determine normal time and crazy time
+    # A: In crazy time, correlation should be high. In normal time, correlation should be low.
+    # A: TODO
+
+    # Q:研究高送转
+    # A: TODO check atest btest share_pct_ch
+
+    # fundamental
+    # TODO
+
+    # Q:use us market industry to determine good industry for china
+    # A: TODO
+
     # xueqiu data
     # A: xueqiu data seem to be pretty accurate. needs to be looked closer
     # A: In my test, I excluded the case that the new comments are on new IPO stocks. So all new discussion, comments, simulation trade, real trade are for long established stocks.
@@ -167,20 +294,128 @@ def main():
     # A: it is hard to verify because xueqiu is new and data is only 2015-2019. The 2015 crazy time can distort the data. The gut feeling is that second lowest attetion and second highest attension have the best return.
     # A: TODO is useful, but need to be looked closer. e.g. scrap all xueqiu comment and analyze semantic
 
-    # volatility/beta between Groups (stocks are too many)
-    # TODO
+    #Q: find a 定投 strategy:
+    #A: TODO
 
-    # unstable period. Shorter period when volatile, Longer period when less volatile
-    # TODO
+    #Q: find out that high and low strategy that had less whipsaw than macd
+    #When last high was higher and last low was lower strategy
+    #A: TODO
 
-    # fundamental
-    # TODO Dividends are important
+    # Q: volatility/beta between Groups (stocks are too many)
+    # A: We can find some long term relationships, but short term relationships might be changed very quickly, so not always useful.
+    # A: For Group
+    # A: (白酒,保险)和创业板关联度最低,
+    # A: (高送转)和主板关联度最低
+    # A: (高送转)和中小板板关联度最低， (一带一路,采掘,煤炭，金属，航运)最高
+    # A: possible assets that can be used because of negative beta:
+    # A: These are mostly good stock 白马股
+    """
+    海天味业
+    晨光文具
+    牧原股份
+    泰格医药
+    歌尔股份
+    恒立液压
+    苏泊尔
+    片仔癀
+    新和成
+    三花智控
+    智飞生物
+    大华股份
+    华兰生物
+    隆基股份
+    涪陵榨菜
+    华夏幸福
+    中际旭创
+    爱尔眼科
+    立讯精密
+    贵州茅台
+    中公教育
+    恒瑞医药
+    正邦科技
+    长春高新
+    山东黄金
+    恒生电子
+    三一重工
+    星宇股份
+    格力电器
+    东方雨虹
+    五粮液
+    伊利股份
+    海螺水泥
+    中航光电
+    仁东控股
+    
+    纳指ETF
+    白酒B
+    食品B
+    兴全轻资
+    合润B
+    博时主题
+    纳指ETF
+    兴全模式
+    消费行业
+    消费ETF
+    消费进取
+    东证睿丰
+    国投产业
+    兴全趋势
+    景顺鼎益
+    建信50B
+    酒B
+    优选LOF
+    鹏华丰和
+    中银中国
+    诺安纯债
 
-    # Q:use us market industry to determine good industry for china
-    # A: TODO
+    """
+    # A: NO Group have negative correlation with the market!: No real beta strategy possible G_G
+    #A: Check out bullishness . Basically only FD I have checked before 消费and白酒
+    #A: for E and EF just use bullishness instead, because some new IPO can have very less Beta
+    #A: Conclusion: Hedging on A market is almost impossible due to high market correlation AND low amount of stocks that can be shorted
+    #A: If long asset_e stocks for hedging, still face asset self beared volatility
 
-    # TODO kurt and skew are actually good high pass indicator.compare them against other high pass to see which one is better.
-    # TODO define crazy time and standard time by using cov and std. It works
+
+    # Q:unstable period. Shorter period when volatile, Longer period when less volatile
+    # A: it is useful to some extend, but it seems that every method has its problem
+    # A:unstable period creates new problem: difficult to explain
+    # A: underlies the same problem of normal ma: whipsaw, bad when movement is flat, lag, unable to predict random movement
+    # A: In general: not very useable
+
+
+
+
+
+    #A: Volatility/Gain adjusted macd
+    #Q: since macd and some other indicator work best if market is volatile. Divide the macd signal by std or any other volatility. Then start use macd only if market volatility goes abv certain thresh
+    #Q: Can also be used on RSI. RSI works best if volatility is big. Basically this is mapping rsi and usefulness of rsi into one indicator, same as gmean.
+    #Q: But then it becomes similiar to an RSI, you can say abv some thresh I buy.
+    #Q: MACD can be adjusted by using market_volatility
+
+
+
+
+    #A: define crazy time and standard time by using cov and std. It works
+    #Q: crazy time and standard time are continous. So the definition of such would naturally have a lag.
+    #Q: you can define crazy time if std of past pct_chg exceeds some thresh hold, like an RSI
+    #Q: Since it is continously, maybe using hard cut to binary is not a good idea. Instead use continous steps to define crazyness
+    #Q: Check out function market_volatility. It actually works.
+
+    # Q: Do high Dividends paying stock perform better in the long run?
+    # A: Test done in bullisness by aggregating all past dividend yield ratio together as mean
+    # A: top 10% rank 3468
+    # A: top 20% rank 3372
+    # A: top 30% rank 3323
+    # A: bot 30% rank 3300
+    # A: bot 20% rank 3310
+    # A: bot 10% rank 3336
+    # A: dividend almost had no impact on stock bullishness rank. So it no a good indicator. If it would be a good indicator, it would be too easy to detect.
+
+    #Q: normalized highpass vs normalized close: are they the same?
+    #A: Actually they are not the same. Normalized high pass describes the distance between price and its ma/lowpass
+    #A: So a turning point would be that norm_close is at bottom and norm_highpass is at max. Because price is at low and there is a high willingness to buy
+    #A: You can use highpass to see if a trend continues or is broken very fast
+
 
     # Are good stock "close"/"pct_chg" different distributed?
     # A: Yes they are a bit different. Good stock are always at top which translates to being often at 0.8-1.0. Bad stock are vice versa.
@@ -297,7 +532,13 @@ def main():
     # Q: combining two method will cause multiple causaion problem (or like this)
     # A: A method must be very significant to be able to use. Otherwise its wrong signals will interfere too much with other methods
 
-
+    # Q: Modle the 1/E game for stock market and general. If something happens that exceeds the max of everything before, then it is a signal? doesnt seem to apply for usoil for instance.
+    # A: Using Logic deduction: for this to be useful, the price has to be randomly+independetly distributed.
+    # A: we know in the long run, the price has trend. In short run, it is randomly distributed.
+    # A: so maybe, use past 5 day pct_chg price. If today pct_chg is higher than all last 5 days, sell
+    # A: if today close is higher than all last 5 days, sell.
+    # A: This is just a randomwalk approach. After you trade, the price can still go higher or lower.
+    # A: So maybe the 1/E analogy here is not the best
 
 """
 summmary
@@ -329,14 +570,21 @@ Voting from fundamental/macro indicators are very slow(low frequency) and hence 
 The safes investment = the Lower the price the better, the higher the long term momentum the better
 
 
+
+Concept research problem: 高价股 was defined very late. Hence, by backtest and selecting stocks with high close, will not yield good results. This is because the concept somehow already exposed future
 The problem of using extrema to predict future, is that after a minma, it can follow another minima and so on. It is random based on stock fundamental.
 You can only calculated the probability based on past value if price will rebounce.
 But this probability is also not accurate, since stock fundamentals change
 
+Technical analysis are very similar. It seems that one can not extract new information, but can only extract existing information in another form.
+Hence, technical analysis might be a overlooked area. Maybe we should focus search on pair trading instead since it is harder to research.
+
+The whole market works like this. If market is at bottom, good stock will rise. If market is at top, ALL stock will go down. That is VERY IMPORTANT FINDING.
 """
 
 if __name__ == '__main__':
     pass
+    market_volatility()
     # ball.set_token('xq_a_token=2ee68b782d6ac072e2a24d81406dd950aacaebe3;')
     # df=ball.report("SH600519")
     # print(df)
