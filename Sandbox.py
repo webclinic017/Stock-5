@@ -6,6 +6,7 @@ import Plot
 import numpy as np
 import pandas as pd
 import Alpha
+import matplotlib.pyplot as plt
 
 from _API_JQ import my_macro
 
@@ -13,6 +14,7 @@ auth('13817373362', '373362')
 
 def unstable_period():
     """
+    partly integrated
     idea: unstable period based on volatility
     """
 
@@ -70,6 +72,7 @@ def unstable_period():
 
 def market_volatility(start_date="20000101"):
     """
+    partly integrated
     this function tries to create an rsi-like indicator to indicate how volatile the market is
     result:
     - all methods seems to behave similar, but still have minor difference
@@ -92,7 +95,6 @@ def market_volatility(start_date="20000101"):
         df[f"method1_{freq}"] = (df[f"{freq}d_high"] - df[f"{freq}d_low"]) / df[f"{freq}d_low"]
         df[f"method1_q{freq}"] = pd.qcut(x=df[f"method1_{freq}"], q=11, labels=False) * scale
 
-
         #method 2: ivola (be care ful because ivola has trend in it)
         df[f"method2_{freq}"]=df["ivola"].rolling(freq).max()-df["ivola"].rolling(freq).min()
         df[f"method2_q{freq}"] = pd.qcut(x=df[f"method2_{freq}"], q=11, labels=False)*scale
@@ -107,14 +109,17 @@ def market_volatility(start_date="20000101"):
         df[f"method4_{freq}"] = Alpha.slope(df=df,abase="close",freq=int(freq),re=pd.Series.rolling,inplace=False)
         df[f"method4_q{freq}"] = pd.qcut(x=df[f"method4_{freq}"], q=11, labels=False) * scale
 
-        #
+
         # d_preload_date=DB.preload(asset="E",on_asset=False)
         # for trade_date, df_date in d_preload_date.items():
         #     print(trade_date)
         #
         #     #method 3: std of pgain120 of all stock on one day
-        #     df.at[trade_date,f"method4_{freq}"]=df_date[f"close.pgain(freq={freq})"].std()
-        # df[f"method4_q{freq}"] = pd.qcut(x=df[f"method4_{freq}"], q=11, labels=False) * scale
+        #     df.at[trade_date,f"method5_{freq}"]=df_date[f"close.pgain(freq={freq})"].std()
+        # df[f"method5_q{freq}"] = pd.qcut(x=df[f"method5_{freq}"], q=11, labels=False) * scale
+
+        #Method 6: high correlation with the market
+
 
         #chooses one of n methods to display
         x=Alpha.macd(df=df,abase="close",freq=120,freq2=240,type=4,inplace=True)
@@ -264,11 +269,19 @@ def main():
     df_all["mean"] = df_helper.mean(axis=1)
     df_all.to_csv("jq/all_macro.csv", encoding='utf-8_sig')
 
-    # margin account/leverage/short, amount of people opening account.
-    # A: TODO margin account is useful. needs to be looked at closer
+
+
 
     # scrape all social security report 券商推荐 on one stock and compare
-    # A: TODO
+    # A: very hard to scrape all the data without an api
+    #A: possible sources:
+    #A: http://data.eastmoney.com/report/singlestock.jshtml?quoteid=0.000651&stockcode=000651
+    #A: http://stock.finance.sina.com.cn/stock/go.php/vReport_List/kind/search/index.phtml?symbol=sz000651&t1=all&p=5
+    #A: http://stock.finance.sina.com.cn/stock/go.php/vReport_List/kind/search/index.phtml?symbol=sz000651&t1=all&p=1
+    #A: this url works but is very annoying to scrape
+
+    #Q: shareholder class from jq
+    #A: TODO
 
     # Q: use global market beta to determine normal time and crazy time
     # A: In crazy time, correlation should be high. In normal time, correlation should be low.
@@ -294,12 +307,32 @@ def main():
     # A: it is hard to verify because xueqiu is new and data is only 2015-2019. The 2015 crazy time can distort the data. The gut feeling is that second lowest attetion and second highest attension have the best return.
     # A: TODO is useful, but need to be looked closer. e.g. scrap all xueqiu comment and analyze semantic
 
+
     #Q: find a 定投 strategy:
     #A: TODO
 
-    #Q: find out that high and low strategy that had less whipsaw than macd
-    #When last high was higher and last low was lower strategy
-    #A: TODO
+
+    # Q: Portfolio management, efficient frontier(highest risk and return combination):
+    # in this case we consider risk = market risk = beta
+    # A: since the beta is very high and can change very rapidly, past beta might be coincidence, past beta does not fully predict future. long term beta does better job
+    # A: For short term investor, only consider short term beta
+    # A: For long term investor, only consider long term beta
+    # A: as we know, there is no real efficient frontier in A股 because all assets are highly market connected
+    # A: Therefore choosing low market correlation automatically improves the portfolio, since the portfolio is mostly build using high beta assets
+    # A: you can try to create portfolio using least beta, but it might cost some return.
+    # A: Only very rare, there are two asset equally well, always choose the asset with least market correlation
+    # A: TODO
+
+    # Q: Portfolio management, kelley formula based on some estimation:
+    # A: 1. The algorithm need to find something very predictive
+    # A: 2. adjust the amount to buy calculated using kelly formula
+    # A: But if something very predictive does not exist, kelly formula might be not effective, but still little useful
+    # A: TODO
+
+    # Q: Portfolio %: should be measured by kelly, or by market crazyness/condition?
+    # A: If managed by kelly, then at normal/bad times, you would buy nothing, at good time, you would invest based on the estimation score
+    # A: If managed by market condition, you would buy nothing at bad times, buy more a good crazy time.
+    # A: Kelly uses marked condition to determin buy or not buy, kelly needs to be fine tuned. But they are basically the same
 
     # Q: volatility/beta between Groups (stocks are too many)
     # A: We can find some long term relationships, but short term relationships might be changed very quickly, so not always useful.
@@ -345,7 +378,6 @@ def main():
     海螺水泥
     中航光电
     仁东控股
-    
     纳指ETF
     白酒B
     食品B
@@ -382,17 +414,15 @@ def main():
     # A: underlies the same problem of normal ma: whipsaw, bad when movement is flat, lag, unable to predict random movement
     # A: In general: not very useable
 
-
-
-
+    #Q: stock vs bond. Buy stock if stock performed better and bond vice versa
+    #A: This is actually idiotic since bond movement is very small, it makes not much sense to compare them
+    #A: also bonds return are so small that one day in stock market can bring it back
 
     #A: Volatility/Gain adjusted macd
     #Q: since macd and some other indicator work best if market is volatile. Divide the macd signal by std or any other volatility. Then start use macd only if market volatility goes abv certain thresh
     #Q: Can also be used on RSI. RSI works best if volatility is big. Basically this is mapping rsi and usefulness of rsi into one indicator, same as gmean.
     #Q: But then it becomes similiar to an RSI, you can say abv some thresh I buy.
     #Q: MACD can be adjusted by using market_volatility
-
-
 
 
     #A: define crazy time and standard time by using cov and std. It works
@@ -415,7 +445,7 @@ def main():
     #A: Actually they are not the same. Normalized high pass describes the distance between price and its ma/lowpass
     #A: So a turning point would be that norm_close is at bottom and norm_highpass is at max. Because price is at low and there is a high willingness to buy
     #A: You can use highpass to see if a trend continues or is broken very fast
-
+    #A: check out norm cj
 
     # Are good stock "close"/"pct_chg" different distributed?
     # A: Yes they are a bit different. Good stock are always at top which translates to being often at 0.8-1.0. Bad stock are vice versa.
@@ -459,6 +489,10 @@ def main():
 
     # q: relationship between bond and stock market
     # A: little. bond market just goes up. If interest is lower, bond market goes higher??
+
+    # margin account/leverage/short, amount of people opening account.
+    # A: Margin is a very new tool introduced after 2010.So the observed period is rather short. But it seems that security sell, short selling indicator can predict the crazyness of the chart
+
 
     # q: correlation between us market gain and chinese market gain
     # A: the pearson relationship has increased over the last year. the more recent the higher relaitonship
@@ -569,7 +603,7 @@ AND voting of technical indicators are NOT independent. They are all the same de
 Voting from fundamental/macro indicators are very slow(low frequency) and hence not compareable with technical indicator
 The safes investment = the Lower the price the better, the higher the long term momentum the better
 
-
+EVEN if there are two samples of indicator describing the market perfectly, combining them in one might be a bad idea some times because the combination does not describe anything good. Maybe it is better to leave them seperated and let human decide when and what to use.
 
 Concept research problem: 高价股 was defined very late. Hence, by backtest and selecting stocks with high close, will not yield good results. This is because the concept somehow already exposed future
 The problem of using extrema to predict future, is that after a minma, it can follow another minima and so on. It is random based on stock fundamental.
@@ -584,7 +618,18 @@ The whole market works like this. If market is at bottom, good stock will rise. 
 
 if __name__ == '__main__':
     pass
-    market_volatility()
+
+    df=DB.get_asset(ts_code="000001.SH",asset="I")
+    e1=Alpha.hhll(df=df, abase="close", freq=20, inplace=True, score=1,thresh=0.07)
+    e2=Alpha.vola(df=df, abase=e1[0], freq=500, inplace=True)
+    e3=Alpha.cj(df=df, abase="close", freq=240, inplace=True)
+    df[e1[0]]=df[e1[0]]*600
+    df[e2[0]]=df[e2[0]]*600
+    df[e3]=df[e3]*2000
+
+
+    Plot.plot_chart(df,["close",e3])
+    #market_volatility()
     # ball.set_token('xq_a_token=2ee68b782d6ac072e2a24d81406dd950aacaebe3;')
     # df=ball.report("SH600519")
     # print(df)

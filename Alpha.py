@@ -1783,6 +1783,51 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
     df[f"{name}"] = df[f"{name}"].fillna(method="ffill")
     return alpha_return(locals())
 
+"""=higher high, lower low"""
+@alpha_wrap
+def hhll(df, abase, freq, inplace, name, cols, score=10, thresh=0.05):
+
+    #calculate extrema
+    bottom = argrelmin(df[abase].to_numpy(), order=freq)[0]
+    peaks = argrelmax(df[abase].to_numpy(), order=freq)[0]
+
+    #convert extrema int position into index position
+    bottom=df.index[bottom]
+    peaks=df.index[peaks]
+
+    # assign extrema back to df
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{name}[{label}_value]"] = df.loc[extrema, "close"]
+        df[f"{name}[{label}_value]"] = df[f"{name}[{label}_value]"].fillna(method="ffill")
+        df[f"{name}[{label}_pct_chg]"] = df[f"{name}[{label}_value]"].pct_change()
+
+    h_peak = df[f"{name}[peakk_pct_chg]"]
+    h_bott = df[f"{name}[bott_pct_chg]"]
+
+    # create signal using last high vs previous high, last low vs previous low
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{name}"] = 0
+
+        # for now the peak and bott are actually the SAME
+        if label == "peakk":
+            df.loc[(h_peak > thresh) | (df[abase] / df[f"{name}[peakk_value]"] > 1+thresh), f"{name}"] = score  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -thresh) | (df[abase] / df[f"{name}[bott_value]"] < 1-thresh), f"{name}"] = -score  # df["bott_diff"]=df["bott_ffill"].diff()*500
+        elif label == "bott":
+            df.loc[(h_peak > thresh) | (df[abase] / df[f"{name}[peakk_value]"] > 1+thresh), f"{name}"] = score  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -thresh) | (df[abase] / df[f"{name}[bott_value]"] < 1-thresh), f"{name}"] = -score  # df["bott_diff"]=df["bott_ffill"].diff()*500
+
+        df[f"{name}"] = df[f"{name}"].replace(0, np.nan).fillna(method="ffill")
+    return alpha_return(locals())
+
+@alpha_wrap
+def vola(df, abase, freq, inplace, name, cols):
+    df[f"{name}[{freq}d_high]"] =high= df["close"].rolling(freq).max()
+    df[f"{name}[{freq}d_low]"] = low= df["close"].rolling(freq).min()
+    df[f"{name}[vola]"] = (high-low) / low
+    df[f"{name}[q]"] = pd.qcut(x=df[f"{name}[vola]"], q=11, labels=False)
+    df[name]=df[f"{name}[q]"]/df[abase]
+    return alpha_return(locals())
+
 
 """Point: Not implemented"""
 def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 10}, df_asset=pd.DataFrame(), delay=3):

@@ -680,7 +680,7 @@ def asset_extrema():
     A: sometimes you have to skip last couple high/lows because they are a new trend
     """
 
-    df=DB.get_asset(ts_code="399001.SZ", asset="I")
+    df=DB.get_asset(ts_code="000001.SH", asset="I")
     df=LB.ohlcpp(df)
     df=df.reset_index()
 
@@ -759,74 +759,78 @@ def asset_extrema():
             df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
 
         df[f"{label}_diff"] = df[f"{label}_diff"].replace(0, np.nan).fillna(method="ffill")
+        df[f"{label}_diff"] = df[f"{label}_diff"]*40
 
+
+    #This is actually a second function to generate PLOT
     # simualte past iteration
-    matplotlib.use("TkAgg")
-    for counter, (index, df) in enumerate(LB.custom_expand(df, 1000).items()):
-        if counter % 20 != 0:
-            continue
+    if False:
+        matplotlib.use("TkAgg")
+        for counter, (index, df) in enumerate(LB.custom_expand(df, 1000).items()):
+            if counter % 20 != 0:
+                continue
 
-        print(counter, index)
+            print(counter, index)
 
-        # array of extrema without nan = shrink close only to extrema
-        s_bott_pvalue = df["bott_pvalue"].dropna()
-        s_peakk_pvalue = df["peakk_pvalue"].dropna()
+            # array of extrema without nan = shrink close only to extrema
+            s_bott_pvalue = df["bott_pvalue"].dropna()
+            s_peakk_pvalue = df["peakk_pvalue"].dropna()
 
-        dict_residuals_bott = {}
-        dict_residuals_peakk = {}
-        dict_regression_bott = {}
-        dict_regression_peakk = {}
+            dict_residuals_bott = {}
+            dict_residuals_peakk = {}
+            dict_regression_bott = {}
+            dict_regression_peakk = {}
 
-        # do regression with extrema with all past extrema. The regression with lowest residual wins
-        for counter, _ in enumerate(s_bott_pvalue):
-            if counter > 3:
-                # bott
-                s_part_pvalue = s_bott_pvalue.tail(counter)
-                distance = index - s_part_pvalue.index[0]
-                # s_part_pvalue[index]=df.at[index,"close"]
-                s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
-                dict_residuals_bott[counter] = residual / distance ** 2
-                dict_regression_bott[counter] = (s_part_pvalue, s_bott_lg)
+            # do regression with extrema with all past extrema. The regression with lowest residual wins
+            for counter, _ in enumerate(s_bott_pvalue):
+                if counter > 3:
+                    # bott
+                    s_part_pvalue = s_bott_pvalue.tail(counter)
+                    distance = index - s_part_pvalue.index[0]
+                    # s_part_pvalue[index]=df.at[index,"close"]
+                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                    dict_residuals_bott[counter] = residual / distance ** 2
+                    dict_regression_bott[counter] = (s_part_pvalue, s_bott_lg)
 
-                # peak
-                s_part_pvalue = s_peakk_pvalue.tail(counter)
-                distance = index - s_part_pvalue.index[0]
-                # s_part_pvalue[index] = df.at[index, "close"]
-                s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
-                dict_residuals_peakk[counter] = residual / distance ** 2
-                dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
+                    # peak
+                    s_part_pvalue = s_peakk_pvalue.tail(counter)
+                    distance = index - s_part_pvalue.index[0]
+                    # s_part_pvalue[index] = df.at[index, "close"]
+                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                    dict_residuals_peakk[counter] = residual / distance ** 2
+                    dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
 
-        # find the regression with least residual
-        from operator import itemgetter
-        n = 1
-        dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
-        dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+            # find the regression with least residual
+            from operator import itemgetter
+            n = 1
+            dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+            dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
 
-        # plot them
-        for key, residual in dict_min_residuals_bott.items():
-            _, s_bott_lg = dict_regression_bott[key]
-            plt.plot(s_bott_lg)
+            # plot them
+            for key, residual in dict_min_residuals_bott.items():
+                _, s_bott_lg = dict_regression_bott[key]
+                plt.plot(s_bott_lg)
 
-        for key, residual in dict_min_residuals_peakk.items():
-            _, s_peakk_lg = dict_regression_peakk[key]
-            plt.plot(s_peakk_lg)
+            for key, residual in dict_min_residuals_peakk.items():
+                _, s_peakk_lg = dict_regression_peakk[key]
+                plt.plot(s_peakk_lg)
 
-        # plot chart
-        plt.plot(df["close"])
-        # plt.show()
-        plt.savefig(f"tesplot/{index}.jpg")
-        plt.clf()
-        plt.close()
+            # plot chart
+            plt.plot(df["close"])
+            # plt.show()
+            plt.savefig(f"tesplot/{index}.jpg")
+            plt.clf()
+            plt.close()
 
     # add macd signal for comparison
-    label = macd(df=df, freq=360, freq2=500, abase="close", type=4, score=signal)
+    label = macd(df=df, freq=360, freq2=500, abase="close", type=4, score=df["close"].max(), inplace=True)
     label = label[0]
 
     plt.plot(x)
     plt.plot(df[label])
 
     plt.plot(df["bott_diff"])
-    plt.plot(df["peakk_diff"])
+    #plt.plot(df["peakk_diff"])
 
     plt.plot(df["bott_pvalue"], "1")
     plt.plot(df["peakk_pvalue"], "1")
@@ -1380,7 +1384,7 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
 
-    #asset_extrema()
+    asset_extrema()
     # #prob_gain_asset()
     # df=DB.get_asset()
     # Plot.plot_distribution(df,abase="pct_chg")
@@ -1394,7 +1398,6 @@ if __name__ == '__main__':
     # distribution(asset="E", column="turnover_rate")
 
     #no_better_name()
-    asset_bullishness()
     #atest_auto()
     #start_tester(asset="E",type="monthofyear")
     # df_sh=DB.get_asset("000001.SH",asset="I")
