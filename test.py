@@ -1,9 +1,8 @@
-
 import DB
 import LB
 import pandas as pd
 import numpy as np
-import Plot
+import UI
 
 
 def asset_beat_index(start_date="00000000",end_date=LB.today()):
@@ -75,9 +74,9 @@ def asset_beat_index(start_date="00000000",end_date=LB.today()):
             print(ts_code,"skipped",e)
             continue
 
-        df_industry1=DB.get_asset(ts_code=f"industry1_{industry1}",asset="G")
-        df_industry2=DB.get_asset(ts_code=f"industry2_{industry2}",asset="G")
-        df_industry3=DB.get_asset(ts_code=f"industry3_{industry3}",asset="G")
+        df_industry1= DB.get_asset(ts_code=f"industry1_{industry1}", asset="G")
+        df_industry2= DB.get_asset(ts_code=f"industry2_{industry2}", asset="G")
+        df_industry3= DB.get_asset(ts_code=f"industry3_{industry3}", asset="G")
         df_industry1 = LB.df_between(df_industry1, start_date, end_date)
         df_industry2 = LB.df_between(df_industry2, start_date, end_date)
         df_industry3 = LB.df_between(df_industry3, start_date, end_date)
@@ -111,7 +110,7 @@ def asset_beat_index(start_date="00000000",end_date=LB.today()):
             df_result.at[ts_code,f"{key}_asset_vs_index_sharp"]= (df_slim[f"norm_pct_{ts_code}"].mean() / df_slim[f"norm_pct_{ts_code}"].std()) / df_slim[f"norm_pct_{compare}"].mean() / df_slim[f"norm_pct_{compare}"].std()
             df_result.at[ts_code,f"{key}_asset_vs_index_gmean"]= (df_slim[f"norm_pct_{ts_code}"].mean() / df_slim[f"norm_pct_{ts_code}"].std())
 
-            #TODO sharp ratio, geomean, beat industry, concept
+            #TODO  beat industry, concept
             df_result.at[ts_code,"index"]=compare
 
 
@@ -283,7 +282,7 @@ def pattern_bull():
     - For 600519, in 3000 days, only 7 times bottom happens. Which means, 12 years, 7 times real bottom.
     """
 
-    df=DB.get_asset(ts_code="600519.SH")
+    df= DB.get_asset(ts_code="600519.SH")
 
     df["signal"]=0
     print(df.abv_ma240)
@@ -303,7 +302,7 @@ def pattern_bull():
              ,"signal" ]=1
     df["signal"]=df["signal"]*df["e_max"]
 
-    Plot.plot_chart(df,["lp","signal","ma240","ma60","e_max"])
+    UI.plot_chart(df, ["lp", "signal", "ma240", "ma60", "e_max"])
 
 
 

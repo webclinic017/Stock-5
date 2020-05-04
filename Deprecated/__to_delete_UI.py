@@ -44,7 +44,11 @@ class Feather_opener(QWidget):
             print("open", path)
             LB.feather_csv_converter(path)
 
-if __name__ == '__main__':
+
+def test():
     app = QApplication(sys.argv)
     ex = Feather_opener()
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    test()

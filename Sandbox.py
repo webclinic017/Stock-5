@@ -2,7 +2,7 @@ import DB
 import LB
 from jqdatasdk import *
 import _API_JQ
-import Plot
+import UI
 import numpy as np
 import pandas as pd
 import Alpha
@@ -18,7 +18,7 @@ def unstable_period():
     idea: unstable period based on volatility
     """
 
-    df=DB.get_asset(ts_code="000001.SH",asset="I")
+    df= DB.get_asset(ts_code="000001.SH", asset="I")
     df=LB.df_between(df,"20000101",LB.today())
 
     #volatility measured in 3 ways:
@@ -65,7 +65,7 @@ def unstable_period():
 
     df["helper120"]=df["helper120"]*1000
     df["helper3120"]=(df["helper3120"]-5).abs()
-    Plot.plot_chart(df,["close",f"helper120","helper4240"], {})
+    UI.plot_chart(df, ["close", f"helper120", "helper4240"], {})
 
 
 
@@ -81,7 +81,7 @@ def market_volatility(start_date="20000101"):
     """
 
 
-    df = DB.get_asset(ts_code="000002.SZ",asset="E")
+    df = DB.get_asset(ts_code="000002.SZ", asset="E")
     #df = LB.df_between(df, start_date, LB.today())
 
     df = df.tail(len(df) - 5)
@@ -125,7 +125,7 @@ def market_volatility(start_date="20000101"):
         x=Alpha.macd(df=df,abase="close",freq=120,freq2=240,type=4,inplace=True)
         df[x[0]]=df[f"method1_q{freq}"]/(df[x[0]]*1)
         a_methods=[f"method{x}_q{freq}" for x in [1]]
-        Plot.plot_chart(df,["close",x[0]]+a_methods, {})
+        UI.plot_chart(df, ["close", x[0]] + a_methods, {})
 
 def main():
     # init stock market
@@ -272,16 +272,34 @@ def main():
 
 
 
-    # scrape all social security report 券商推荐 on one stock and compare
+    # Q: qdii research
     # A: very hard to scrape all the data without an api
     #A: possible sources:
     #A: http://data.eastmoney.com/report/singlestock.jshtml?quoteid=0.000651&stockcode=000651
     #A: http://stock.finance.sina.com.cn/stock/go.php/vReport_List/kind/search/index.phtml?symbol=sz000651&t1=all&p=5
     #A: http://stock.finance.sina.com.cn/stock/go.php/vReport_List/kind/search/index.phtml?symbol=sz000651&t1=all&p=1
     #A: this url works but is very annoying to scrape
+    # A: top 10% rank 2410
+    # A: top 20% rank 2612
+    # A: top 30% rank 2747
+    # A: bot 30% rank 3711
+    # A: bot 20% rank 3660
+    # A: bot 10% rank 3555
+    #higher than mean is 2766, lower than mean is 3500
+    #A: Conclusion: YES! The more people write about it, the better the stock might be.
+    #A: the pearson between final rank and qdii attention is -0.27 which is very high!
+    #A: overall : it is highly correlated whatever qdii does
+
+
+    #Q: QDII grade
+    #A: it is significant that good stock have only positive rating. checked in bulllishness
+    #A: pearson wise: it is -0.14, also highly correlated, but not as much as qdii_research
+
 
     #Q: shareholder class from jq
+    #Q: for now, it doesnt work because jqdata error. But I can assume that institutional holding has a godo predictability.
     #A: TODO
+
 
     # Q: use global market beta to determine normal time and crazy time
     # A: In crazy time, correlation should be high. In normal time, correlation should be low.
@@ -619,7 +637,7 @@ The whole market works like this. If market is at bottom, good stock will rise. 
 if __name__ == '__main__':
     pass
 
-    df=DB.get_asset(ts_code="000001.SH",asset="I")
+    df= DB.get_asset(ts_code="000001.SH", asset="I")
     e1=Alpha.hhll(df=df, abase="close", freq=20, inplace=True, score=1,thresh=0.07)
     e2=Alpha.vola(df=df, abase=e1[0], freq=500, inplace=True)
     e3=Alpha.cj(df=df, abase="close", freq=240, inplace=True)
@@ -628,7 +646,7 @@ if __name__ == '__main__':
     df[e3]=df[e3]*2000
 
 
-    Plot.plot_chart(df,["close",e3])
+    UI.plot_chart(df, ["close", e3])
     #market_volatility()
     # ball.set_token('xq_a_token=2ee68b782d6ac072e2a24d81406dd950aacaebe3;')
     # df=ball.report("SH600519")

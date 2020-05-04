@@ -208,7 +208,7 @@ def bruteforce_iterate():
 
 
 if __name__ == '__main__':
-    # TODO generate test cases
+
     # need to use geomean for eval function
     df = DB.get_asset()
 

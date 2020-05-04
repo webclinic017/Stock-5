@@ -3,8 +3,9 @@ import cProfile
 import Alpha
 from Alpha import *
 import numpy as np
-import Plot
+import UI
 from scipy.stats.mstats import gmean
+from scipy.stats import gmean
 import sys
 import os
 import matplotlib
@@ -409,7 +410,7 @@ def atest_manu(fname="macd", a_abase=["close"]):
 
 
 def atest_auto(type=4):
-    #TODO use p
+
     def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
         """can be used on any indicator
         gq=Generic quantile
@@ -583,7 +584,7 @@ def asset_start_season_initiator(asset="I", a_n=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
     a_result=[]
     for n in a_n:
         a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/n{n}")
-        df=DB.get(a_path,set_index="index")
+        df=DB.get(a_path, set_index="index")
         df=df.mean()
         a_result.append(df)
         print("load",a_path[0])
@@ -674,13 +675,13 @@ def asset_extrema():
     5. Slope of trend
 
 
-    todo new method
+
     1. Calculate reverse from today on all high /lows and make regression on then. if the regression does not fit anymore. then the trend is the last strongest trend.
-    A: Done that. the problem is tat trend exhange happens too often
+    A: Done that. the problem is tat trend exhange happens too often. So by default, it rarely fits perfect, even if it fits perfect, it changes very quickly.
     A: sometimes you have to skip last couple high/lows because they are a new trend
     """
 
-    df=DB.get_asset(ts_code="000001.SH", asset="I")
+    df= DB.get_asset(ts_code="000001.SH", asset="I")
     df=LB.ohlcpp(df)
     df=df.reset_index()
 
@@ -818,7 +819,7 @@ def asset_extrema():
             # plot chart
             plt.plot(df["close"])
             # plt.show()
-            plt.savefig(f"tesplot/{index}.jpg")
+            plt.savefig(f"Plot/extrema/{index}.jpg")
             plt.clf()
             plt.close()
 
@@ -882,7 +883,7 @@ def asset_intraday_analysis():
         #2.part:prediction. first 15 min predict today
         a_results=[]
         for intraday in a_intraday:
-            df_day=DB.get_asset(ts_code=ts_code,asset=asset)
+            df_day= DB.get_asset(ts_code=ts_code, asset=asset)
             df_filter = df[df["intraday"] == intraday]
             df_filter["trade_date"]=df_filter["day"].apply(LB.switch_trade_date)
             df_filter["trade_date"]=df_filter["trade_date"].astype(int)
@@ -1060,8 +1061,6 @@ def asset_fundamental(start_date, end_date, freq, assets=["E"]):
 
     # add static data and sort by final rank
     df_result_mean = DB.add_static_data(df_result_mean, assets=assets)
-    df_result_mean = DB.add_asset_final_analysis_rank(df_result_mean, assets, freq, "bullishness")
-    df_result_mean = DB.add_asset_final_analysis_rank(df_result_mean, assets, freq, "volatility")
     df_result_mean.sort_values(by=["final_fundamental_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Atest/" + "fundamental" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
@@ -1133,7 +1132,6 @@ def asset_volatility(start_date, end_date, assets, freq):
 
     # add static data and sort by final rank
     df_result = DB.add_static_data(df_result, assets)
-    df_result = DB.add_asset_final_analysis_rank(df_result, assets, freq, "bullishness")
     df_result.sort_values(by=["final_volatility_rank"], ascending=True, inplace=True)
 
     path = "Market/" + "CN" + "/Atest/" + "volatility" + "/" + ''.join(assets) + "_" + freq + "_" + start_date + "_" + end_date + ".xlsx"
@@ -1142,19 +1140,19 @@ def asset_volatility(start_date, end_date, assets, freq):
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
 def asset_bullishness(market="CN"):
-    from scipy.stats import gmean
+    #init
     df_ts_code = DB.get_ts_code(a_asset=["E","I","FD","F","G"],market=market)[::1]
-    #df_ts_code.to_csv("check.csv",encoding="utf-8_sig")
     df_result = pd.DataFrame()
-
-    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I",market="CN")
+    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I", market="CN")
     df_sh_index["sh_close"] = df_sh_index["close"]
-    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I",market="CN")
+    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I", market="CN")
     df_sz_index["sz_close"] = df_sz_index["close"]
-    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I",market="CN")
+    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I", market="CN")
     df_cy_index["cy_close"] = df_cy_index["close"]
+
+    #loop
     for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
-        print("ts_code", ts_code, asset)
+        print("calculate bullishness",market, ts_code, asset)
 
         try:
             df_asset = DB.get_asset(ts_code=ts_code, asset=asset, market=market)
@@ -1165,14 +1163,13 @@ def asset_bullishness(market="CN"):
 
         if len(df_asset) > 100:
             # assed gained from lifetime. bigger better
-            df_result.at[ts_code, "comp_gain"] = df_asset["close"].iat[len(df_asset) - 1] / df_asset["close"].iat[0]
+            df_result.at[ts_code, "comp_gain"] =comp_gain= df_asset["close"].iat[len(df_asset) - 1] / df_asset["close"].iat[0]
 
             # period. the longer the better
-            df_result.at[ts_code, "period"] = len(df_asset)
+            df_result.at[ts_code, "period"] =period= len(df_asset)
 
             # gain / period
-            df_result.at[ts_code, "gain"] = df_result.at[ts_code, "comp_gain"] / df_result.at[ts_code, "period"]
-
+            df_result.at[ts_code, "gain"] = gain=df_result.at[ts_code, "comp_gain"] / len(df_asset)
 
             # Geomean.
             helper = 1 + (df_asset["pct_chg"] / 100)
@@ -1215,12 +1212,30 @@ def asset_bullishness(market="CN"):
             # df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
             # df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
 
+            # polyfit with residual: the less residual the better
+            _,residual=LB.polyfit_full(df["close"].index, df["close"],degree=2)
+
             # dividend
-            if asset == "E":
+            if asset == "E" and market == "CN":
                 if "dv_ttm" in df_asset.columns:
                     df_result.at[ts_code, "dividend(not counted)"] = df_asset["dv_ttm"].mean()
 
-    #TODO update it to be exactly same as bullishness rank
+
+                #qdii research
+                df_qdii_research= DB.get_asset(ts_code=ts_code, freq="D_qdii_research", market="CN")
+                if not df_qdii_research.empty:
+                    df_result.at[ts_code, "qdii_research(not counted)"] = len(df_qdii_research)
+                    df_result.at[ts_code, "qdii_research/period(not counted)"] =  len(df_qdii_research)/ len(df_asset)
+
+
+                #qdii grade
+                df_qdii_grade= DB.get_asset(ts_code=ts_code, freq="D_qdii_grade", market="CN")
+                if not df_qdii_grade.empty:
+                    df_result.at[ts_code, "qdii_grade(not counted)"] = len(df_qdii_grade)
+                    df_result.at[ts_code, "qdii_grade/period(not counted)"] =  len(df_qdii_grade)/ len(df_asset)
+                    df_result.at[ts_code, "qdii_grade_pos(not counted)"] = len(df_qdii_grade[ (df_qdii_grade["grade"]=="买入")  | (df_qdii_grade["grade"]=="增持")]) / len(df_qdii_grade)
+
+    # aggregate and rank
     gmean_rank=df_result["geomean"].rank(ascending=False)
     sharp_rank=df_result["sharp"].rank(ascending=False)
     beta_sh_rank=df_result["beta_sh"].rank(ascending=True)
@@ -1231,7 +1246,6 @@ def asset_bullishness(market="CN"):
                               beta_sh_rank*0.05+\
                               beta_sz_rank*0.05+\
                               beta_cy_rank*0.05
-
 
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}.xlsx", group_result=True, market=market)
 
@@ -1384,7 +1398,20 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
 
-    asset_extrema()
+    # df_ts_code=DB.get_ts_code(a_asset=["E"],market="US")
+    # for ts_code in df_ts_code.index:
+    #     print(ts_code)
+    #     lol =pd.read_feather(f"Market/US/Asset/E/D/{ts_code}.feather")
+    #     lol["trade_date"]=lol["trade_date"].apply(lambda x: (x[0:8]))
+    #     lol["period"]=Alpha.period(df=lol,inplace=False)
+    #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
+
+    #asset_bullishness(market="US")
+
+    #todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
+
+
+    #asset_extrema()
     # #prob_gain_asset()
     # df=DB.get_asset()
     # Plot.plot_distribution(df,abase="pct_chg")
@@ -1398,7 +1425,7 @@ if __name__ == '__main__':
     # distribution(asset="E", column="turnover_rate")
 
     #no_better_name()
-    #atest_auto()
+    atest_auto()
     #start_tester(asset="E",type="monthofyear")
     # df_sh=DB.get_asset("000001.SH",asset="I")
     # start_year_relation(df_sh,month=1)

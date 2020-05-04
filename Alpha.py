@@ -1,15 +1,12 @@
 import numpy as np
-from scipy.stats import gmean
-import DB
+import pandas as pd
 import LB
-import matplotlib.pyplot as plt
-import Plot
-from scipy.signal import argrelextrema
-from scipy.signal import argrelmin
-from scipy.signal import argrelmax
-from scipy.stats.mstats import gmean
-import scipy.stats
-from LB import *
+import UI
+from scipy.signal import (argrelextrema,argrelmin,argrelmax)
+from scipy.stats import gmean
+import talib
+import DB
+import math
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -110,7 +107,7 @@ def co_pct_chg(df, inplace, name, cols):
 
 
 @alpha_wrap
-def pjup(df, inplace, name, cols):  # TODO test if 2 pct gap is better
+def pjup(df, inplace, name, cols):
     df[name] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= 3)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return alpha_return(locals())
 
@@ -234,9 +231,7 @@ def pos(df, abase, freq, inplace, name, cols):
 
 @alpha_wrap
 def extrema_rdm(df,abase, inplace,name,cols,n=60):
-    """finds extrema values using random noisy sample.
-    Todo not finished
-    """
+    """finds extrema values using random noisy sample"""
     s=df[abase]
     np.random.seed(0)
     xs = [0]
@@ -665,10 +660,7 @@ def MESA(df):
     df = df[["close", "trend", "kalman", "sine", "leadsine", "mode", "marker", "rsi240"]]  # dphase quadrature   "dperiod", "inphase",
     # df=df[["close", "rsi5","rsi10","marker"]]#dphase quadrature   "dperiod", "inphase",
 
-    df.reset_index(inplace=True, drop=True)
-    df.plot(legend=True)
-    plt.show()
-    plt.close()
+
 
 
 @alpha_wrap
@@ -1620,7 +1612,7 @@ def cdl(df, abase):
     a_negative_columns = []
 
     # create candle stick column
-    for key, array in c_candle().items():
+    for key, array in LB.c_candle().items():
         if (array[1] != 0) or (array[2] != 0):  # if used at any, calculate the pattern
             func = array[0]
             df[key] = func(open=df["open"], high=df["high"], low=df["low"], close=df["close"]).replace(0, np.nan)
@@ -1637,7 +1629,7 @@ def cdl(df, abase):
 
     df[abase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
     # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
-    remove_columns(df, a_positive_columns + a_negative_columns)
+    LB.remove_columns(df, a_positive_columns + a_negative_columns)
     return abase
 
 
@@ -1735,8 +1727,7 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
         Butterwohle is also very smooth, but it produces 1 more curve at turning point. Hence super smoother is better for this job.
 
 
-        Works good on high volatile time, works bad on flat times.
-        TODO I need some indicator to have high volatility in flat time so I can use this to better identify trend with macd
+        Works good on high volatile time, works bad on flat times. check out function vola. It describes volatility and can be good used together with macd
         """
 
     df[f"{name}[dif]"] = 0
@@ -1922,7 +1913,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
                 except Exception as e:
                     print("error resistance 2", e)
 
-        # optional #TODO configure it nicely
+        # optional
         df_asset["rs_abv"] = df_asset["rs_abv"].rolling(delay).max().fillna(0)
         df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
     else:
@@ -2026,7 +2017,7 @@ def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, s
                 except Exception as e:
                     print("error resistance 2", e)
 
-        # optional #TODO configure it nicely
+        # optional
         df_asset["rs_abv"] = df_asset["rs_abv"].rolling(delay).max().fillna(0)
         df_asset["rs_und"] = df_asset["rs_und"].rolling(delay).max().fillna(0)
     else:
@@ -2131,7 +2122,6 @@ def trend2(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, 
 
         # fill na based on the trigger points. bfill makes no sense here
         # df[trendfreq_name].fillna(method='ffill', inplace=True)
-        # TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
 
     # remove RSI and phase Columns to make it cleaner
     a_remove = []
@@ -2141,7 +2131,7 @@ def trend2(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, 
         pass
     LB.remove_columns(df, a_remove)
 
-    # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
+    # calculate final trend =weighted trend of previous
     return trend_name
 
 # ONE OF THE MOST IMPORTANT KEY FUNNCTION I DISCOVERED
@@ -2152,7 +2142,7 @@ def trend2(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, 
 # 5 Step Calculate Step comp_chg
 # variables:1. function, 2. threshhold 3. final weight 4. combination with other function
 def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str = ""):
-    a_all = [1] + c_bfreq()
+    a_all = [1] + LB.c_bfreq()
     a_low = [str(x) for x in a_all][:-1]
     a_high = [str(x) for x in a_all][1:]
 
@@ -2195,7 +2185,6 @@ def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str =
 
         # fill na based on the trigger points. bfill makes no sense here
         df[trendfreq_name].fillna(method='ffill', inplace=True)
-        # TODO MAYBE TREND can be used to score past day gains. Which then can be used to judge other indicators
 
     # remove RSI and phase Columns to make it cleaner
     a_remove = []
@@ -2205,7 +2194,7 @@ def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str =
         pass
     LB.remove_columns(df, a_remove)
 
-    # calculate final trend =weighted trend of previous TODO this need to be adjusted manually. But the weight has relative small impact
+    # calculate final trend =weighted trend of previous
     df[trend_name] = df[f"{trend_name}2"] * 0.80 + df[f"{trend_name}5"] * 0.12 + df[f"{trend_name}10"] * 0.04 + df[f"{trend_name}20"] * 0.02 + df[f"{trend_name}60"] * 0.01 + df[f"{trend_name}240"] * 0.01
     return trend_name
 
@@ -2299,21 +2288,21 @@ def trend_swap(df, column, value):
 
 
 if __name__ == '__main__':
-    df = DB.get_asset(ts_code="399001.SZ",asset="I")
+    df = DB.get_asset(ts_code="399001.SZ", asset="I")
     df = LB.ohlcpp(df)
 
 
     #mini=minima(df=df, abase="close", n=60, inplace=True)
     #maxi=maxima(df=df, abase="close", n=60, inplace=True)
     #extrema=extrema_diff(df=df, abase="close", n=60, n2=120,inplace=True)
-
+    import matplotlib as plt
 
     label_240=cj(df=df,abase="close",inplace=True,freq=240)
     df=df.reset_index()
     df["close"].plot()
     df[label_240].plot(secondary_y=True)
     plt.show()
-    Plot.plot_chart(df, ["close", label_240], {})
+    UI.plot_chart(df, ["close", label_240], {})
     df.to_csv("test.csv")
 
     maxima_l=maxima(df=df, abase="close", n=120, inplace=True)
@@ -2321,7 +2310,7 @@ if __name__ == '__main__':
     maxima_d=extrema_dis(df=df, abase=maxima_l, inplace=True)
     minima_d=extrema_dis(df=df, abase=minima_l, inplace=True)
     df["diff"]=df[maxima_d]-df[minima_d]
-    Plot.plot_chart(df, ["close", "diff",maxima_d,minima_d,maxima_l,minima_l], {maxima_l: "x",minima_l:"o"})
+    UI.plot_chart(df, ["close", "diff", maxima_d, minima_d, maxima_l, minima_l], {maxima_l: "x", minima_l: "o"})
     pass
 
 

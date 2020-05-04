@@ -17,7 +17,6 @@ import traceback
 import _API_Tushare
 import atexit
 from time import time, strftime, localtime
-import time
 import subprocess, os, platform
 from datetime import timedelta
 from playsound import playsound
@@ -25,24 +24,15 @@ from numba import jit
 import numba
 import enum
 import time
+
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
 
 
-#decorator TODO maybe remove if no one else uses
-def trade_date_norm(func):
-    def this_function_will_never_be_seen(*args, **kwargs):
-        try:
-            if "date" in kwargs:
-                kwargs["date"]=switch_trade_date(kwargs["date"])
-            return func(*args, **kwargs)
-        except Exception as e:
-            return
-    return this_function_will_never_be_seen
 
 
-# decorator functions must be at top
+# DECORATORS must be at top
 def deco_only_big_update(func):
     def this_invisible_func(*args, **kwargs):
         if "big_update" in [*kwargs]:
@@ -53,7 +43,6 @@ def deco_only_big_update(func):
     return this_invisible_func
 
 
-# TODO very dangerous function, check it often
 def deco_try_ignore(func):
     def this_function_will_never_be_seen(*args, **kwargs):
         try:
@@ -129,14 +118,22 @@ def fibonacci_weight(n):
     return array
 
 
-
-
-
 def empty_df(query):
     if query == "pro_bar":
         return pd.DataFrame(columns=["ts_code", "trade_date", "open", "high", "low", "close", "pct_chg", "vol"])
-    elif query == "holdertrade":
+    elif query == "holder_trade":
         return pd.DataFrame(columns=["ts_code", "ann_date", "holder_name", "holder_type", "in_de", "change_vol", "change_ratio", "after_share", "after_ratio", "avg_price", "total_share", "begin_date", "close_date"])
+    elif query == "margin_detail":
+        return pd.DataFrame(columns=["ts_code", "trade_date", "rzye", "rqye", "rzmre", "rqyl", "rzche", "rqchl", "rqmcl", "rzrqye"])
+    elif query == "top10_tolders":
+        return pd.DataFrame(columns=["ts_code", "end_date", "ann_date", "holder_name", "hold_amount", "hold_ratio"])
+    elif query == "suspended":
+        return pd.DataFrame(columns=["ts_code", "trade_date", "suspend_timing", "suspend_type"])
+    elif query == "dividend":
+        return pd.DataFrame(columns=["ts_code", "end_date", "ann_date", "div_proc", "stk_div", "stk_bo_rate", "stk_co_rate", "cash_div", "cash_div_tax", "record_date", "ex_date", "pay_date", "div_listdate", "imp_ann_date"])
+    elif query == "share_float":
+        return pd.DataFrame(columns=["ts_code", "ann_date", "float_date", "float_share", "float_ratio", "holder_name", "share_type"])
+
     elif query == "share_float":
         return pd.DataFrame(columns=["ts_code", "ann_date", "float_date", "float_share", "float_ratio", "holder_name", "share_type"])
     elif query == "repurchase":
@@ -147,6 +144,12 @@ def empty_df(query):
         return pd.DataFrame(columns=["ts_code", "end_date", "pledge_count", "unrest_pledge", "rest_pledge", "total_share", "pledge_ratio"])
     elif query == "top_holder":
         return pd.DataFrame(columns=["ts_code", "ann_date", "end_date", "holder_name", "hold_amount", "hold_ratio"])
+    elif query == "forecast":
+        return pd.DataFrame(
+            columns=["ts_code", "ann_date", "end_date", "eps", "dt_eps", "total_revenue_ps", "revenue_ps", "capital_rese_ps", "surplus_rese_ps", "undist_profit_ps", "extra_item", "profit_dedt", "gross_margin", "current_ratio", "quick_ratio", "cash_ratio", "ar_turn", "ca_turn", "fa_turn", "assets_turn", "op_income", "ebit", "ebitda", "fcff", "fcfe", "current_exint", "noncurrent_exint", "interestdebt", "netdebt", "tangible_asset", "working_capital", "networking_capital", "invest_capital", "retained_earnings", "diluted2_eps", "bps", "ocfps", "retainedps", "cfps", "ebit_ps", "fcff_ps", "fcfe_ps",
+                     "netprofit_margin", "grossprofit_margin", "cogs_of_sales", "expense_of_sales", "profit_to_gr", "saleexp_to_gr", "adminexp_of_gr", "finaexp_of_gr", "impai_ttm", "gc_of_gr", "op_of_gr", "ebit_of_gr", "roe", "roe_waa", "roe_dt", "roa", "npta", "roic", "roe_yearly", "roa2_yearly", "debt_to_assets", "assets_to_eqt", "dp_assets_to_eqt", "ca_to_assets", "nca_to_assets", "tbassets_to_totalassets", "int_to_talcap", "eqt_to_talcapital", "currentdebt_to_debt", "longdeb_to_debt", "ocf_to_shortdebt", "debt_to_eqt", "eqt_to_debt", "eqt_to_interestdebt", "tangibleasset_to_debt",
+                     "tangasset_to_intdebt", "tangibleasset_to_netdebt", "ocf_to_debt", "turn_days", "roa_yearly", "roa_dp", "fixed_assets", "profit_to_op", "q_saleexp_to_gr", "q_gc_to_gr", "q_roe", "q_dt_roe", "q_npta", "q_ocf_to_sales", "basic_eps_yoy", "dt_eps_yoy", "cfps_yoy", "op_yoy", "ebt_yoy", "netprofit_yoy", "dt_netprofit_yoy", "ocf_yoy", "roe_yoy", "bps_yoy", "assets_yoy", "eqt_yoy", "tr_yoy", "or_yoy", "q_sales_yoy", "q_op_qoq", "equity_yoy"])
+
     elif query == "balancesheet":
         return pd.DataFrame(
             columns=["ts_code", "ann_date", "f_ann_date", "end_date", "report_type", "comp_type", "total_share", "cap_rese", "undistr_porfit", "surplus_rese", "special_rese", "money_cap", "trad_asset", "notes_receiv", "accounts_receiv", "oth_receiv", "prepayment", "div_receiv", "int_receiv",
@@ -227,8 +230,9 @@ def get_trade_date_datetime_dayofyear(trade_date):
 def get_trade_date_datetime_weekofyear(trade_date):
     return get_trade_date_datetime(trade_date).strftime("%W")
 
+
 def get_trade_date_datetime_weekofmonth(trade_date):
-    trade_date=get_trade_date_datetime(trade_date)
+    trade_date = get_trade_date_datetime(trade_date)
     return (trade_date.isocalendar()[1] - trade_date.replace(day=1).isocalendar()[1] + 1)
 
 
@@ -262,15 +266,17 @@ def remove_columns(df, columns_array):
             pass
 
 
-
 def polyfit_full(s_index, s_data, degree=1):
-    full = np.polyfit(s_index, s_data, degree,full=True)
-    z=full[0]
-    residuals=full[1]
-    return [pd.Series(index=s_index, data=s_index * z[0] + z[1]),residuals]
+    """returns residual and other information"""
+    full = np.polyfit(s_index, s_data, degree, full=True)
+    z = full[0]
+    residuals = full[1]
+    return [pd.Series(index=s_index, data=s_index * z[0] + z[1]), residuals]
+
 
 def polyfit_slope(s_index, s_data, degree=1):
     return np.polyfit(s_index, s_data, degree)[0]  # if degree is 1, then [0] is slope
+
 
 # def get_linear_regression_variables(s_index, s_data):
 #     return np.polyfit(s_index, s_data, 1)
@@ -343,11 +349,13 @@ def groups_d_to_string_iterable(d_groups: dict):
 def get_numeric_df(df):
     return df.select_dtypes(include=[np.number])
 
+
 def shutdown_windows():
     os.system('shutdown -s')
 
+
 def sound(file="error.mp3"):
-    playsound(f"Media/Sound/{file}")
+    playsound(f"Sound/{file}")
 
 
 def a_path(path: str = ""):
@@ -355,7 +363,7 @@ def a_path(path: str = ""):
 
 
 def handle_save_exception(e, path):
-    if type(e) in [UnicodeDecodeError,FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
+    if type(e) in [UnicodeDecodeError, FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -390,12 +398,10 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
                 handle_save_exception(e, a_path[1])
 
 
-
-
 def to_excel(path, d_df, index=True):
     for i in range(0, 10):
         try:
-            writer = pd.ExcelWriter(path,engine="xlsxwriter")
+            writer = pd.ExcelWriter(path, engine="xlsxwriter")
             for key, df in d_df.items():
                 df.to_excel(writer, sheet_name=key, index=index, encoding='utf-8_sig')
             writer.save()
@@ -403,7 +409,6 @@ def to_excel(path, d_df, index=True):
         except Exception as e:
             print("excel save exception type", type(e))
             handle_save_exception(e, path)
-
 
 
 def send_mail(trade_string="what to buy and sell"):
@@ -432,33 +437,42 @@ def send_mail(trade_string="what to buy and sell"):
 def multi_process(func, a_kwargs, a_partial=[]):
     a_process = []
     for d_partial in a_partial:
-        new_dict = a_kwargs.copy()#maybe deepcopy
+        new_dict = a_kwargs.copy()  # maybe deepcopy
         new_dict.update(d_partial)
         a_process.append(Process(target=func, kwargs=new_dict))
     [process.start() for process in a_process]
     [process.join() for process in a_process]
 
 
+def multi_steps(step=1):
+    return [{"step": x} for x in [x for x in range(1, step + 1)] + [-x for x in range(1, step + 1)]]
+
 
 def c_root():
     return "D:\Stock/"
 
+
 def c_root_beta():
     return "E:\Beta/"
 
+
 def c_assets():
-    return ["I","E","FD"]
+    return ["I", "E", "FD"]
+
 
 def c_assets_big():
     return c_assets() + ["G", "F"]
 
+
 def c_bfreq():
-    return [1,2,5,10,20,60,120,240]
+    return [1, 2, 5, 10, 20, 60, 120, 240]
+
 
 def c_sfreq():
-    return [2,20,240]
+    return [2, 20, 240]
 
-#deprecated, only there for deprecated dependency
+
+# deprecated, only there for deprecated dependency
 class BFreq(enum.Enum):
     f1 = 1
     f2 = 2
@@ -468,23 +482,28 @@ class BFreq(enum.Enum):
     f60 = 60
     f120 = 120
     f240 = 240
-    #f500 = 500
+    # f500 = 500
 
-#deprecated, only there for deprecated dependency
+
+# deprecated, only there for deprecated dependency
 class SFreq(enum.Enum):
     # f1 = 1
     f2 = 2
     f20 = 20
     f240 = 240
 
+
 def c_G_queries():
     return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','zj_industry1','jq_industry1','jq_industry2','concept','market'] "]}
+
 
 def c_index_queries():
     return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
 
+
 def c_index():
-    return ['000001.SH','399001.SZ','399006.SZ']
+    return ['000001.SH', '399001.SZ', '399006.SZ']
+
 
 def c_group_score_weight():
     return {"area": 0.10,
@@ -495,18 +514,31 @@ def c_group_score_weight():
             "is_hs": 0.05}  # "sw_industry3": 0.20,
 
 
-def c_date_oth():
+def c_index_label():
+    """this returns an ordered list of prioritized columns for df index
+    NOT to confuse with index asset"""
+    return ["trade_date", "date", "ann_date", "end_date", "cal_date"]
+
+
+def c_asset_E_bundle():
     return {"block_trade": _API_Tushare.my_block_trade,
-            "holdertrade": _API_Tushare.my_holdertrade,
-            "repurchase": _API_Tushare.my_repurchase,
-            "share_float": _API_Tushare.my_share_float}
+            "holder_trade": _API_Tushare.my_holder_trade,
+            "margin_detail": _API_Tushare.my_margin_detail,
+            "top10_holders": _API_Tushare.my_top10_holders,
+            "suspended": _API_Tushare.my_suspended,
+            "dividend": _API_Tushare.my_dividend,
+            "share_float": _API_Tushare.my_share_float,
+            "forecast": _API_Tushare.my_forecast,
 
-
-def c_assets_fina_function_dict():
-    return {"fina_indicator": _API_Tushare.my_fina_indicator,
+            # financial
+            "fina_indicator": _API_Tushare.my_fina_indicator,
             "income": _API_Tushare.my_income,
             "balancesheet": _API_Tushare.my_balancesheet,
-            "cashflow": _API_Tushare.my_cashflow}
+            "cashflow": _API_Tushare.my_cashflow
+
+            # not implemented because not assetable
+            # "repurchase": _API_Tushare.my_repurchase,
+            }
 
 
 def c_op():
@@ -586,58 +618,44 @@ def c_candle():
             }
 
 
-def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
+def c_d_groups(assets=c_assets(), a_ignore=[], market="CN"):
     import DB
     # E[0]=KEY, E[1][0]= LABEL 1 KEY, E[2][1]= LABEL 2 Instances,
     asset = {"asset": c_assets()}
     if "E" in assets:
-        df_ts_code_E = DB.get_ts_code(["E"],market=market)
+        df_ts_code_E = DB.get_ts_code(["E"], market=market)
+        if market == "CN":
+            a_columns = [x for x in df_ts_code_E.columns if x in ["sw_industry1", "sw_industry2", "sw_industry3", "zj_industry1", "jq_industry1", "jq_industry2", "area", "market", "is_hs", "state_company", "concept"]]
+        elif market =="US":
+            a_columns = [x for x in df_ts_code_E.columns if x in ["sector", "industry", "country"]]
 
-        a_columns=[x for x in df_ts_code_E.columns if x in ["sw_industry1","sw_industry2","sw_industry3","zj_industry1","jq_industry1","jq_industry2","area","market","is_hs","state_company","concept"]]
-        # d_e = {"industry1": list(df_ts_code_E["industry1"].unique()),
-        #        "industry2": list(df_ts_code_E["industry2"].unique()),
-        #        "industry3": list(df_ts_code_E["industry3"].unique()),
-        #        "concept": list(df_ts_code_concept["concept"].unique()),
-        #        "area": list(df_ts_code_E["area"].unique()),
-        #        "market": list(df_ts_code_E["market"].unique()),
-        #        "is_hs": list(df_ts_code_E["is_hs"].unique()),
-        #        "state_company": list(df_ts_code_E["state_company"].unique()),}
-
-        d_e={}
+        d_e = {}
         for column in a_columns:
-            if column !="concept":
-                d_e[column]=list(df_ts_code_E[column].unique())
+            if column != "concept":
+                d_e[column] = list(df_ts_code_E[column].unique())
             else:
                 df_ts_code_concept = DB.get_ts_code(["concept"], market=market)
                 d_e[column] = list(df_ts_code_concept[column].unique())
 
         asset = {**asset, **d_e}
     if "I" in assets:
-        df_ts_code_I = DB.get_ts_code(["I"],market=market)
-        a_columns = [x for x in df_ts_code_I.columns if x in ["category","publisher"]]
+        df_ts_code_I = DB.get_ts_code(["I"], market=market)
+        if market == "CN":
+            a_columns = [x for x in df_ts_code_I.columns if x in ["category", "publisher"]]
+        elif market == "US":
+            a_columns = []
 
-        # d_i = {"category": list(df_ts_code_I["category"].unique()),
-        #        "publisher": list(df_ts_code_I["publisher"].unique()), }
-
-        d_i = {}
-        for column in a_columns:
-            d_i[column] = list(df_ts_code_I[column].unique())
+        d_i = {column: list(df_ts_code_I[column].unique()) for column in a_columns}
 
         asset = {**asset, **d_i}
     if "FD" in assets:
-        df_ts_code_FD = DB.get_ts_code(["FD"],market=market)
-        a_columns = [x for x in df_ts_code_FD.columns if x in ["fund_type", "invest_type","type","management","custodian"]]
+        df_ts_code_FD = DB.get_ts_code(["FD"], market=market)
+        if market == "CN":
+            a_columns = [x for x in df_ts_code_FD.columns if x in ["fund_type", "invest_type", "type", "management", "custodian"]]
+        elif market == "US":
+            a_columns = [x for x in df_ts_code_FD.columns if x in ["sector", "industry", "country"]]
 
-        # d_fd = {"fund_type": list(df_ts_code_FD["fund_type"].unique()),
-        #         "invest_type": list(df_ts_code_FD["invest_type"].unique()),
-        #         "type": list(df_ts_code_FD["type"].unique()),
-        #         "management": list(df_ts_code_FD["management"].unique()),
-        #         "custodian": list(df_ts_code_FD["custodian"].unique()), }
-        #
-
-        d_fd = {}
-        for column in a_columns:
-            d_fd[column] = list(df_ts_code_FD[column].unique())
+        d_fd = {column: list(df_ts_code_FD[column].unique()) for column in a_columns}
 
         asset = {**asset, **d_fd}
     return {key: value for key, value in asset.items() if key not in a_ignore}
@@ -646,9 +664,11 @@ def c_d_groups(assets=c_assets(), a_ignore=[],market="CN"):
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
 
+
 @deco_wrap_line
 def log(message, elapsed=None):
     print(secondsToStr(), '-', message, '-', "Time Used:", elapsed)
+
 
 def endlog():
     sound("finished_all.mp3")
@@ -689,17 +709,26 @@ def std(xs):
     std = math.sqrt(variance)
     return std
 
+
 def switch_ts_code(ts_code):
-    dict_replace={".XSHE":".SZ", ".XSHG":".SH",".SZ":".XSHE",".SH":".XSHG"}
-    for key,value in dict_replace.items():
+    dict_replace = {".XSHE": ".SZ", ".XSHG": ".SH", ".SZ": ".XSHE", ".SH": ".XSHG"}
+    for key, value in dict_replace.items():
         if key in ts_code:
-            return re.sub(key,dict_replace[key],ts_code)
+            return re.sub(key, dict_replace[key], ts_code)
+
 
 def switch_trade_date(trade_date):
+    """e.g. 2018-01-29 to 20180101 and vice versa"""
     if "-" in str(trade_date):
-        return str(trade_date).replace("-","")
+        return str(trade_date).replace("-", "")
     else:
-        return str(str(trade_date)[0:4]+"-"+str(trade_date)[4:6]+"-"+str(trade_date)[6:8])
+        return str(str(trade_date)[0:4] + "-" + str(trade_date)[4:6] + "-" + str(trade_date)[6:8])
+
+
+def trade_date_to_investpy(trade_date):
+    trade_date = str(trade_date)
+    return trade_date[6:8] + "/" + trade_date[4:6] + "/" + trade_date[0:4]
+
 
 def timeseries_to_season(df):
     """converts a df time series to another df containing only the last day of season"""
@@ -715,7 +744,7 @@ def timeseries_to_season(df):
             last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
-    return timeseries_helper(df=df,a_index=a_index)
+    return timeseries_helper(df=df, a_index=a_index)
 
 
 def timeseries_to_week(df):
@@ -723,8 +752,8 @@ def timeseries_to_week(df):
     df_copy = df.copy()
     df_copy["weekday"] = df_copy.index
     df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x))  # can be way more efficient
-    df= df_copy[df_copy["weekday"] == "Friday"]
-    return timeseries_helper(df=df,a_index=list(df.index))
+    df = df_copy[df_copy["weekday"] == "Friday"]
+    return timeseries_helper(df=df, a_index=list(df.index))
 
 
 def timeseries_to_month(df):
@@ -741,7 +770,8 @@ def timeseries_to_month(df):
             last_season_day = df_year[df_year["month"] == month].last_valid_index()
             if last_season_day is not None:
                 a_index.append(last_season_day)
-    return timeseries_helper(df=df,a_index=a_index)
+    return timeseries_helper(df=df, a_index=a_index)
+
 
 def timeseries_to_year(df):
     """converts a df time series to another df containing only the last day of month"""
@@ -753,21 +783,23 @@ def timeseries_to_year(df):
     for year in df_copy["year"].unique():
         last_year_day = df_copy[df_copy["year"] == year].last_valid_index()
         a_index.append(last_year_day)
-    return timeseries_helper(df=df,a_index=a_index)
+    return timeseries_helper(df=df, a_index=a_index)
 
-def timeseries_helper(df,a_index):
+
+def timeseries_helper(df, a_index):
     """converts index to time series and cleans up. Return only ohlc and pct_chg"""
-    df_result=df.loc[a_index]
-    df_result =ohlcpp(df_result)
+    df_result = df.loc[a_index]
+    df_result = ohlcpp(df_result)
     df_result["pct_chg"] = df_result["close"].pct_change() * 100
     return df_result
 
-def custom_quantile(df, column, p_setting=[0,0.2,0.4,0.6,0.8,1], key_val=True):
+
+def custom_quantile(df, column, p_setting=[0, 0.2, 0.4, 0.6, 0.8, 1], key_val=True):
     d_df = {}
     for low_quant, high_quant in custom_pairwise_overlap(p_setting):
         low_val, high_val = list(df[column].quantile([low_quant, high_quant]))
 
-        key=f"{low_quant},{high_quant},{low_val},{high_val}" if key_val else f"{low_quant},{high_quant}"
+        key = f"{low_quant},{high_quant},{low_val},{high_val}" if key_val else f"{low_quant},{high_quant}"
         d_df[key] = df[df[column].between(low_val, high_val)]
     return d_df
 
@@ -791,40 +823,54 @@ def custom_pairwise_combination(a_array, n):
     """care about order: e.g. (0,1),(0,2)"""
     return list(itertools.combinations(a_array, n))
 
+
 def custom_pairwise_permutation(a_array, n):
     """dont care about order:  e.g. (1,0),(0,1)"""
     return list(itertools.permutations(a_array, n))
 
-def custom_pairwise_cartesian(a_array,n=1):
-    """cartesian product with itself"""
-    return list(itertools.product(a_array,repeat=n))
 
+def custom_pairwise_cartesian(a_array, n=1):
+    """cartesian product with itself"""
+    return list(itertools.product(a_array, repeat=n))
 
 
 # for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
 
-def drange(start,end,step):
-    return [x/100 for x in range(start,end,step)]
+
+def drange(start, end, step):
+    return [x / 100 for x in range(start, end, step)]
 
 
 def print_iterables(d):
-    if type(d)==dict:
-        for key,value in d.items():
-            print(key,value)
+    if type(d) == dict:
+        for key, value in d.items():
+            print(key, value)
     else:
         for x in d:
             print(x)
 
-def ohlcpp(df):
-    return df[["ts_code","period","open","high","low","close","pct_chg"]]
 
+def ohlcpp(df):
+    return df[["ts_code", "period", "open", "high", "low", "close", "pct_chg"]]
+
+
+def set_index(df,set_index):
+    if set_index:
+        return df.set_index(set_index,drop=True)
+    else:
+        for index_label in c_index_label():
+            if index_label in df.columns:
+                return df.set_index(index_label, drop=True)
+        else:
+            raise BaseException("none of the index labels are in the columns")
 
 
 def df_between(df, start_date, end_date):
-    df.index=df.index.astype(str)
+    df.index = df.index.astype(str)
     return df[(df.index >= start_date) & (df.index <= end_date)]
+
 
 # def btest_quantile(series):
 #     """this function should not exist. it helps in btest to eval quantil str in one line"""
@@ -837,13 +883,16 @@ def df_between(df, start_date, end_date):
 class interrupt_class:  # static method inside class is required to break the loop because two threads
     interrput = False
 
+
 def interrupt_user_input():
     input('Press a key \n')  # no need to store input, any key will trigger break
     interrupt_class.interrput = True
 
+
 def interrupt_start():
     break_detector = threading.Thread(target=interrupt_user_input, daemon=True)
     break_detector.start()
+
 
 def interrupt_confirmed():
     if interrupt_class.interrput:
@@ -856,6 +905,8 @@ def interrupt_confirmed():
 
 
 time_count = np.nan
+
+
 def time_counter(msg=""):
     return
     global time_count
@@ -865,13 +916,14 @@ def time_counter(msg=""):
     else:
         now = time.time()
         elapsed = now - time_count
-        time_count=now
+        time_count = now
         print("time_counter", msg, " : ", elapsed)
 
+
 def feather_csv_converter(path):
-    df=pd.read_feather(path)
-    csv_path=path.replace(".feather",".csv")
-    df.to_csv(csv_path,encoding="utf-8_sig")
+    df = pd.read_feather(path)
+    csv_path = path.replace(".feather", ".csv")
+    df.to_csv(csv_path, encoding="utf-8_sig")
     open_file(csv_path)
 
 
@@ -879,16 +931,15 @@ if __name__ == '__main__':
     pass
     import DB
 
-
-    market=r"CN"
-    asset=r"E"
-    freq=r"D"
-    ts_code=r"000002.SZ"
-    path=r"Market/"+market+r"/Asset/"+asset+r"/"+freq+r"/"+ts_code
-    path=r"Market/CN/Asset/E/D/000002.SZ.feather"
-    #path=f"Market//{market}//Asset//{asset}//{freq}//{ts_code}"
-    #path=f"Market\{market}\Asset\{asset}\{freq}\{ts_code}"
-    #path=f"Market\\{market}\\Asset\\{asset}\\{freq}\\{ts_code}"
+    market = r"CN"
+    asset = r"E"
+    freq = r"D"
+    ts_code = r"000002.SZ"
+    path = r"Market/" + market + r"/Asset/" + asset + r"/" + freq + r"/" + ts_code
+    path = r"Market/CN/Asset/E/D/000002.SZ.feather"
+    # path=f"Market//{market}//Asset//{asset}//{freq}//{ts_code}"
+    # path=f"Market\{market}\Asset\{asset}\{freq}\{ts_code}"
+    # path=f"Market\\{market}\\Asset\\{asset}\\{freq}\\{ts_code}"
     feather_csv_converter(path)
 
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
@@ -896,5 +947,3 @@ else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     sound("start.mp3")
     atexit.register(endlog)
     log("START")
-
-

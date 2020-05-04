@@ -4,23 +4,16 @@ import numpy as np
 import time as mytime
 import time
 import DB
-from itertools import combinations
-from itertools import permutations
 import LB
-import glob
 import os
 from datetime import datetime
 import traceback
 from scipy.stats import gmean
 import copy
 import cProfile
-import operator
-import threading
 import Alpha
-import matplotlib
 from numba import njit
 from numba import jit
-from sympy.utilities.iterables import multiset_permutations
 
 pd.options.mode.chained_assignment = None  # default='warn'
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
@@ -90,7 +83,7 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
         raise ValueError
 
     # PORT_C
-    df_port_c = df_trade_h.groupby("trade_date").agg("mean")  # TODO remove inefficient apply and groupby and loc
+    df_port_c = df_trade_h.groupby("trade_date").agg("mean")
     df_port_c = df_port_c.iloc[:-1]  # exclude last row because last row predicts future
 
     #helper function to make it clear and faster
@@ -331,7 +324,8 @@ def btest(settings=[{}]):
 
             # 2 ECONOMY
             # 3 FINANCIAL MARKET
-            # 6 PORTFOLIO = ASSET BALANCING, EFFICIENT FRONTIER, LEAST BETA #TODO
+            # 6 PORTFOLIO = ASSET BALANCING, EFFICIENT FRONTIER, LEAST BETA
+            # #TODO. Basically create portfolio with low beta when market is bad and high beta when market is good
 
             # 6.2 PORTFOLIO SELL SELECT
             p_winner_abv = setting["p_winner_abv"]
@@ -726,7 +720,7 @@ def btest_auto(pair=1, setting_master = btest_setting_master()):
                 if exclude_column not in column:
                     a_columns.append(column)
 
-        #step 1 TODO do with combination first. and if it is not enough, do with permutation = more combinations and calculation
+        #step 1 TODO do with pair 1,2,3
         for col_comb in LB.custom_pairwise_combination(a_array=a_columns,n=pair):
 
             #skip if file already exists

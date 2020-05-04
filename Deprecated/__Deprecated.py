@@ -184,8 +184,6 @@ def auto_corr_multiple():
 
 
 def cross_corr_multiple():
-    """TODO this should also be obsolte right now
-    """
     dict_indicators = {
         "pct_chg": {
             "a0_10": pd.DataFrame(),

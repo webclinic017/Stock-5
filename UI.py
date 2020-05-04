@@ -1,10 +1,8 @@
-import tushare as ts
 import pandas as pd
-import time
 import os.path
 import numpy as np
-from pathlib import Path
-
+import sys
+from PyQt5.QtWidgets import (QWidget, QPushButton,QLineEdit,QFileDialog,QHBoxLayout, QVBoxLayout, QApplication)
 import matplotlib
 import matplotlib.pyplot as plt
 import DB
@@ -17,9 +15,8 @@ import LB
 from scipy.signal import find_peaks
 from pandas.plotting import autocorrelation_plot
 import Alpha
-from multiprocessing import Process
-pd.options.mode.chained_assignment = None  # default='warn'
 
+pd.options.mode.chained_assignment = None  # default='warn'
 
 def create_gif(ts_code="000002.SZ"):
     images = []
@@ -133,9 +130,55 @@ def plot_peaks(df, abase, distance=120, height=""):
     plt.plot(peaks,y[peaks],"x")
     plt.show()
 
+
+class Feather_opener(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.initUI()
+
+    def initUI(self):
+        self.input = QLineEdit(self)
+        self.open = QPushButton("Open")
+        self.choose = QPushButton("Choose")
+        self.open.clicked.connect(self.open_clicked)
+        self.choose.clicked.connect(self.choose_clicked)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.input)
+        hbox.addWidget(self.open)
+        hbox.addWidget(self.choose)
+        vbox = QVBoxLayout()
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+        self.show()
+
+    def choose_clicked(self):
+        input_text = self.input.text()
+        if input_text:
+            path, format_egal = QFileDialog.getOpenFileName(self, 'Input Dialog', input_text, "*.feather")
+        else:
+            path, format_egal = QFileDialog.getOpenFileName(self, 'Input Dialog', 'D:\Stock\Market\CN', "*.feather")
+
+        if path not in [None,""]:
+            self.input.setText(path)
+            print("choose",path)
+            LB.feather_csv_converter(path)
+
+    def open_clicked(self):
+        path = self.input.text()
+        if path not in [None, ""]:
+            print("open", path)
+            LB.feather_csv_converter(path)
+
+def feather_opener():
+    app = QApplication(sys.argv)
+    lol = Feather_opener()
+    sys.exit(app.exec_())
+
 if __name__ == '__main__':
-    # support_resistance_multiple()
     pass
+    feather_opener()
     matplotlib.use("TkAgg")
 
 else:
