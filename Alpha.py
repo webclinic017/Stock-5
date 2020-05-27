@@ -312,14 +312,19 @@ def comp_chg(df, abase, inplace, name, cols):
 
 """NOTE!: This function requires df to have range index and not date!"""
 
-
+"""need to use range index first """
 @alpha_wrap
 def poly_fit(df, abase, inplace, name, cols, degree=1):
-    weights = np.polyfit(df[abase].index, df[abase], degree)
-    data = pd.Series(index=df[abase].index, data=0)
+
+    df_copy=df.reset_index()
+
+    weights = np.polyfit(df_copy[abase].index, df_copy[abase], degree)
+    data = pd.Series(index=df_copy[abase].index, data=0)
     for i, polynom in enumerate(weights):
-        data += (polynom * (df[abase].index ** (degree - i)))
-    df[name] = data
+        data += (polynom * (df_copy[abase].index ** (degree - i)))
+
+    df[name] = data.to_numpy()
+    df[f"{name}[residuals]"] = abs(df[name]-df[abase])
     return alpha_return(locals())
 
 

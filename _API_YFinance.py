@@ -24,3 +24,8 @@ def download_asset(ticker="AAPL"):
 
 
 
+if __name__ == '__main__':
+    import LB
+    #df=my_stock_historical_data("AAPL", country="united states", from_date="01/01/2000", to_date=LB.trade_date_to_investpy(LB.today()))
+    df=download_asset(ticker="AAPL")
+    print(df)

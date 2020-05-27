@@ -13,12 +13,11 @@ import itertools
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 
-#from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
+# from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
 
 sys.setrecursionlimit(1000000)
 
 array = [2, 5, 10, 20, 40, 60, 120, 240]
-
 
 """
 Atest (Assettest): 
@@ -31,9 +30,6 @@ Btest (Backtest):
 = COMPARE assets with other (relative to other)(quantile to others)
 
 """
-
-
-
 
 
 def extrema_rdm_2(df, abase, a_n=[60]):
@@ -239,9 +235,6 @@ def generic_comparison(df, abase):
     plt.show()
 
 
-
-
-
 # generate test for all fund stock index and for all strategy and variables.
 # a_freqs=[5, 10, 20, 40, 60, 80, 120, 160, 200, 240, 360, 500, 750],
 # kwargs= {"func": Alpha.macd, "fname": "macd_for_all", "a_kwargs": [{}, {}, {}, {}]}
@@ -274,31 +267,30 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
             try:
                 func_return_column = kwargs["func"](df=df_asset, **one_kwarg)[0]
 
-
                 """
                 -CAN NOT use sharp here Because len are different. smaller period will always have different std and hence different sharp
                 -could also add pearson, but since outcome is binary, no need for pearson"""
 
-                #init: calculate future price in theory by using tomorrow variable
-                #Very important: shift always -1 because wait for night to see the signal. fgain choices are limited by creation
+                # init: calculate future price in theory by using tomorrow variable
+                # Very important: shift always -1 because wait for night to see the signal. fgain choices are limited by creation
                 df_asset[f"tomorrow{tomorrow}"] = df_asset[f"open.fgain(freq={tomorrow})"].shift(-1)  # one day delayed signal. today signal, tomorrow buy, atomorrow sell
 
-                #general
+                # general
                 df_result.at[ts_code, "period"] = len(df_asset)
-                #df_result.at[ts_code, "sharp"] = asset_sharp = (df_asset[f"tomorrow{tomorrow}"]).mean()/(df_asset[f"tomorrow{tomorrow}"]).std()
+                # df_result.at[ts_code, "sharp"] = asset_sharp = (df_asset[f"tomorrow{tomorrow}"]).mean()/(df_asset[f"tomorrow{tomorrow}"]).std()
                 df_result.at[ts_code, "gmean"] = asset_gmean = gmean(df_asset[f"tomorrow{tomorrow}"].dropna())
                 df_result.at[ts_code, "daily_winrate"] = ((df_asset[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
 
-                #if strategy signals buy
+                # if strategy signals buy
                 df_long = df_asset[df_asset[func_return_column] == one_kwarg["score"]]
-                #df_result.at[ts_code, "long_sharp_"] = (df_long[f"tomorrow{tomorrow}"].mean()) / (df_long[f"tomorrow{tomorrow}"].std()) /asset_sharp
-                df_result.at[ts_code, "long_gmean_"] = gmean(df_long[f"tomorrow{tomorrow}"].dropna()) /asset_gmean
+                # df_result.at[ts_code, "long_sharp_"] = (df_long[f"tomorrow{tomorrow}"].mean()) / (df_long[f"tomorrow{tomorrow}"].std()) /asset_sharp
+                df_result.at[ts_code, "long_gmean_"] = gmean(df_long[f"tomorrow{tomorrow}"].dropna()) / asset_gmean
                 df_result.at[ts_code, "long_daily_winrate"] = ((df_long[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
-                df_result.at[ts_code, "long_occ"] = len(df_long)/len(df_asset)
+                df_result.at[ts_code, "long_occ"] = len(df_long) / len(df_asset)
 
-                #if strategy signals sell
+                # if strategy signals sell
                 df_short = df_asset[df_asset[func_return_column] == -one_kwarg["score"]]
-                #df_result.at[ts_code, "short_sharp_"] = (df_short[f"tomorrow{tomorrow}"].mean()) / (df_short[f"tomorrow{tomorrow}"].std()) / asset_sharp
+                # df_result.at[ts_code, "short_sharp_"] = (df_short[f"tomorrow{tomorrow}"].mean()) / (df_short[f"tomorrow{tomorrow}"].std()) / asset_sharp
                 df_result.at[ts_code, "short_gmean_"] = gmean(df_short[f"tomorrow{tomorrow}"].dropna()) / asset_gmean
                 df_result.at[ts_code, "short_daily_winrate"] = ((df_short[f"tomorrow{tomorrow}"] > 1).astype(int)).mean()
                 df_result.at[ts_code, "short_occ"] = len(df_short) / len(df_asset)
@@ -308,36 +300,34 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
                 print("exception at func execute", e)
                 continue
 
-        #create sample
-        if counter_outer==len(kwargs["a_kwargs"])-1:
-            key=[x for x in d_preload.keys()]
+        # create sample
+        if counter_outer == len(kwargs["a_kwargs"]) - 1:
+            key = [x for x in d_preload.keys()]
             df_sample = d_preload[key[0]]
             a_path_sample = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/SAMPLE_{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
             LB.to_csv_feather(df=df_sample, a_path=a_path_sample, skip_feather=True)
 
-
         # important check only if up/downtrend_gmean are not nan. Which means they actually exist for this strategy.
-        for one in ["long","short"]:
-            for two in ["gmean"]:#"sharp"
+        for one in ["long", "short"]:
+            for two in ["gmean"]:  # "sharp"
                 df_result.loc[df_result[f"{one}_{two}_"].notna(), f"{one}_{two}_better"] = (df_result.loc[df_result[f"{one}_{two}_"].notna(), f"{one}_{two}_"] > 1).astype(int)
-                df_result[f"{one}_{two}_std"]=df_result[f"{one}_{two}_"].std()
+                df_result[f"{one}_{two}_std"] = df_result[f"{one}_{two}_"].std()
 
         # very slow witgh DB.to_excel_with_static_data(df_ts_code=df_result, path=path, sort=[])
-        LB.to_csv_feather(df=df_result,a_path=a_path, skip_feather=True)
+        LB.to_csv_feather(df=df_result, a_path=a_path, skip_feather=True)
 
     # create summary for all
 
-    d_summary={"summary":pd.DataFrame()}
-    for one, two, three in itertools.product(["long", "short"],["gmean", ],  ["", "better", "std"]): #sharp
+    d_summary = {"summary": pd.DataFrame()}
+    for one, two, three in itertools.product(["long", "short"], ["gmean", ], ["", "better", "std"]):  # sharp
         name = f"{one}_{two}_{three}"
         print(name)
-        d_summary[name]=pd.DataFrame()
+        d_summary[name] = pd.DataFrame()
 
-
-    abase=one_kwarg['abase'] #abase should not change during iteration.otherwise unstable
+    abase = one_kwarg['abase']  # abase should not change during iteration.otherwise unstable
     for one_kwarg in kwargs["a_kwargs"]:
         param_string = '_'.join([f'{key}{value}' for key, value in one_kwarg.items()])
-        a_path =LB.a_path( f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
+        a_path = LB.a_path(f"Market/CN/Atest/{kwargs['fname']}/{one_kwarg['abase']}/{asset}_step{step}_{kwargs['fname']}_tomorrow{tomorrow}_{param_string}")
 
         print(f"summarizing {a_path[0]}")
         df_saved = pd.read_csv(a_path[0])
@@ -347,18 +337,17 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
         d_summary["summary"].at[a_path[0], "short_occ"] = df_saved["short_occ"].mean()
         d_summary["summary"].at[a_path[0], f"long_daily_winrate"] = df_saved["long_daily_winrate"].mean()
         d_summary["summary"].at[a_path[0], f"short_daily_winrate"] = df_saved["short_daily_winrate"].mean()
-        #d_summary["summary"].at[a_path[0], "sharp"] = df_saved["sharp"].mean()
+        # d_summary["summary"].at[a_path[0], "sharp"] = df_saved["sharp"].mean()
         d_summary["summary"].at[a_path[0], "gmean"] = df_saved["gmean"].mean()
 
-        d_helper={}
-        for one in ["long","short"]:
-            for two in ["gmean"]:#sharp
-                for three in ["","better","std"]:
+        d_helper = {}
+        for one in ["long", "short"]:
+            for two in ["gmean"]:  # sharp
+                for three in ["", "better", "std"]:
                     d_summary["summary"].at[a_path[0], f"{one}_{two}_{three}"] = d_helper[f"{one}_{two}_{three}"] = df_saved[f"{one}_{two}_{three}"].mean()
 
-
         # create heatmap only if two frequencies are involved in creation
-        #if up/downtrend exists, is it better than mean?
+        # if up/downtrend exists, is it better than mean?
         # if "sfreq" in one_kwarg and "bfreq" in one_kwarg:
         #     df_long_sharp.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = long_sharp
         #     df_short_sharp.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = short_sharp
@@ -366,10 +355,10 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
         #     df_short_sharp_better.at[f"{one_kwarg['sfreq']}_abv", one_kwarg["bfreq"]] = short_sharp_better
 
         for one in ["long", "short"]:
-            for two in [ "gmean"]:#sharp
+            for two in ["gmean"]:  # sharp
                 for three in ["", "better", "std"]:
-                    lol=d_helper[f"{one}_{two}_{three}"]
-                    d_summary[f"{one}_{two}_{three}"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = lol
+                    lol = d_helper[f"{one}_{two}_{three}"]
+                    d_summary[f"{one}_{two}_{three}"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'], one_kwarg['q_high']}"] = lol
 
         # d_summary["short_sharp"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = short_sharp
         # d_summary["long_sharp_better"].at[f"norm_freq{one_kwarg['norm_freq']}", f"{one_kwarg['q_low'],one_kwarg['q_high']}"] = long_sharp_better
@@ -381,10 +370,9 @@ def atest(asset="E", step=1, d_queries={}, kwargs={}, tomorrow=1):
 
 
 def atest_manu(fname="macd", a_abase=["close"]):
-
     for abase in a_abase:
 
-        #setting generation
+        # setting generation
         a_kwargs = []
         if fname == "macd":
             func = macd
@@ -395,22 +383,21 @@ def atest_manu(fname="macd", a_abase=["close"]):
         elif fname == "is_max":
             func = ismax
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-            for q in np.linspace(0, 1,6):
+            for q in np.linspace(0, 1, 6):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
         elif fname == "is_min":
             func = ismin
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 1}
-            for q in np.linspace(0, 1,6):
+            for q in np.linspace(0, 1, 6):
                 a_kwargs.append({"abase": abase, "q": q, "score": 1})
 
-        #run atest
+        # run atest
         LB.print_iterables(a_kwargs)
-        for asset in ["F","FD","G","I","E"]:
-            atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
+        for asset in ["F", "FD", "G", "I", "E"]:
+            atest(asset=asset, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset == "G" else {})
 
 
 def atest_auto(type=4):
-
     def auto(df, abase, q_low=0.2, q_high=0.4, norm_freq=240, type=1, score=10):
         """can be used on any indicator
         gq=Generic quantile
@@ -436,8 +423,8 @@ def atest_auto(type=4):
                 # this is the same as ROCP rate of change percent
                 df[f"norm_{name}"] = (df[abase] - df[abase].shift(1)) / df[abase].shift(1)
             elif type == 4:
-                #DONT ADD 1+ here
-                df[f"norm_{name}"] = 1+ df[abase].pct_change(norm_freq)
+                # DONT ADD 1+ here
+                df[f"norm_{name}"] = 1 + df[abase].pct_change(norm_freq)
 
         # create expanding quantile
         for q in [q_low, q_high]:
@@ -449,10 +436,9 @@ def atest_auto(type=4):
         df[f"in_q{q_low, q_high}_{name}"] = df[f"in_q{q_low, q_high}_{name}"].replace(to_replace=0, value=-score)
         return [f"in_q{q_low, q_high}_{name}", ]
 
-
-    #atest_auto starts here
-    for asset in ["E","I","FD"]: #,"FD","G","I","E"
-        #get example column of this asset
+    # atest_auto starts here
+    for asset in ["E", "I", "FD"]:  # ,"FD","G","I","E"
+        # get example column of this asset
         a_example_column = DB.get_example_column(asset=asset, numeric_only=True)
         # remove unessesary columns:
         a_columns = []
@@ -462,20 +448,19 @@ def atest_auto(type=4):
                     a_columns.append(column)
 
         for col in a_columns:
-            #setting generation
+            # setting generation
             a_kwargs = []
             func = auto
-            fname=func.__name__
-            tomorrow=1 #how many days to forward predict. ideally [1,5,10,20,60,240]
+            fname = func.__name__
+            tomorrow = 1  # how many days to forward predict. ideally [1,5,10,20,60,240]
             d_steps = {"F": 1, "FD": 1, "G": 1, "I": 1, "E": 4}
-            for norm_freq in [5,10,20,60,120,240,500]:
-                for q_low,q_high in LB.custom_pairwise_overlap(LB.drange(0,101,10)):
-                    a_kwargs.append({"abase": col, "q_low": q_low, "q_high":q_high,"norm_freq":norm_freq,"score": 1,"type":type})
+            for norm_freq in [5, 10, 20, 60, 120, 240, 500]:
+                for q_low, q_high in LB.custom_pairwise_overlap(LB.drange(0, 101, 10)):
+                    a_kwargs.append({"abase": col, "q_low": q_low, "q_high": q_high, "norm_freq": norm_freq, "score": 1, "type": type})
 
-            #run atest
+            # run atest
             LB.print_iterables(a_kwargs)
-            atest(asset=asset, tomorrow=tomorrow,step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset=="G" else {})
-
+            atest(asset=asset, tomorrow=tomorrow, step=d_steps[asset], kwargs={"func": func, "fname": fname, "a_kwargs": a_kwargs}, d_queries=LB.c_G_queries() if asset == "G" else {})
 
 
 def asset_start_season(df, n=1, type="year"):
@@ -491,82 +476,80 @@ def asset_start_season(df, n=1, type="year"):
     Pearson, spearman are to predict the strengh of prediction
     """
 
-    if type=="monthofyear": #1-12
-        suffix1="_y"
-        suffix2="_m"
-        df_year=LB.timeseries_to_year(df)
-        df_month = LB.timeseries_to_month(df)
-
-        df_year["index_copy"]=df_year.index
-        df_year["year"]=df_year["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-
-        df_month["index_copy"] = df_month.index
-        df_month["year"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-        df_month["month"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
-        df_month=df_month[df_month["month"] == n]
-
-        df_combined=pd.merge(df_year,df_month, on="year", how="left",suffixes=[suffix1,suffix2],sort=False)
-    elif type=="seasonofyear": #1-4
+    if type == "monthofyear":  # 1-12
         suffix1 = "_y"
-        suffix2 = "_s"
-        df_year = LB.timeseries_to_year(df)
-        df_season = LB.timeseries_to_season(df)
+        suffix2 = "_m"
+        df_year = LB.timeseries_convert(df, "Y")
+        df_month = LB.timeseries_convert(df, "W")
 
         df_year["index_copy"] = df_year.index
-        df_year["year"] = df_year["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+
+        df_month["index_copy"] = df_month.index
+        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
+        df_month = df_month[df_month["month"] == n]
+
+        df_combined = pd.merge(df_year, df_month, on="year", how="left", suffixes=[suffix1, suffix2], sort=False)
+    elif type == "seasonofyear":  # 1-4
+        suffix1 = "_y"
+        suffix2 = "_s"
+        df_year = LB.timeseries_convert(df, "Y")
+        df_season = LB.timeseries_convert(df, "S")
+
+        df_year["index_copy"] = df_year.index
+        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
 
         df_season["index_copy"] = df_season.index
-        df_season["year"] = df_season["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-        df_season["season"] = df_season["index_copy"].apply(lambda x: get_trade_date_datetime_s(x))  # can be way more efficient
+        df_season["year"] = df_season["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_season["season"] = df_season["index_copy"].apply(lambda x: LB.get_trade_date_datetime_s(x))  # can be way more efficient
         df_season = df_season[df_season["season"] == n]
 
         df_combined = pd.merge(df_year, df_season, on="year", how="left", suffixes=[suffix1, suffix2], sort=False)
 
         pass
-    elif type=="weekofmonth":#1-6
+    elif type == "weekofmonth":  # 1-6
         suffix1 = "_m"
         suffix2 = "_w"
-        df_month = LB.timeseries_to_month(df)
-        df_week = LB.timeseries_to_week(df)
+        df_month = LB.timeseries_convert(df, "M")
+        df_week = LB.timeseries_convert(df, "W")
 
         df_month["index_copy"] = df_month.index
-        df_month["year"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-        df_month["month"] = df_month["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
 
         df_week["index_copy"] = df_week.index
-        df_week["year"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-        df_week["month"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
-        df_week["weekofmonth"] = df_week["index_copy"].apply(lambda x: get_trade_date_datetime_weekofmonth(x))  # can be way more efficient
+        df_week["year"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_week["month"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
+        df_week["weekofmonth"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_weekofmonth(x))  # can be way more efficient
         df_week = df_week[df_week["weekofmonth"] == n]
 
-        df_combined = pd.merge(df_month, df_week, on=["year","month"], how="left", suffixes=[suffix1, suffix2], sort=False)
+        df_combined = pd.merge(df_month, df_week, on=["year", "month"], how="left", suffixes=[suffix1, suffix2], sort=False)
 
 
-    elif type=="dayofweek": #1-5
+    elif type == "dayofweek":  # 1-5
         pass
 
-    #many ways to determine that
-    periods=len(df_combined)
-    TT= len(df_combined[(df_combined[f"pct_chg{suffix2}"]>0) & (df_combined[f"pct_chg{suffix1}"]>0) ])/periods
-    TF= len(df_combined[(df_combined[f"pct_chg{suffix2}"]>0) & (df_combined[f"pct_chg{suffix1}"]<0) ])/periods
-    FT= len(df_combined[(df_combined[f"pct_chg{suffix2}"]<0) & (df_combined[f"pct_chg{suffix1}"]>0) ])/periods
-    FF= len(df_combined[(df_combined[f"pct_chg{suffix2}"]<0) & (df_combined[f"pct_chg{suffix1}"]<0) ])/periods
-    pearson=df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"])
-    spearman=df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"],method="spearman")
-    return pd.Series({"periods":periods,"TT":TT,"TF":TF,"FT":FT,"FF":FF,"pearson":pearson,"spearman":spearman})
-
+    # many ways to determine that
+    periods = len(df_combined)
+    TT = len(df_combined[(df_combined[f"pct_chg{suffix2}"] > 0) & (df_combined[f"pct_chg{suffix1}"] > 0)]) / periods
+    TF = len(df_combined[(df_combined[f"pct_chg{suffix2}"] > 0) & (df_combined[f"pct_chg{suffix1}"] < 0)]) / periods
+    FT = len(df_combined[(df_combined[f"pct_chg{suffix2}"] < 0) & (df_combined[f"pct_chg{suffix1}"] > 0)]) / periods
+    FF = len(df_combined[(df_combined[f"pct_chg{suffix2}"] < 0) & (df_combined[f"pct_chg{suffix1}"] < 0)]) / periods
+    pearson = df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"])
+    spearman = df_combined[f"pct_chg{suffix2}"].corr(df_combined[f"pct_chg{suffix1}"], method="spearman")
+    return pd.Series({"periods": periods, "TT": TT, "TF": TF, "FT": FT, "FF": FF, "pearson": pearson, "spearman": spearman})
 
 
 def asset_start_season_initiator(asset="I", a_n=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], type="monthofyear"):
-
     if asset == "I":
-        d_queries_ts_code={"I":["category != '债券指数' "]}
-    elif asset=="G":
-        d_queries_ts_code=LB.c_G_queries()
+        d_queries_ts_code = {"I": ["category != '债券指数' "]}
+    elif asset == "G":
+        d_queries_ts_code = LB.c_G_queries()
     else:
         d_queries_ts_code = {}
 
-    d_preload=DB.preload(asset=asset,step=1,d_queries_ts_code=d_queries_ts_code)
+    d_preload = DB.preload(asset=asset, step=1, d_queries_ts_code=d_queries_ts_code)
     for n in a_n:
         a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/n{n}")
         if not os.path.isfile(a_path[0]):
@@ -574,25 +557,24 @@ def asset_start_season_initiator(asset="I", a_n=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
 
             for ts_code, df_asset in d_preload.items():
                 print(f"start_tester {ts_code} {n}")
-                s=asset_start_season(df=df_asset, n=n, type=type)
-                s["ts_code"]=ts_code
+                s = asset_start_season(df=df_asset, n=n, type=type)
+                s["ts_code"] = ts_code
                 a_result.append(s)
-            df_result=pd.DataFrame(a_result)
-            LB.to_csv_feather(df=df_result,a_path=a_path)
+            df_result = pd.DataFrame(a_result)
+            LB.to_csv_feather(df=df_result, a_path=a_path)
 
-    #summarizing summary
-    a_result=[]
+    # summarizing summary
+    a_result = []
     for n in a_n:
         a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/n{n}")
-        df=DB.get(a_path, set_index="index")
-        df=df.mean()
+        df = DB.get(a_path, set_index="index")
+        df = df.mean()
         a_result.append(df)
-        print("load",a_path[0])
+        print("load", a_path[0])
     df_result = pd.DataFrame(a_result)
 
-    a_path=LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/summary_{type}_{asset}")
-    LB.to_csv_feather(df=df_result, a_path=a_path,skip_feather=True)
-
+    a_path = LB.a_path(f"Market/CN/ATest/start_season/{type}/{asset}/summary_{type}_{asset}")
+    LB.to_csv_feather(df=df_result, a_path=a_path, skip_feather=True)
 
 
 def asset_prob_gain_asset(asset="E"):
@@ -603,53 +585,48 @@ def asset_prob_gain_asset(asset="E"):
     The goal is to predict the direction of the movement.
     A: the more previous days are down, the more likely future days are up
     """
-    d_preload=DB.preload(asset=asset,step=10)
-    for n in [3,4,5,6,10,20,40,60]:
-        df_result=pd.DataFrame()
-        df_heat=pd.DataFrame()
-        path=f"Market/CN/Atest/prob_gain/{n}_summary.xlsx"
+    d_preload = DB.preload(asset=asset, step=10)
+    for n in [3, 4, 5, 6, 10, 20, 40, 60]:
+        df_result = pd.DataFrame()
+        df_heat = pd.DataFrame()
+        path = f"Market/CN/Atest/prob_gain/{n}_summary.xlsx"
 
         if not os.path.isfile(path):
-            for ts_code , df_asset in d_preload.items():
+            for ts_code, df_asset in d_preload.items():
                 print(f"prob_gain {n}: {ts_code}")
 
-                #reset index to later easier calcualte days
-                df_asset=df_asset.reset_index()
+                # reset index to later easier calcualte days
+                df_asset = df_asset.reset_index()
 
-                df_asset["probgaingeneric"]=(df_asset["pct_chg"]>0).astype(int)
+                df_asset["probgaingeneric"] = (df_asset["pct_chg"] > 0).astype(int)
                 df_asset[f"probggain_init{n}"] = df_asset["probgaingeneric"].rolling(n).sum()
 
-                for subn in range(0,n+1):
-                    #Mark day where % of past n days are positive = meet the criteria
-                    df_asset[f"probggain_marker{n,subn}"]=0
-                    df_asset.loc[df_asset[f"probggain_init{n}"]==subn,f"probggain_marker{n,subn}"]=1
+                for subn in range(0, n + 1):
+                    # Mark day where % of past n days are positive = meet the criteria
+                    df_asset[f"probggain_marker{n, subn}"] = 0
+                    df_asset.loc[df_asset[f"probggain_init{n}"] == subn, f"probggain_marker{n, subn}"] = 1
 
-                    df_filter=df_asset[df_asset[f"probggain_marker{n,subn}"]==1]
-                    occurence=len(df_filter)/len(df_asset)
-                    sharp_fgain5=df_filter["close.fgain5"].mean()/df_filter["close.fgain5"].std() if df_filter["close.fgain5"].std()!=0 else np.nan
+                    df_filter = df_asset[df_asset[f"probggain_marker{n, subn}"] == 1]
+                    occurence = len(df_filter) / len(df_asset)
+                    sharp_fgain5 = df_filter["close.fgain5"].mean() / df_filter["close.fgain5"].std() if df_filter["close.fgain5"].std() != 0 else np.nan
 
-
-                    #for each match day in df_filter, check out their next 5 days
-                    a_pct_positive=[]
+                    # for each match day in df_filter, check out their next 5 days
+                    a_pct_positive = []
                     for index in df_filter.index:
-                        df_part=df_asset.loc[index+1:index+6]
+                        df_part = df_asset.loc[index + 1:index + 6]
                         print(f"prob_gain {n}: {ts_code} {len(df_part)}")
                         if not df_part.empty:
-                            pct_positive=len(df_part[df_part["pct_chg"]>0])/len(df_part)
+                            pct_positive = len(df_part[df_part["pct_chg"] > 0]) / len(df_part)
                             a_pct_positive.append(pct_positive)
 
+                    s_result = pd.Series(a_pct_positive)
+                    positive = s_result.mean()
 
-                    s_result=pd.Series(a_pct_positive)
-                    positive=s_result.mean()
-
-                    df_result.at[ts_code,f"{n,subn}_occ"]=occurence
+                    df_result.at[ts_code, f"{n, subn}_occ"] = occurence
                     df_result.at[ts_code, f"{n, subn}_pct_positive"] = positive
-                    df_result.at[ts_code,f"{n,subn}_sharp_gain5"]=sharp_fgain5
+                    df_result.at[ts_code, f"{n, subn}_sharp_gain5"] = sharp_fgain5
 
-
-            LB.to_excel(path=path,d_df={"Overview":df_result,"Heat":df_heat})
-
-
+            LB.to_excel(path=path, d_df={"Overview": df_result, "Heat": df_heat})
 
 
 def asset_extrema():
@@ -681,17 +658,17 @@ def asset_extrema():
     A: sometimes you have to skip last couple high/lows because they are a new trend
     """
 
-    df= DB.get_asset(ts_code="000001.SH", asset="I")
-    df=LB.ohlcpp(df)
-    df=df.reset_index()
+    df = DB.get_asset(ts_code="000001.SH", asset="I")
+    df = LB.ohlcpp(df)
+    df = df.reset_index()
 
-    df["hp"]= highpass(df=df,abase="close", freq=20,inplace=False)
-    df["lp"]= lowpass(df=df,abase="close", freq=20,inplace=False)
+    df["hp"] = highpass(df=df, abase="close", freq=20, inplace=False)
+    df["lp"] = lowpass(df=df, abase="close", freq=20, inplace=False)
 
-    order=20
-    signal=100
-    distance=1
-    abase="close"
+    order = 20
+    signal = 100
+    distance = 1
+    abase = "close"
 
     from scipy.signal import argrelmin, argrelmax, peak_prominences
 
@@ -760,10 +737,9 @@ def asset_extrema():
             df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
 
         df[f"{label}_diff"] = df[f"{label}_diff"].replace(0, np.nan).fillna(method="ffill")
-        df[f"{label}_diff"] = df[f"{label}_diff"]*40
+        df[f"{label}_diff"] = df[f"{label}_diff"] * 40
 
-
-    #This is actually a second function to generate PLOT
+    # This is actually a second function to generate PLOT
     # simualte past iteration
     if False:
         matplotlib.use("TkAgg")
@@ -831,15 +807,12 @@ def asset_extrema():
     plt.plot(df[label])
 
     plt.plot(df["bott_diff"])
-    #plt.plot(df["peakk_diff"])
+    # plt.plot(df["peakk_diff"])
 
     plt.plot(df["bott_pvalue"], "1")
     plt.plot(df["peakk_pvalue"], "1")
 
     plt.show()
-
-
-
 
 
 def asset_intraday_analysis():
@@ -850,8 +823,8 @@ def asset_intraday_analysis():
     -if first 15 min are positive, there are 65% the whole day is positive
     """
     var = 15
-    asset="I"
-    for ts_code in ["000001.SH","399006.SZ","399001.SZ"]:
+    asset = "I"
+    for ts_code in ["000001.SH", "399006.SZ", "399001.SZ"]:
         df = pd.read_csv(f"D:\Stock\Market\CN\Asset\{asset}\{var}m/{ts_code}.csv")
 
         df["pct_chg"] = df["close"].pct_change()
@@ -864,12 +837,12 @@ def asset_intraday_analysis():
 
         df_result = pd.DataFrame()
         a_intraday = list(df["intraday"].unique())
-        #1.part stats about mean and volatility
+        # 1.part stats about mean and volatility
         for intraday in a_intraday:
             df_filter = df[df["intraday"] == intraday]
             mean = df_filter["pct_chg"].mean()
-            pct_chg_pos=len(df_filter[df_filter["pct_chg"]>0])/len(df_filter)
-            pct_chg_neg=len(df_filter[df_filter["pct_chg"]<0])/len(df_filter)
+            pct_chg_pos = len(df_filter[df_filter["pct_chg"] > 0]) / len(df_filter)
+            pct_chg_neg = len(df_filter[df_filter["pct_chg"] < 0]) / len(df_filter)
             std = df_filter["pct_chg"].std()
             sharp = mean / std
             df_result.at[intraday, "mean"] = mean
@@ -879,35 +852,34 @@ def asset_intraday_analysis():
             df_result.at[intraday, "sharp"] = sharp
         df_result.to_csv(f"intraday{ts_code}.csv")
 
-
-        #2.part:prediction. first 15 min predict today
-        a_results=[]
+        # 2.part:prediction. first 15 min predict today
+        a_results = []
         for intraday in a_intraday:
-            df_day= DB.get_asset(ts_code=ts_code, asset=asset)
+            df_day = DB.get_asset(ts_code=ts_code, asset=asset)
             df_filter = df[df["intraday"] == intraday]
-            df_filter["trade_date"]=df_filter["day"].apply(LB.switch_trade_date)
-            df_filter["trade_date"]=df_filter["trade_date"].astype(int)
-            df_final=pd.merge(LB.ohlcpp(df=df_day), df_filter, on="trade_date", suffixes=["_d", "_15m"], sort=False)
+            df_filter["trade_date"] = df_filter["day"].apply(LB.switch_trade_date)
+            df_filter["trade_date"] = df_filter["trade_date"].astype(int)
+            df_final = pd.merge(LB.ohlcpp(df=df_day), df_filter, on="trade_date", suffixes=["_d", "_15m"], sort=False)
 
             df_final["pct_chg_d"] = df_final["pct_chg_d"].shift(-1)
             df_final.to_csv(f"intraday_prediction_{ts_code}.csv")
 
-            len_df=len(df_final)
+            len_df = len(df_final)
 
-            TT= len(df_final[(df_final["pct_chg_15m"]>0) & (df_final["pct_chg_d"]>0)])/len_df
-            TF= len(df_final[(df_final["pct_chg_15m"]>0) & (df_final["pct_chg_d"]<0)])/len_df
-            FT= len(df_final[(df_final["pct_chg_15m"]<0) & (df_final["pct_chg_d"]>0)])/len_df
-            FF= len(df_final[(df_final["pct_chg_15m"]<0) & (df_final["pct_chg_d"]<0)])/len_df
+            TT = len(df_final[(df_final["pct_chg_15m"] > 0) & (df_final["pct_chg_d"] > 0)]) / len_df
+            TF = len(df_final[(df_final["pct_chg_15m"] > 0) & (df_final["pct_chg_d"] < 0)]) / len_df
+            FT = len(df_final[(df_final["pct_chg_15m"] < 0) & (df_final["pct_chg_d"] > 0)]) / len_df
+            FF = len(df_final[(df_final["pct_chg_15m"] < 0) & (df_final["pct_chg_d"] < 0)]) / len_df
 
-            #rolling version
-            rolling=5
-            df_final[f"pct_chg_15m_r{rolling}"]=df_final[f"pct_chg_15m"].rolling(rolling).mean()
-            pearson=df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"])
-            spearman=df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"],method="spearman")
+            # rolling version
+            rolling = 5
+            df_final[f"pct_chg_15m_r{rolling}"] = df_final[f"pct_chg_15m"].rolling(rolling).mean()
+            pearson = df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"])
+            spearman = df_final[f"pct_chg_15m_r{rolling}"].corr(df_final["pct_chg_d"], method="spearman")
 
-            s=pd.Series({"intraday":intraday,"TT":TT,"TF":TF,"FT":FT,"FF":FF,"pearson":pearson,"sparman":spearman})
+            s = pd.Series({"intraday": intraday, "TT": TT, "TF": TF, "FT": FT, "FF": FF, "pearson": pearson, "sparman": spearman})
             a_results.append(s)
-        df_predict_result=pd.DataFrame(a_results)
+        df_predict_result = pd.DataFrame(a_results)
         df_predict_result.to_csv(f"intraday_prediction_result_{ts_code}.csv")
 
 
@@ -915,6 +887,8 @@ def asset_intraday_analysis():
 # ASSET INFORMATION
 # measures the fundamentals aspect
 """does not work in general. past can not predict future here"""
+
+
 def asset_fundamental(start_date, end_date, freq, assets=["E"]):
     asset = assets[0]
     ts_codes = DB.get_ts_code(a_asset=[asset])
@@ -1139,46 +1113,55 @@ def asset_volatility(start_date, end_date, assets, freq):
 
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
-def asset_bullishness(market="CN"):
-    #init
-    df_ts_code = DB.get_ts_code(a_asset=["E","I","FD","F","G"],market=market)[::1]
-    df_result = pd.DataFrame()
-    df_sh_index = DB.get_asset(ts_code="000001.SH", asset="I", market="CN")
-    df_sh_index["sh_close"] = df_sh_index["close"]
-    df_sz_index = DB.get_asset(ts_code="399001.SZ", asset="I", market="CN")
-    df_sz_index["sz_close"] = df_sz_index["close"]
-    df_cy_index = DB.get_asset(ts_code="399006.SZ", asset="I", market="CN")
-    df_cy_index["cy_close"] = df_cy_index["close"]
+def asset_bullishness(market="CN", step=1):
+    # init
 
-    #loop
-    for ts_code, asset in zip(df_ts_code.index, df_ts_code["asset"]):
-        print("calculate bullishness",market, ts_code, asset)
+    df_ts_code = DB.get_ts_code(a_asset=["E", "I", "FD", "F", "G"], market=market)[::1]
+    df_result = pd.DataFrame()
+
+    preload_index = DB.preload_index(market=market)
+    for ts_code_index, df_index in preload_index.items():
+        df_index[f"{ts_code_index}_close"] = df_index["close"]
+
+    # loop
+    for ts_code, asset in zip(df_ts_code.index[::step], df_ts_code["asset"][::step]):
+        print("calculate bullishness", market, asset, ts_code)
 
         try:
             df_asset = DB.get_asset(ts_code=ts_code, asset=asset, market=market)
             df_result.at[ts_code, "period"] = len(df_asset)
             df_asset = df_asset[(df_asset["period"] > 240)]
+
         except:
             continue
 
         if len(df_asset) > 100:
+
+            d_asset_freq = {freq: LB.timeseries_convert(df_asset, freq) for freq in ["D", "M", "Y"]}
+
+            # scale close to all start at 1
+            df_asset["close"] = df_asset["close"] / df_asset.at[df_asset.index[0], "close"]
+
             # assed gained from lifetime. bigger better
-            df_result.at[ts_code, "comp_gain"] =comp_gain= df_asset["close"].iat[len(df_asset) - 1] / df_asset["close"].iat[0]
+            df_result.at[ts_code, "comp_gain"] = comp_gain = df_asset["close"].iat[len(df_asset) - 1]
 
             # period. the longer the better
-            df_result.at[ts_code, "period"] =period= len(df_asset)
+            df_result.at[ts_code, "period"] = period = len(df_asset)
 
             # gain / period
-            df_result.at[ts_code, "gain"] = gain=df_result.at[ts_code, "comp_gain"] / len(df_asset)
+            df_result.at[ts_code, "gain"] = gain = df_result.at[ts_code, "comp_gain"] / len(df_asset)
 
             # Geomean.
-            helper = 1 + (df_asset["pct_chg"] / 100)
-            df_result.at[ts_code, "geomean"] = gmean(helper)
+
+            for freq, df_asset_freq in d_asset_freq.items():
+                df_asset_freq["pct_change"] = 1 + df_asset_freq["close"].pct_change()
+                df_result.at[ts_code, f"{freq}_geomean"] = gmean(df_asset_freq["pct_change"].dropna())
 
             # sharp/sortino ratio: Note my sharp ratio is not anuallized but period adjusted
-            s=df_asset["pct_chg"]
-            df_result.at[ts_code, "sharp"] = (s.mean()/s.std())*np.sqrt(len(s))
-            #df_result.at[ts_code, "sortino"] = (s.mean()/s[s<0].std())*np.sqrt(len(s))
+            #for freq, df_asset_freq in d_asset_freq.items():
+                #s = df_asset_freq["pct_change"]
+                #df_result.at[ts_code, f"{freq}_sharp"] = (s.mean() / s.std()) * np.sqrt(len(s))
+                # df_result.at[ts_code, "sortino"] = (s.mean()/s[s<0].std())*np.sqrt(len(s))
 
             # times above ma, bigger better
             # df_asset["abv_ma"] = 0
@@ -1201,51 +1184,79 @@ def asset_bullishness(market="CN"):
             # df_result.at[ts_code, "highpass_mean"] = highpass_mean
 
             # volatility pct_ chg, less than better
-            #df_result.at[ts_code, "rapid_down"] = len(df_asset[df_asset["pct_chg"] <= (-5)]) / len(df_asset)
+            # df_result.at[ts_code, "rapid_down"] = len(df_asset[df_asset["pct_chg"] <= (-5)]) / len(df_asset)
 
             # beta, lower the better
-            df_result.at[ts_code, "beta_sh"] = LB.calculate_beta(df_asset["close"], df_sh_index["sh_close"])
-            df_result.at[ts_code, "beta_sz"] = LB.calculate_beta(df_asset["close"], df_sz_index["sz_close"])
-            df_result.at[ts_code, "beta_cy"] = LB.calculate_beta(df_asset["close"], df_cy_index["cy_close"])
+            for ts_code_index, df_index in preload_index.items():
+                df_result.at[ts_code, f"{ts_code_index}_beta"] = LB.calculate_beta(df_asset["close"], df_index[f"{ts_code_index}_close"])
 
             # is_max. How long the current price is around the all time high. higher better
             # df_asset["expanding_max"] = df_asset["close"].expanding(240).max()
             # df_result.at[ts_code, "is_max"] = len(df_asset[(df_asset["close"] / df_asset["expanding_max"]).between(0.9, 1.1)]) / len(df_asset)
 
             # polyfit with residual: the less residual the better
-            _,residual=LB.polyfit_full(df["close"].index, df["close"],degree=2)
+            try:  # sometimes causes polyfit error
+                pass
+                # fit, _ = Alpha.poly_fit(df=df_asset, abase="close", inplace=True, degree=2)
+
+                # method 1:naive calculation using residuals: result: did not work well
+
+                # df_asset["ideal"] = df_asset["period"] ** np.e
+                # ratio = df_asset.at[df_asset.index[-1], "ideal"] / df_asset.at[df_asset.index[-1], "close"]
+                # df_asset["ideal"] = df_asset["ideal"] / ratio
+                # UI.plot_chart(df, ["close", fit, "ideal"])
+                # residuals = (df_asset["ideal"] - df_asset[fit]).abs().sum()
+                # df_result.at[ts_code, "residual"] = residuals
+                # df_result.at[ts_code, "residual_div(period)"] = residuals / (len(df_asset)**np.e)
+                # df_result.at[ts_code, "residual_pow(1/period)"] = residuals ** (1 / len(df_asset))
+
+                # method 2: using fited curve to calculate ismax. if the fited curve is always at max, it is a good sign
+                # did not work well
+                # df_asset["e_max"]=df_asset[fit].expanding(240).max()
+                # df_asset["e_ismax"]= (df_asset[fit]==df_asset["e_max"]).astype(int)
+                # df_result.at[ts_code, "e_max"] = df_asset["e_ismax"].mean()
+
+                # method 3. How often a stock close is higher than last close
+
+            except:
+                pass
 
             # dividend
             if asset == "E" and market == "CN":
                 if "dv_ttm" in df_asset.columns:
                     df_result.at[ts_code, "dividend(not counted)"] = df_asset["dv_ttm"].mean()
 
-
-                #qdii research
-                df_qdii_research= DB.get_asset(ts_code=ts_code, freq="D_qdii_research", market="CN")
+                # qdii research
+                df_qdii_research = DB.get_asset(ts_code=ts_code, freq="qdii_research", market="CN")
                 if not df_qdii_research.empty:
                     df_result.at[ts_code, "qdii_research(not counted)"] = len(df_qdii_research)
-                    df_result.at[ts_code, "qdii_research/period(not counted)"] =  len(df_qdii_research)/ len(df_asset)
+                    df_result.at[ts_code, "qdii_research/period(not counted)"] = len(df_qdii_research) / len(df_asset)
 
-
-                #qdii grade
-                df_qdii_grade= DB.get_asset(ts_code=ts_code, freq="D_qdii_grade", market="CN")
+                # qdii grade
+                df_qdii_grade = DB.get_asset(ts_code=ts_code, freq="qdii_grade", market="CN")
                 if not df_qdii_grade.empty:
                     df_result.at[ts_code, "qdii_grade(not counted)"] = len(df_qdii_grade)
-                    df_result.at[ts_code, "qdii_grade/period(not counted)"] =  len(df_qdii_grade)/ len(df_asset)
-                    df_result.at[ts_code, "qdii_grade_pos(not counted)"] = len(df_qdii_grade[ (df_qdii_grade["grade"]=="买入")  | (df_qdii_grade["grade"]=="增持")]) / len(df_qdii_grade)
+                    df_result.at[ts_code, "qdii_grade/period(not counted)"] = len(df_qdii_grade) / len(df_asset)
+                    df_result.at[ts_code, "qdii_grade_pos(not counted)"] = len(df_qdii_grade[(df_qdii_grade["grade"] == "买入") | (df_qdii_grade["grade"] == "增持")]) / len(df_qdii_grade)
 
     # aggregate and rank
-    gmean_rank=df_result["geomean"].rank(ascending=False)
-    sharp_rank=df_result["sharp"].rank(ascending=False)
-    beta_sh_rank=df_result["beta_sh"].rank(ascending=True)
-    beta_sz_rank=df_result["beta_sz"].rank(ascending=True)
-    beta_cy_rank=df_result["beta_cy"].rank(ascending=True)
-    df_result["final_rank"] = gmean_rank*0.45+\
-                              sharp_rank*0.40+\
-                              beta_sh_rank*0.05+\
-                              beta_sz_rank*0.05+\
-                              beta_cy_rank*0.05
+    D_gmean_rank = df_result["D_geomean"].rank(ascending=False)
+    M_gmean_rank = df_result["M_geomean"].rank(ascending=False)
+    Y_gmean_rank = df_result["Y_geomean"].rank(ascending=False)
+    gain_rank= df_result["gain"].rank(ascending=False)
+    # D_sharp_rank = df_result["D_sharp"].rank(ascending=False)
+    # M_sharp_rank = df_result["M_sharp"].rank(ascending=False)
+    # Y_sharp_rank = df_result["Y_sharp"].rank(ascending=False)
+    a_beta = [df_result[f"{ts_code_index}_beta"].rank(ascending=True) for ts_code_index in preload_index]
+    df_result["final_rank"] = D_gmean_rank * 0.50 + \
+                              M_gmean_rank * 0.30 + \
+                              Y_gmean_rank * 0.05 + \
+                              gain_rank * 0.15
+                              # a_beta[0] * 0.05 + \
+                              # a_beta[1] * 0.05 + \
+                              # a_beta[2] * 0.05
+
+    df_result.to_csv("result.csv")
 
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}.xlsx", group_result=True, market=market)
 
@@ -1312,29 +1323,26 @@ def asset_candlestick_analysis_multiple():
     path = "Market/CN/Atest/candlestick/summary.csv"
     df_all_result.to_csv(path, index=True)
 
-def asset_distribution(asset="I", column="close", bins=10):
-    d_preload=DB.preload(asset=asset,step=5)
 
-    for freq in [10,20,40,60,120,240,500]:
+def asset_distribution(asset="I", column="close", bins=10):
+    d_preload = DB.preload(asset=asset, step=5)
+
+    for freq in [10, 20, 40, 60, 120, 240, 500]:
         a_path = LB.a_path(f"Market/CN/Atest/distribution/{asset}/{column}/{column}_freq{freq}_bin{bins}")
-        df_result=pd.DataFrame()
+        df_result = pd.DataFrame()
         if not os.path.isfile(a_path[0]):
             for ts_code, df in d_preload.items():
                 print(f"{asset}, freq{freq}, bins{bins}, {ts_code}, {column}")
 
-                #normalize past n values to be between 0 and 1. 0 is lowest and 1 is highest.
+                # normalize past n values to be between 0 and 1. 0 is lowest and 1 is highest.
                 df["norm"] = df["close"].rolling(freq).apply(Alpha.normalize_apply, raw=False)
 
-                #count cut as result
-                df_result.at[ts_code,"len"]=len(df)
-                for c1,c2 in LB.custom_pairwise_overlap(LB.drange(0,101,bins)):
-                    df_result.at[ts_code,f"c{c1,c2}"]=len(df[df["norm"].between(c1,c2)])
+                # count cut as result
+                df_result.at[ts_code, "len"] = len(df)
+                for c1, c2 in LB.custom_pairwise_overlap(LB.drange(0, 101, bins)):
+                    df_result.at[ts_code, f"c{c1, c2}"] = len(df[df["norm"].between(c1, c2)])
 
-            LB.to_csv_feather(df_result,a_path=a_path,skip_feather=True)
-
-
-
-
+            LB.to_csv_feather(df_result, a_path=a_path, skip_feather=True)
 
 
 def date_daily_stocks_abve():
@@ -1355,18 +1363,19 @@ def date_daily_stocks_abve():
     for ts_code, df in df_asset.items():
         print("ts_code", ts_code)
         for pct in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
-            df_copy=df[ (100*(df["pct_chg_open"]-1) >  pct) ]
-            df_result.at[ts_code,f"pct_chg_open > {pct} pct"]=len(df_copy)/len(df)
+            df_copy = df[(100 * (df["pct_chg_open"] - 1) > pct)]
+            df_result.at[ts_code, f"pct_chg_open > {pct} pct"] = len(df_copy) / len(df)
 
             df_copy = df[(100 * (df["pct_chg_close"] - 1) > pct)]
             df_result.at[ts_code, f"pct_chg_close > {pct} pct"] = len(df_copy) / len(df)
 
-            df_copy = df[(((df["close"]/df["open"]) - 1)*100 > pct)] #trade
+            df_copy = df[(((df["close"] / df["open"]) - 1) * 100 > pct)]  # trade
             df_result.at[ts_code, f"trade > {pct} pct"] = len(df_copy) / len(df)
 
-            df_copy = df[ ((df["co_pct_chg"]-1)*100 > pct)] #today open and yester day close
+            df_copy = df[((df["co_pct_chg"] - 1) * 100 > pct)]  # today open and yester day close
             df_result.at[ts_code, f"non trade > {pct} pct"] = len(df_copy) / len(df)
     df_result.to_csv("test.csv")
+
 
 def date_volatility():
     """one day pct_chg std
@@ -1386,9 +1395,6 @@ def date_volatility():
     df_result.to_csv("volatilty.csv")
 
 
-
-
-
 if __name__ == '__main__':
     # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
     #     atest_manu(fname="gq_rsi", a_abase=[column])
@@ -1406,17 +1412,15 @@ if __name__ == '__main__':
     #     lol["period"]=Alpha.period(df=lol,inplace=False)
     #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
 
-    #asset_bullishness(market="US")
+    asset_bullishness(market="US", step=1)
+    asset_bullishness(market="CN", step=1)
 
-    #todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
+    # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 
-
-    #asset_extrema()
+    # asset_extrema()
     # #prob_gain_asset()
     # df=DB.get_asset()
     # Plot.plot_distribution(df,abase="pct_chg")
-
-
 
     # for asset in ["E","I","G"]:
     #     for column in ["pct_chg"]:
@@ -1424,10 +1428,10 @@ if __name__ == '__main__':
     #
     # distribution(asset="E", column="turnover_rate")
 
-    #no_better_name()
-    atest_auto()
-    #start_tester(asset="E",type="monthofyear")
+    # no_better_name()
+    # atest_auto()
+    # start_tester(asset="E",type="monthofyear")
     # df_sh=DB.get_asset("000001.SH",asset="I")
     # start_year_relation(df_sh,month=1)
-    #pr.disable()
-    #pr.print_stats(sort='file')
+    # pr.disable()
+    # pr.print_stats(sort='file')

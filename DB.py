@@ -256,8 +256,13 @@ def update_ts_code(asset="E", market="CN", big_update=True):
             df = _API_Investpy.my_get_stocks(country="united states")
             df.columns = ["country", "name", "full_name", "isin", "currency", "ts_code"]
         elif "FD" == asset:
-            df = _API_Investpy.my_get_funds(country="united states")
-            df.columns = ["country", "name", "ts_code", "issuer", "isin", "asset_class", "currency", "underlying"]
+            # df_fund = _API_Investpy.my_get_funds(country="united states")
+            # df_fund["etf"]=False
+
+            #for now, only consider etf as fund
+            df_etf = _API_Investpy.my_get_etf(country="united states")
+            df=df_etf
+            df = df.rename({'symbol': 'ts_code'}, axis='columns')
 
         df = df.set_index("ts_code")
 
@@ -269,7 +274,7 @@ def update_ts_code(asset="E", market="CN", big_update=True):
     LB.to_csv_feather(df, a_path)
 
 
-def update_asset_US(asset="E", step=1, api="invest_py"):
+def update_asset_US(asset="E", step=1, api="investpy"):
     """maybe in future merge both functions. For NOW this is minimized version"""
     if api == "yfinance":
         import _API_YFinance
@@ -277,7 +282,7 @@ def update_asset_US(asset="E", step=1, api="invest_py"):
     df_ts_code = pd.read_csv(f"Market/US/General/ts_code_{asset}.csv").set_index("ts_code")
     df_ts_code = df_ts_code.loc[~df_ts_code.index.duplicated(keep="last")]
 
-    for ts_code in df_ts_code.index[::step]:
+    for ts_code, name in zip(df_ts_code.index[::step],df_ts_code["name"][::step]):
         print(f"investpy download US step{step}", asset, ts_code)
         a_path = LB.a_path(f"Market/US/Asset/{asset}/D/{ts_code}")
         if os.path.isfile(a_path[1]):
@@ -287,11 +292,13 @@ def update_asset_US(asset="E", step=1, api="invest_py"):
             if api == "investpy":
                 d_func = {"I": _API_Investpy.my_index_historical_data,
                           "E": _API_Investpy.my_stock_historical_data,
-                          "FD": _API_Investpy.my_fund_historical_data}
+                          "FD": _API_Investpy.my_etf_historical_data }
 
-                df = d_func[asset](ts_code, "united states", "01/01/1880", LB.trade_date_to_investpy(LB.today()))
-                df.columns = ["open", "high", "low", "close", "vol", "currency"]
-                df = df[["open", "high", "low", "close", "vol"]]
+                """really weird. Stock use ticker, index and fund use name"""
+                d_symbol={"I":name, "E":ts_code, "FD":name }
+                df = d_func[asset](d_symbol[asset], "united states", "01/01/1880", LB.trade_date_to_investpy(LB.today()))
+                df = df.rename({'Open': 'open', 'High': 'high',"Low":"low","Close":"close","Volume":"vol","Currency":"currency"}, axis='columns')
+
 
             elif api == "yfinance":
                 df, sector, industry = _API_YFinance.download_asset(ts_code)
@@ -299,8 +306,9 @@ def update_asset_US(asset="E", step=1, api="invest_py"):
             else:
                 df = pd.DataFrame()
 
-        except:
-            pass
+        except Exception as e:
+            print(e)
+            continue
 
         # post processing to standardize names
         df["period"] = Alpha.period(df=df, inplace=False)
@@ -1197,7 +1205,7 @@ def get_ts_code(a_asset=["E"], market="CN", d_queries={}):
         if df.empty:
             continue
 
-        if (asset == "FD"):
+        if (asset == "FD") and market == "CN":
             df = df[df["delist_date"].isna()]
             # df = df[df["type"]=="契约型开放式"] #契约型开放式 and 契约型封闭式 都可以买 在线交易，封闭式不能随时赎回，但是可以在二级市场上专卖。 开放式更加资本化，发展的好可以扩大盘面，发展的不好可以随时赎回。所以开放式的盘面大小很重要。越大越稳重
             df = df[df["market"] == "E"] #Only consider ETF and LOF because they can be publicly traded
@@ -1331,14 +1339,16 @@ def add_asset_comparison(df, freq, asset, ts_code, a_compare_label=["open", "hig
     return pd.merge(df, df_compare, how='left', on=["trade_date"], suffixes=["", ""], sort=False)
 
 
-def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False):
+def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=240, d_queries_ts_code={}, reset_index=False,market="CN"):
     """
     query_on_df: filters df_asset/df_date by some criteria. If the result is empty dataframe, it will NOT be included in d_result
     """
+
+
     d_result = {}
-    df_index = get_ts_code(a_asset=[asset], d_queries=d_queries_ts_code)[::step] if on_asset else get_trade_date(start_date="20000000")[::step]
+    df_index = get_ts_code(a_asset=[asset], d_queries=d_queries_ts_code, market=market)[::step] if on_asset else get_trade_date(start_date="20000000")[::step]
     func = get_asset if on_asset else get_date
-    kwargs = {"asset": asset, "freq": freq} if on_asset else {"a_asset": [asset]}
+    kwargs = {"asset": asset, "freq": freq, "market":market} if on_asset else {"a_asset": [asset],"market":market}
 
     bar = tqdm(range(len(df_index)))
     for index, i in zip(df_index.index, bar):
@@ -1354,6 +1364,7 @@ def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=
             else:  # only take df that satisfy ALL conditions and is non empty
                 d_result[index] = df.reset_index() if reset_index else df
         except Exception as e:
+            print(e)
             pass
             # print("preload exception", e)
     bar.close()
@@ -1364,15 +1375,18 @@ def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=
     print(f"NOT LOADED : {len(a_notloaded)}")
     return d_result
 
+def preload_index(market="CN",step=1):
+    return preload(asset="I", freq="D", on_asset=True, step=step, query_df="", period_abv=240, d_queries_ts_code=LB.c_index_queries(market=market), reset_index=False,market=market)
 
 def update_all_in_one_us(big_update=False):
     # ts_code
     for asset in ["I", "E", "FD"]:
         update_ts_code(asset=asset, market="US")
 
-    # LB.multi_process(func=update_asset_us_investpy, a_kwargs={"asset": "E", }, a_partial=LB.multi_steps(8))  # big: smart decide - small: smart decide
-    # LB.multi_process(func=update_asset_us, a_kwargs={"asset": "FD", }, a_partial=LB.multi_steps(4))  # big: smart decide - small: smart decide
-    # LB.multi_process(func=update_asset_us, a_kwargs={"asset": "I", }, a_partial=LB.multi_steps(4))  # big: smart decide - small: smart decide
+
+    #LB.multi_process(func=update_asset_US, a_kwargs={"asset": "E", }, a_partial=LB.multi_steps(2))  # big: smart decide - small: smart decide
+    LB.multi_process(func=update_asset_US, a_kwargs={"asset": "FD", }, a_partial=LB.multi_steps(2))  # big: smart decide - small: smart decide
+    #LB.multi_process(func=update_asset_US, a_kwargs={"asset": "I", }, a_partial=LB.multi_steps(2))  # big: smart decide - small: smart decide
 
     # update trade_date (using index)
 
@@ -1434,7 +1448,7 @@ fast_load = {}
 df_ts_code = get_ts_code(a_asset=["E", "I", "FD", "F", "G"])
 
 
-def get_fast_load(ts_code):
+def get_fast_load(ts_code,market="CN"):
     if ts_code in fast_load:
         df = fast_load[ts_code]
         if not df.empty:
@@ -1445,7 +1459,10 @@ def get_fast_load(ts_code):
     return fast_load[ts_code]
 
 
+
+
 if __name__ == '__main__':
+    # TODO in general, save empty df or not safe?
     # TODO generate test cases
     # TODO update all in one so that it can run from zero to hero in one run
     pr = cProfile.Profile()
@@ -1456,6 +1473,7 @@ if __name__ == '__main__':
         # update_all_in_one_hk()
         # update_all_in_one_us()
         update_all_in_one_us()
+
 
     except Exception as e:
         traceback.print_exc()

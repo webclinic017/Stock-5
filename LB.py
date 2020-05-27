@@ -265,13 +265,13 @@ def remove_columns(df, columns_array):
         except Exception as e:
             pass
 
-
-def polyfit_full(s_index, s_data, degree=1):
+#TODO should be removed and use alpha polyfit instead, but too lazy to change for now
+def polyfit_full(s_data, degree=1):
     """returns residual and other information"""
-    full = np.polyfit(s_index, s_data, degree, full=True)
+    full = np.polyfit(s_data.index, s_data, degree, full=True)
     z = full[0]
     residuals = full[1]
-    return [pd.Series(index=s_index, data=s_index * z[0] + z[1]), residuals]
+    return [pd.Series(index=s_data.index, data=s_data.index * z[0] + z[1]), residuals]
 
 
 def polyfit_slope(s_index, s_data, degree=1):
@@ -302,6 +302,9 @@ def calculate_beta(s1, s2):  # useful, otherwise s.corr mostly returns nan becau
     s2_name = s2.name
     s1 = s1.copy()  # nessesary for some reason . dont delete it
     s2 = s2.copy()
+
+    s1.index=s1.index.astype(int)
+    s2.index=s2.index.astype(int)
 
     # calculate beta by only using the non na days = smallest amount of days where both s1 s2 are trading
     asset_all = pd.merge(s1, s2, how='inner', on=["trade_date"], suffixes=["", ""], sort=False)
@@ -497,12 +500,17 @@ def c_G_queries():
     return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','zj_industry1','jq_industry1','jq_industry2','concept','market'] "]}
 
 
-def c_index_queries():
-    return {"I": ["ts_code in ['000001.SH','399001.SZ','399006.SZ']"]}
+def c_index_queries(market="CN"):
+    return {"I": [f"ts_code in {c_index(market=market)}"]}
 
 
-def c_index():
-    return ['000001.SH', '399001.SZ', '399006.SZ']
+def c_index(market="CN"):
+    if market=="CN":
+        return ['000001.SH', '399001.SZ', '399006.SZ']
+    elif market=="US":
+        return  ['DJI', 'IXIC', 'SPX']
+    elif market=="HK":
+        return ['HSI', 'HSCEI', 'HSCCI']
 
 
 def c_group_score_weight():
@@ -631,11 +639,11 @@ def c_d_groups(assets=c_assets(), a_ignore=[], market="CN"):
 
         d_e = {}
         for column in a_columns:
-            if column != "concept":
-                d_e[column] = list(df_ts_code_E[column].unique())
-            else:
+            if column == "concept":
                 df_ts_code_concept = DB.get_ts_code(["concept"], market=market)
                 d_e[column] = list(df_ts_code_concept[column].unique())
+            else:
+                d_e[column] = list(df_ts_code_E[column].unique())
 
         asset = {**asset, **d_e}
     if "I" in assets:
@@ -730,69 +738,86 @@ def trade_date_to_investpy(trade_date):
     return trade_date[6:8] + "/" + trade_date[4:6] + "/" + trade_date[0:4]
 
 
-def timeseries_to_season(df):
-    """converts a df time series to another df containing only the last day of season"""
-    df_copy = df.copy()
-    df_copy["trade_date_copy"] = df_copy.index
-    df_copy["year"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-    df_copy["month"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+def timeseries_convert(df,freq):
+    def timeseries_to_week(df):
+        """converts a df time series to another df containing only fridays"""
+        df_copy = df.copy()
+        df_copy["index_copy"] = df_copy.index
+        df_copy["weekday"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_dayofweek(x))  # can be way more efficient
+        df = df_copy[df_copy["weekday"] == "Friday"]
+        return timeseries_helper(df=df, a_index=list(df.index))
 
-    a_index = []
-    for year in df_copy["year"].unique():
-        df_year = df_copy[df_copy["year"] == year]
-        for month in [3, 6, 9, 12]:
-            last_season_day = df_year[df_year["month"] == month].last_valid_index()
-            if last_season_day is not None:
-                a_index.append(last_season_day)
-    return timeseries_helper(df=df, a_index=a_index)
+    def timeseries_to_month(df):
+        """converts a df time series to another df containing only the last day of month"""
+        df_copy = df.copy()
+        df_copy["index_copy"] = df_copy.index
 
+        #df_copy["year"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        #df_copy["month"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
 
-def timeseries_to_week(df):
-    """converts a df time series to another df containing only fridays"""
-    df_copy = df.copy()
-    df_copy["weekday"] = df_copy.index
-    df_copy["weekday"] = df_copy["weekday"].apply(lambda x: get_trade_date_datetime_dayofweek(x))  # can be way more efficient
-    df = df_copy[df_copy["weekday"] == "Friday"]
-    return timeseries_helper(df=df, a_index=list(df.index))
+        df_copy["year"] = df_copy["index_copy"].astype(str).str.slice(0,4)
+        df_copy["month"] = df_copy["index_copy"].astype(str).str.slice(4,6)
 
 
-def timeseries_to_month(df):
-    """converts a df time series to another df containing only the last day of month"""
-    df_copy = df.copy()
-    df_copy["index_copy"] = df_copy.index
-    df_copy["year"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
-    df_copy["month"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+        a_index = []
+        for year in df_copy["year"].unique():
+            df_year = df_copy[df_copy["year"] == year]
+            for month in range(1, 13):
+                last_season_day = df_year[df_year["month"] == str(month)].last_valid_index()
+                if last_season_day is not None:
+                    a_index.append(last_season_day)
+        return timeseries_helper(df=df, a_index=a_index)
 
-    a_index = []
-    for year in df_copy["year"].unique():
-        df_year = df_copy[df_copy["year"] == year]
-        for month in range(1, 13):
-            last_season_day = df_year[df_year["month"] == month].last_valid_index()
-            if last_season_day is not None:
-                a_index.append(last_season_day)
-    return timeseries_helper(df=df, a_index=a_index)
+    def timeseries_to_season(df):
+        """converts a df time series to another df containing only the last day of season"""
+        df_copy = df.copy()
+        df_copy["index_copy"] = df_copy.index
+        #df_copy["year"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        #df_copy["month"] = df_copy["trade_date_copy"].apply(lambda x: get_trade_date_datetime_m(x))  # can be way more efficient
+
+        df_copy["year"] = df_copy["index_copy"].astype(str).str.slice(0, 4)
+        df_copy["month"] = df_copy["index_copy"].astype(str).str.slice(4, 6)
+
+        a_index = []
+        for year in df_copy["year"].unique():
+            df_year = df_copy[df_copy["year"] == year]
+            for month in [3, 6, 9, 12]:
+                last_season_day = df_year[df_year["month"] == str(month)].last_valid_index()
+                if last_season_day is not None:
+                    a_index.append(last_season_day)
+        return timeseries_helper(df=df, a_index=a_index)
+
+    def timeseries_to_year(df):
+        """converts a df time series to another df containing only the last day of month"""
+        df_copy = df.copy()
+        df_copy["index_copy"] = df_copy.index
+        #df_copy["year"] = df_copy["index_copy"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        df_copy["year"] = df_copy["index_copy"].astype(str).str.slice(0, 4)
 
 
-def timeseries_to_year(df):
-    """converts a df time series to another df containing only the last day of month"""
-    df_copy = df.copy()
-    df_copy["year"] = df_copy.index
-    df_copy["year"] = df_copy["year"].apply(lambda x: get_trade_date_datetime_y(x))  # can be way more efficient
+        a_index = []
+        for year in df_copy["year"].unique():
+            last_year_day = df_copy[df_copy["year"] == year].last_valid_index()
+            a_index.append(last_year_day)
+        return timeseries_helper(df=df, a_index=a_index)
 
-    a_index = []
-    for year in df_copy["year"].unique():
-        last_year_day = df_copy[df_copy["year"] == year].last_valid_index()
-        a_index.append(last_year_day)
-    return timeseries_helper(df=df, a_index=a_index)
+    def timeseries_helper(df, a_index):
+        """converts index to time series and cleans up. Return only ohlc and pct_chg"""
+        df_result = df.loc[a_index]
+        df_result = ohlcpp(df_result)
+        df_result["pct_chg"] = df_result["close"].pct_change() * 100
+        return df_result
 
-
-def timeseries_helper(df, a_index):
-    """converts index to time series and cleans up. Return only ohlc and pct_chg"""
-    df_result = df.loc[a_index]
-    df_result = ohlcpp(df_result)
-    df_result["pct_chg"] = df_result["close"].pct_change() * 100
-    return df_result
-
+    if freq=="D":
+        return df
+    elif freq=="W":
+        return timeseries_to_week(df)
+    elif freq=="M":
+        return timeseries_to_month(df)
+    elif freq=="S":
+        return timeseries_to_season(df)
+    elif freq=="Y":
+        return timeseries_to_year(df)
 
 def custom_quantile(df, column, p_setting=[0, 0.2, 0.4, 0.6, 0.8, 1], key_val=True):
     d_df = {}
@@ -853,7 +878,7 @@ def print_iterables(d):
 
 
 def ohlcpp(df):
-    return df[["ts_code", "period", "open", "high", "low", "close", "pct_chg"]]
+    return df[[ "period", "open", "high", "low", "close", "pct_chg"]]
 
 
 def set_index(df,set_index):
@@ -926,21 +951,22 @@ def feather_csv_converter(path):
     df.to_csv(csv_path, encoding="utf-8_sig")
     open_file(csv_path)
 
+def combine_csv(path):
+    import glob,re
+    df_final=pd.DataFrame()
+    for csvfile in glob.iglob(os.path.join(path, "*.csv")):
+        print(f"{csvfile}")
+
+        df=pd.read_csv(rf"{csvfile}".decode('unicode_escape'))
+        df_final=df_final.append(df)
+    df_final.to_csv(path+"/ALL.csv")
 
 if __name__ == '__main__':
     pass
-    import DB
+    print("what")
+    combine_csv("E:/lianjia-beike-spider-master/data/ke/xiaoqu/sh/20200522")
 
-    market = r"CN"
-    asset = r"E"
-    freq = r"D"
-    ts_code = r"000002.SZ"
-    path = r"Market/" + market + r"/Asset/" + asset + r"/" + freq + r"/" + ts_code
-    path = r"Market/CN/Asset/E/D/000002.SZ.feather"
-    # path=f"Market//{market}//Asset//{asset}//{freq}//{ts_code}"
-    # path=f"Market\{market}\Asset\{asset}\{freq}\{ts_code}"
-    # path=f"Market\\{market}\\Asset\\{asset}\\{freq}\\{ts_code}"
-    feather_csv_converter(path)
+
 
 else:  # IMPORTANT TO KEEP FOR SOUND AND TIME
     start = time.time()
