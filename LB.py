@@ -358,8 +358,10 @@ def shutdown_windows():
 
 
 def sound(file="error.mp3"):
-    playsound(f"Sound/{file}")
-
+    try:
+        playsound(f"Sound/{file}")
+    except:
+        pass
 
 def a_path(path: str = ""):
     return [x for x in [f"{path}.csv", f"{path}.feather"]]
