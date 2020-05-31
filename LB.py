@@ -383,7 +383,7 @@ def handle_save_exception(e, path):
         traceback.print_exc()
 
 
-# reset index no matter what becaus of feather format. Drop index depends if index is relevant. CSV store index is always false
+# reset index no matter what because of feather format. Drop index depends if index is relevant. CSV store index is always false
 def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv=False):  # utf-8_sig
     df.reset_index(drop=(not index_relevant), inplace=True)  # reset index no matter what because feather can only store normal index. if index relevant then dont drop
     df = df.infer_objects()
