@@ -151,9 +151,10 @@ def fgain(df, abase, freq, inplace, name, cols):
 
 
 @alpha_wrap
-def pct_chg(df, abase, freq, inplace, name, cols):
+def pct_chg(df, abase, inplace, name, cols):
     df[name] = (1 + df[abase].pct_change())
     return alpha_return(locals())
+
 
 
 # possible another version is x.mean()**2/x.std()
@@ -304,9 +305,9 @@ def extrema_dif(df, abase, inplace, name, cols, n=60, n2=120):
 
 
 @alpha_wrap
-def comp_chg(df, abase, inplace, name, cols):
+def comp_chg(df, abase, inplace, name, cols,start=1):
     """this comp_chg is for version pct_chg in form of 30 means 30%"""
-    df[name] = (1 + (df[abase] / 100)).cumprod()
+    df[name] = (1 + (df[abase] / 100)).cumprod() + (start-1)
     return alpha_return(locals())
 
 
@@ -335,6 +336,10 @@ def norm(df, abase, inplace, name, cols, min=0, max=1):
     df[name] = (((max - min) * (df[abase] - series_min)) / (series_max - series_min)) + min
     return alpha_return(locals())
 
+@alpha_wrap
+def rollingnorm(df, abase, inplace, name, cols, freq, min=0, max=1):
+    df[name] = df[abase].rolling(freq).apply(apply_norm)
+    return alpha_return(locals())
 
 @alpha_wrap
 def FT(df, abase, inplace, name, cols, min=0, max=1):

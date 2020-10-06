@@ -426,6 +426,16 @@ def main():
     #A: If long asset_e stocks for hedging, still face asset self beared volatility
 
 
+
+    #Q: use trend or detrended data?e.g. Volume
+    #A: Trend data = abs data. Detrend data = Relative data = rolling.
+    #A: In oder to predict, we often need both trend AND detrended. Because we need to compare current volume to 30 days ago AND since 2015.
+    #A: Solution: multiple point sample. e.g. 12 days, 30days, 120 days.
+    #A: Solution: Adaptive sampling points. Since last high or low
+
+
+
+
     # Q:unstable period. Shorter period when volatile, Longer period when less volatile
     # A: it is useful to some extend, but it seems that every method has its problem
     # A:unstable period creates new problem: difficult to explain

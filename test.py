@@ -308,3 +308,9 @@ def pattern_bull():
 
 
 
+
+"1.test how good stocks at their maximum perform"
+"2.use indicator to see how many stocks are at their maximum"
+"3.simplyfy the gathering process each day to make more frequent update"
+
+

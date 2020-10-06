@@ -117,6 +117,26 @@ def fibonacci_weight(n):
     array = [x / sum(array) for x in array]
     return array
 
+def consequtive_counter(s, count=1):
+    def swap_1_0(s):
+        # swap 1 and 0 value. count 0 instead of 1
+        """s.replace(0, 999, inplace=True)
+        s.replace(1, 0, inplace=True)
+        s.replace(999, 1, inplace=True)"""
+        s.replace({0: 1, 1: 0})
+
+    if count==1:
+        return s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
+    elif count==0:
+        s.replace({0: 1, 1: 0})
+        result= s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
+        s.replace({0: 1, 1: 0})
+        return result
+    else:
+        return
+
+
+
 
 def empty_df(query):
     if query == "pro_bar":
@@ -235,6 +255,15 @@ def get_trade_date_datetime_weekofmonth(trade_date):
     trade_date = get_trade_date_datetime(trade_date)
     return (trade_date.isocalendar()[1] - trade_date.replace(day=1).isocalendar()[1] + 1)
 
+def trade_date_to_calender(df):
+    """
+    return
+     week of year
+     month of year
+     season of year
+     day of week
+     day of month
+    """
 
 def df_reverse_reindex(df):
     df = df.loc[~df.index.duplicated(keep="last")]
@@ -514,6 +543,10 @@ def c_index(market="CN"):
     elif market=="HK":
         return ['HSI', 'HSCEI', 'HSCCI']
 
+def c_index_short(market="CN"):
+    if market == "CN":
+        return ['sh', 'sz', 'cy']
+
 
 def c_group_score_weight():
     return {"area": 0.10,
@@ -670,6 +703,9 @@ def c_d_groups(assets=c_assets(), a_ignore=[], market="CN"):
         asset = {**asset, **d_fd}
     return {key: value for key, value in asset.items() if key not in a_ignore}
 
+
+def c_index_name():
+    return {"主板":"sh","中小板":"sz","创业板":"cy","科创板":"kc"}
 
 def secondsToStr(elapsed=None):
     return strftime("%Y-%m-%d %H:%M:%S", localtime()) if elapsed is None else str(timedelta(seconds=elapsed))
@@ -878,6 +914,8 @@ def print_iterables(d):
         for x in d:
             print(x)
 
+def c_asset():
+    return ["I","E"]
 
 def ohlcpp(df):
     return df[[ "period", "open", "high", "low", "close", "pct_chg"]]
@@ -966,7 +1004,6 @@ def combine_csv(path):
 if __name__ == '__main__':
     pass
     print("what")
-    combine_csv("E:/lianjia-beike-spider-master/data/ke/xiaoqu/sh/20200522")
 
 
 

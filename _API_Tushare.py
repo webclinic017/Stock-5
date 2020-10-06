@@ -116,7 +116,7 @@ def my_fund_portfolo(ts_code=""):
     return get(func=pro.fund_portfolio, fname="pro.fund_portfolio", kwargs=locals())
 
 
-def my_fx_daily(ts_code, trade_date="", start_date="", end_date=""):
+def my_fx_daily( trade_date="", start_date="", end_date=""):
     """limited to 1000 rows"""
     return get(func=pro.fx_daily, fname="pro.fx_daily", kwargs=locals())
 
@@ -161,6 +161,6 @@ def my_concept_detail(id="",ts_code="",fields="id,concept_name,ts_code,name,in_d
 
 if __name__ == '__main__':
 
-    df = my_fina_indicator(ts_code="600519.SH")
-    print('","'.join([x for x in df.columns]))
+    df = ts.pro_bar(ts_code='000001.SZ', asset='E', start_date='20180101', end_date='20181011')
+
     df.to_csv("test.csv",encoding="utf-8_sig")

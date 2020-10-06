@@ -69,6 +69,7 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
 
     # use trade date on all stock market to see which day was not traded
     df_merge_helper = df_stock_market_all.reset_index(inplace=False, drop=False)
+
     df_merge_helper = df_merge_helper.loc[df_merge_helper["trade_date"].between(int(setting["start_date"]), int(setting["end_date"])), "trade_date"]
     next_trade_date = DB.get_next_trade_date(freq="D")
     df_merge_helper = df_merge_helper.append(pd.Series(data=int(next_trade_date), index=[0]), ignore_index=False)  # before merge_ add future trade date as proxy
@@ -160,7 +161,8 @@ def btest_portfolio(setting_original, d_trade_h, df_stock_market_all, backtest_s
     # df_overview.at[0, "all_pct_chg_std"] = df_port_c["all_pct_chg"].std()
     if not df_port_c.empty:
         df_overview.at[0, "all_comp_chg"] = df_port_c.at[df_port_c["all_comp_chg"].last_valid_index(), "all_comp_chg"]
-        df_overview.at[0, "all_comp_chg/sh_index"] = df_port_c.at[len(df_port_c) - 1, "all_comp_chg"] / df_port_c.at[len(df_port_c) - 1, "comp_chg_000001.SH"]
+        #df_overview.at[0, "all_comp_chg/sh_index"] = df_port_c.at[(len(df_port_c) - 1), "all_comp_chg"] / df_port_c.at[len(df_port_c) - 1, "comp_chg_000001.SH"]
+        df_overview.at[0, "all_comp_chg/sh_index"] = df_port_c["all_comp_chg"].iat[-1] / df_port_c["comp_chg_000001.SH"].iat[- 1]
     else:
         df_overview.at[0, "all_comp_chg"] =np.nan
         df_overview.at[0, "all_comp_chg/sh_index"] =np.nan
@@ -264,17 +266,19 @@ def btest(settings=[{}]):
     df_trade_dates["tomorrow"] = df_trade_dates.index.values
     df_trade_dates["tomorrow"] = df_trade_dates["tomorrow"].shift(-1).fillna(-1).astype(int)
     df_stock_market_all = DB.get_stock_market_all(market)
+    print("df_stock_market_all",df_stock_market_all)
     #d_G_df = DB.preload(asset="G", d_queries_ts_code=LB.c_G_queries())
     d_G_df = {}
     df_today_accelerator = pd.DataFrame()
 
     # 0.4 PREPARATION- INITIALIZE Changeables for the loop
-    a_d_trade_h = [{df_trade_dates.index[0]: {"sell": [], "hold": [], "buy": []}} for _ in settings]  # trade history for each setting
+    a_d_trade_h = [{int(df_trade_dates.index[0]): {"sell": [], "hold": [], "buy": []}} for _ in settings]  # trade history for each setting
     d_capital = {setting_count: {"cash": settings[0]["p_capital"]} for setting_count in range(0, len(settings))}  # only used in iteration, saved in trade_h
 
     # Main Loop
     for today, tomorrow in zip(df_trade_dates.index, df_trade_dates["tomorrow"]):
 
+        today=int(today)
         if LB.interrupt_confirmed():
             for setting in settings:
                 setting["end_date"] = today
@@ -288,11 +292,11 @@ def btest(settings=[{}]):
             df_tomorrow = df_today_accelerator.copy()  # bug here?
             df_tomorrow[["high", "low", "close", "pct_chg"]] = np.nan
         else:
-            df_tomorrow = DB.get_date(trade_date=tomorrow, a_assets=assets, freq="D", market=market)
+            df_tomorrow = DB.get_date(trade_date=tomorrow, a_asset=assets, freq="D", market=market)
 
             #to be removed
             df_tomorrow["name"]=df_tomorrow.index
-            df_today = DB.get_date(trade_date=today, a_assets=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
+            df_today = DB.get_date(trade_date=today, a_asset=assets, freq="D", market=market) if df_today_accelerator.empty else df_today_accelerator
             df_today_accelerator = df_tomorrow
             d_weight_accelerator = {}
 
@@ -332,6 +336,7 @@ def btest(settings=[{}]):
             p_loser_und = setting["p_loser_und"]
             hold_count = 1
             sell_count = 1
+
             for trade_type, a_trade_content in d_trade_h[today].items():  # NOTE here today means today morning trade
                 if trade_type != "sell":  # == in ["hold","buy"]. last day stocks that was kept for over night
                     for d_trade in a_trade_content:
@@ -575,8 +580,8 @@ def btest(settings=[{}]):
 def btest_setting_master():
     return {
         # general = Non changeable through one run
-        "start_date": "20000101",
-        "end_date": "20200301",
+        "start_date": "20180101",
+        "end_date": "20180601",
         "freq": "D",
         "market": "CN",
         "assets": ["E"],  # E,I,FD,G,F
@@ -601,7 +606,7 @@ def btest_setting_master():
         # portfolio
         "p_capital": 1000000,  # start capital
         "p_fee": 0.0000,  # 1==100%
-        "p_maxsize": 10,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
+        "p_maxsize": 1000,  # 1: fixed number,2: percent. 3: percent with top_limit. e.g. 30 stocks vs 30% of todays trading stock
         "p_min_T+": 1,  # Start consider sell. 1 means trade on next day, aka T+1， = Hold stock for 1 night， 2 means hold for 2 nights. Preferably 0,1,2 for day trading
         "p_max_T+": 1,  # MUST sell no matter what.
         "p_proportion": False,  # choices: False(evenly), prop(proportional to rank), fibo(fibonacci)
@@ -620,6 +625,18 @@ def btest_manu(setting_master = btest_setting_master()):
         setting_asset["f_query_asset"] += [f"df_today['group'].isin({['concept', 'industry1', 'industry2']})"] if asset == "G" else []
         setting_asset["assets"] = [asset]
         a_setting_instance = []
+
+
+        # treats history of custom stocks
+        custom_string="002019.SZ,002029.SZ,600409.SH,600525.SH,002157.SZ,600682.SH,002022.SZ,600036.SH,002223.SZ,600741.SH,600563.SH,002158.SZ,600990.SH,002129.SZ,600085.SH,600482.SH,600549.SH,002151.SZ,600420.SH,002201.SZ,600271.SH,000895.SZ,600507.SH,600114.SH,600201.SH,002156.SZ,002010.SZ,600660.SH,600486.SH,002273.SZ,000963.SZ,600490.SH,002222.SZ,002167.SZ,002009.SZ,002113.SZ,600985.SH,600993.SH,600585.SH,002002.SZ,002146.SZ,002108.SZ,600446.SH,300024.SZ,600352.SH,000858.SZ,002245.SZ,600426.SH,600438.SH,600522.SH,002030.SZ,600887.SH,002020.SZ,002034.SZ,002028.SZ,002126.SZ,002042.SZ,600452.SH,600987.SH,002198.SZ,002043.SZ,300015.SZ,002168.SZ,002120.SZ,002221.SZ,002081.SZ,600521.SH,600066.SH,002003.SZ,002219.SZ,002139.SZ,002262.SZ,600518.SH,002180.SZ,000651.SZ,600535.SH,002311.SZ,002127.SZ,002141.SZ,002176.SZ,600967.SH,600406.SH,002174.SZ,002085.SZ,600309.SH,002044.SZ,600572.SH,002138.SZ,002049.SZ,600570.SH,002013.SZ,002230.SZ,002007.SZ,002050.SZ,000538.SZ,002001.SZ,002038.SZ,002179.SZ,002241.SZ,002185.SZ,002210.SZ,600487.SH,002271.SZ,600276.SH,600436.SH,002178.SZ,002252.SZ,002032.SZ,002008.SZ,002035.SZ,600340.SH,600519.SH,002236.SZ"
+        a_names=custom_string.split(",")
+        setting_asset["f_query_asset"] += [f"df_today.index.isin({a_names})"]
+
+
+        for column1 in ["close"]:
+            setting_instance = copy.deepcopy(setting_asset)
+            setting_instance["s_weight1"] = {}
+            a_setting_instance.append(setting_instance)
 
         # 0 00000000000000000is_min
         # for thresh in [x/100 for x in range(0,100,5)]: #"zlmacd_close.(1, 5, 10)", "zlmacd_close.(1, 10, 20)", "zlmacd_close.(1, 240, 300)",
@@ -656,13 +673,15 @@ def btest_manu(setting_master = btest_setting_master()):
         #general: quantile, ,"turnover_rate","total_mv","pe_ttm","ps_ttm","total_share","pb","vol"
         #for column in ["period","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240","close","ivola"]:
 
-        for column1 in ["close"]:
-            for low_quant1,high_quant1 in LB.custom_pairwise_overlap(LB.drange(0,101,4)):
-                        setting_instance = copy.deepcopy(setting_asset)
-                        setting_instance["f_query_asset"] += [f"df_today['{column1}'].between(  **LB.btest_quantile(df_today['{column1}'].quantile([{low_quant1},{high_quant1}])))"]
-                        setting_instance["s_weight1"] = {}
+        #for column1 in ["close"]:
+        #    for low_quant1,high_quant1 in LB.custom_pairwise_overlap(LB.drange(0,101,4)):
+        #                setting_instance = copy.deepcopy(setting_asset)
+        #                setting_instance["f_query_asset"] += [f"df_today['{column1}'].between(  **LB.btest_quantile(df_today['{column1}'].quantile([{low_quant1},{high_quant1}])))"]
+        #                setting_instance["s_weight1"] = {}
 
-                        a_setting_instance.append(setting_instance)
+        #                a_setting_instance.append(setting_instance)
+
+
 
         #general: binary
         # for column in ["exchange"]:
