@@ -577,6 +577,89 @@ def asset_start_season_initiator(asset="I", a_n=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 
     LB.to_csv_feather(df=df_result, a_path=a_path, skip_feather=True)
 
 
+
+def asset_seasonal_statistic_sh():
+    #use sh index as source
+    df_trade_date=DB.get_trade_date()
+    df_sh=DB.get_asset(ts_code="000001.SH",asset="I")
+    df_sh["vol_pct_chg"]=df_sh["vol"].pct_change()
+    df_sh=df_sh[["pct_chg","vol_pct_chg"]]
+
+    for division in ["month","day","weekofyear","dayofweek"]:
+        df_sh[division]=df_trade_date[division]
+        df_result = df_sh.groupby([division]).agg(["mean","std"])
+        a_path = LB.a_path(f"Market/CN/ATest/seasonal_sh/{division}")
+        LB.to_csv_feather(df=df_result, a_path=a_path, skip_feather=True)
+        del df_sh[division]
+
+
+    #add new year data (this method only works for SH. it is a lazy method)
+    df_new_year=pd.DataFrame()
+    df_trade_date= df_trade_date.reset_index()
+    df_sh= df_sh.reset_index()
+
+    for freq in [3,5,10,15,20,30,40]:
+        #mark all dates that are within the range of new year
+        #get all start of ny
+        df_trade_date[f"new_year_marker{freq}"]=0
+        df_helper= df_trade_date[df_trade_date["new_year"]==1]
+
+        for start in df_helper.index:
+
+            #n days AFTER START of ny
+            for marker in range(start-freq+1,start+1):
+                df_trade_date.at[marker,f"new_year_marker{freq}"]=1
+
+            # n days AFTER END of ny
+            for marker in range(start , start + freq+1):
+                df_trade_date.at[marker, f"new_year_marker{freq}"] = 1
+
+        df_sh[f"new_year_marker{freq}"]=df_trade_date[f"new_year_marker{freq}"]
+        df_sh_helper=df_sh[df_sh[f"new_year_marker{freq}"]==1]
+        df_new_year.at[f"freq{freq}","pct_chg"]=df_sh_helper["pct_chg"].mean()
+
+    a_path = LB.a_path(f"Market/CN/ATest/seasonal_sh/new_year")
+    LB.to_csv_feather(df=df_new_year, a_path=a_path, skip_feather=True)
+
+
+
+
+
+def asset_seasonal_statistic_stock():
+    #use all stocks as source
+    df_trade_date=DB.get_trade_date()
+    d_preload=DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
+
+    for division in ["month","day","weekofyear","dayofweek"]:
+        a_division_result=[]
+        divideby=0
+
+        for ts_code, df_asset in d_preload.items():
+            print(f"{ts_code}, {division}")
+            divideby+=1
+            df_asset["vol_pct_chg"] = df_asset["vol"].pct_change()
+            df_asset = df_asset[["pct_chg", "vol_pct_chg"]]
+            df_asset[division]=df_trade_date[division]
+            df_asset_result = df_asset.groupby([division]).agg(["mean"])
+            a_division_result+=[df_asset_result]
+
+
+        #choose first df as base and then set al values to 0
+        df_division_result=a_division_result[0]
+        for column in df_division_result.columns:
+            df_division_result[column]=0.0
+
+        #add all df together
+        for df in a_division_result:
+            df_division_result=df_division_result.add(df, fill_value=0)
+
+        df_division_result=df_division_result/divideby
+        a_path = LB.a_path(f"Market/CN/ATest/seasonal_stock/{division}")
+        LB.to_csv_feather(df=df_division_result, a_path=a_path, skip_feather=True)
+
+
+    # add new year data todo
+
 def asset_prob_gain_asset(asset="E"):
     """
     Answers this question:
@@ -1445,8 +1528,10 @@ if __name__ == '__main__':
     #     lol["period"]=Alpha.period(df=lol,inplace=False)
     #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
 
+    asset_seasonal_statistic_sh()
     for end_date in [20000101,20020101,20040101,20060101,20060101,20080101,20100101,20120101,20140101,20160101,20180101]:
-        asset_bullishness(start_date=00000000,end_date=end_date,market="CN", step=1)
+        pass
+        #asset_bullishness(start_date=00000000,end_date=end_date,market="CN", step=1)
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 

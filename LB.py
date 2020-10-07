@@ -118,19 +118,13 @@ def fibonacci_weight(n):
     return array
 
 def consequtive_counter(s, count=1):
-    def swap_1_0(s):
-        # swap 1 and 0 value. count 0 instead of 1
-        """s.replace(0, 999, inplace=True)
-        s.replace(1, 0, inplace=True)
-        s.replace(999, 1, inplace=True)"""
-        s.replace({0: 1, 1: 0})
 
     if count==1:
         return s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
     elif count==0:
-        s.replace({0: 1, 1: 0})
+        s.replace({0: 1, 1: 0}, inplace=True)
         result= s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
-        s.replace({0: 1, 1: 0})
+        s.replace({0: 1, 1: 0}, inplace=True)
         return result
     else:
         return
@@ -257,13 +251,38 @@ def get_trade_date_datetime_weekofmonth(trade_date):
 
 def trade_date_to_calender(df):
     """
-    return
-     week of year
-     month of year
-     season of year
-     day of week
-     day of month
+    str trade_date to seasonal stats
+    return:
+
+    year
+    month
+    day
+
+    week of year
+    month of year
+    season of year
+    day of week
+
     """
+
+    df["index_copy"] = df.index
+    df["index_copy"]= df["index_copy"].astype(str)
+
+    df["year"]=(df["index_copy"].str.slice(0, 4)).astype(int)
+    df["season"] = (df["index_copy"].apply(lambda x: get_trade_date_datetime_s(x))).astype(int)
+    df["month"]=(df["index_copy"].str.slice(4, 6)).astype(int)
+    df["day"]= (df["index_copy"].str.slice(6, 8)).astype(int)
+
+    df["weekofyear"] = df["index_copy"].apply(lambda x: get_trade_date_datetime_weekofyear(x))
+    df["dayofweek"] = df["index_copy"].apply(lambda x: get_trade_date_datetime_dayofweek(x))
+    df["dayofweek"] =df["dayofweek"].replace("Monday",1)
+    df["dayofweek"] =df["dayofweek"].replace("Tuesday",2)
+    df["dayofweek"] =df["dayofweek"].replace("Wednesday",3)
+    df["dayofweek"] =df["dayofweek"].replace("Thursday",4)
+    df["dayofweek"] =df["dayofweek"].replace("Friday",5)
+
+
+    return df
 
 def df_reverse_reindex(df):
     df = df.loc[~df.index.duplicated(keep="last")]

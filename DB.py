@@ -107,6 +107,44 @@ def update_trade_date(freq="D", market="CN", start_date="00000000", end_date=LB.
         df_trade_date["seasonal_score"] = df_trade_date["seasonal_score"].rolling(2).mean()
         return df_trade_date
 
+
+
+    def update_ny(df):
+        # calculate new year on gregorian calendar
+        # find all dates that are not trading
+        df_trade_cal_D = get_trade_cal_D(market=market, a_is_open=[0, 1])
+
+        # count the non trading sequence
+        df_trade_cal_D["is_open_counter"] = LB.consequtive_counter(s=df_trade_cal_D["is_open"], count=0)
+
+        # shift 1 because we want to find the first day AFTER HOLIDAZ
+        df_trade_cal_D["is_open_counter"] = df_trade_cal_D["is_open_counter"].shift(1)
+        df_trade_cal_D.to_csv("df_trade_cal_D.csv")
+
+        # search for the highest non trading sequence in JAN or FEB for each year
+        df_trade_cal_D = LB.trade_date_to_calender(df_trade_cal_D)
+        df_trade_cal_D = df_trade_cal_D[df_trade_cal_D["month"] < 4]
+
+        # find all distinct years
+        s_years = df_trade_cal_D["year"].unique()
+
+        df["new_year"] = 0
+
+        # end of NY: loop over each year to find the max non trading sequence
+        for year in s_years:
+            df_this_year = df_trade_cal_D[df_trade_cal_D["year"] == year]
+            NY_end = df_this_year["is_open_counter"].idxmax()
+            df.at[str(NY_end), "new_year"] = -1
+
+        # start of NY:
+        copy_helper = df["new_year"].copy()
+        copy_helper = copy_helper.shift(-1)
+        copy_helper = copy_helper * (-1)
+        df["new_year"] += copy_helper
+        df["new_year"] = df["new_year"].fillna(0)
+
+        return df
+
     # here function starts
     if freq in ["D"]:
         a_path = LB.a_path(f"Market/{market}/General/trade_date_{freq}")
@@ -114,9 +152,11 @@ def update_trade_date(freq="D", market="CN", start_date="00000000", end_date=LB.
         df = LB.df_between(df, start_date, end_date)
 
         if market == "CN":
+            df = LB.trade_date_to_calender(df) # add year, month, day, weekofmonth etc
             df = update_trade_date_stockcount(df)  # adds E,I,FD count
             df = update_trade_date_indexcount(df)  # adds sh,sz,cy count
-        # df = update_trade_date_seasonal_score(df, freq, market)  # TODO adds seasonal score for each day
+            df = update_ny(df) # add new year data
+
         LB.to_csv_feather(df, a_path, index_relevant=True)
 
 
@@ -1270,8 +1310,9 @@ def get_date(trade_date, a_asset=["E"], freq="D", market="CN"):  # might need ge
 def get_trade_date(start_date="000000", end_date=LB.today(), freq="D", market="CN"):
     df = get(LB.a_path(f"Market/{market}/General/trade_date_{freq}"), set_index="trade_date")
     # return df[(df.index >= int(start_date)) & (df.index <= int(end_date))]
-    return LB.df_between(df=df, start_date=start_date, end_date=end_date)
-
+    df= LB.df_between(df=df, start_date=start_date, end_date=end_date)
+    df.index=df.index.astype(int)
+    return df
 
 def get_trade_cal_D(start_date="00000000", end_date="30000000", a_is_open=[1], market="CN"):
     df = get(LB.a_path(f"Market/{market}/General/trade_cal_D"), set_index="cal_date")

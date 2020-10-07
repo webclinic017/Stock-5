@@ -27,8 +27,8 @@ def run(debug=0):
     5. (done) check if top n stocks are doing well or not
     6. check if best 3 industry are doing well or not
     7. (todo maybe unessesary) use index to calculate time since last peak
-    8. overlay of the new year period month
-    9. calculate how many institutinos are holding stocks
+    8. (todo not useful atm) overlay of the new year period month
+    9. calculate how many institution are holding stocks
     10. us market for potential crash
     11. Never buy at market all time high (90%) and no volume. Check together with all 3 indexes
     11. Steepness. If the price gained or falled too steep, it is mostlikely in sinoid transition phase
@@ -78,7 +78,7 @@ def run(debug=0):
     #step3(df_result=df_result,debug=debug)
 
     # 4 OVERMA
-    step4(df_result=df_result, d_preload=d_preload,debug=debug)
+    #step4(df_result=df_result, d_preload=d_preload,debug=debug)
 
     # 5 TOP N Stock
     #step5(df_result=df_result, d_preload=d_preload,debug=debug)
@@ -452,15 +452,39 @@ def step6(df_result):
 
 def step8(df_result, debug=0):
     """
+    currently no use of seasonal effect because they are too periodic.
+    Seasonal effect are interesting, but deviation are too big.
+    Hence it makes the stats useless
+
     1. overlay of chinese month of year effect
     2. overlay of first month prediction effect
     3. overlay of day of month effect
     """
 
-    # overlay of month of year effect
-    df_result
+    #init
+    df_trade_date=DB.get_trade_date()
 
-    return
+    df_result["year"] = df_trade_date["year"]
+    df_result["month"] = df_trade_date["month"]
+    df_result["day"] = df_trade_date["day"]
+    df_result["weekofyear"] = df_trade_date["weekofyear"]
+    df_result["dayofweek"] = df_trade_date["dayofweek"]
+    df_result["r8:buy_sell"]=0.0
+
+    #overlay of all divisions are NOT IN USE
+    for division in ["month","weekofyear"]:
+        # overlay of seasonal effect
+        df_division = DB.get(a_path = LB.a_path(f"Market/CN/ATest/seasonal_stock/{division}"),set_index=division)
+        df_result[division]=df_result[division].astype(int)
+        df_result[division]=df_result[division].replace(df_division["pct_chg"].to_dict())
+        df_result[division] = df_result[division].astype(float)
+        df_result["r8:buy_sell"]+=df_result[division]
+
+    #overlay of chinese new year effect
+
+    #overlay first and last week of year
+
+
 
 def step_eleven():
     """check if all three index and US index is all their all time high
@@ -559,6 +583,8 @@ def step_eleven():
 
 
 if __name__ == '__main__':
+
+
     run()
 
 
