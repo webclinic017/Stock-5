@@ -426,6 +426,24 @@ def main():
     #A: If long asset_e stocks for hedging, still face asset self beared volatility
 
 
+    #Q: what is the general rule for reason and causation?
+    #A: Reason -> causation. Reason must have at least as much state as causation
+    #A: otherwise the mapping does not work
+    #A; By this logic bond, oil, gold, or low volatility, low movement, low change data does not predict the market
+    #A; A coin has only 2 states, a dice has 6. a coin can not describe the outcome of a dice.
+    #A; But maybe the combination of low volatiliy can become causation.
+    #A: Maybe 3 coins together can describe the dice (IF there is a relation anywhere)
+
+    #Q: What are internal and external factors?
+    #A: Internal factors are signals from the stockmarket: volume, price gain, rsi, ma ...
+    #A: External factors are signals outside the stockmarket: oilprice, gold price, macro economy, pmi,
+    #A: IN FUCKING THEORY, external factors should lead stockmarket. BUT in REALITY, stock market leads the economy.
+    #A: Using external factors to predict stockmarket usually is more unreliable and has more delay than just looking at the price itself.
+    #A: But some external factors can be used like fundamentals(which is not an external factor in real)
+
+    #Q: Is there a time when volatility is low and bull market?
+    #A: NO, this does not exist in A Stock. IN CN market, if there is bull market, volatiliy MUST be high
+
 
     #Q: use trend or detrended data?e.g. Volume
     #A: Trend data = abs data. Detrend data = Relative data = rolling.
@@ -434,6 +452,13 @@ def main():
     #A: Solution: Adaptive sampling points. Since last high or low
 
 
+    #Q: is m0, m1, m2 useful
+    #A: Yes, m1-m2.
+    #A: But the problem is that there is no sign that to predict the m012, they are not periodic but manually conroled by the state
+    #A: So the finding here only confirms the rise of stock market, it does not give hint in advance
+    #A: https://www.legulegu.com/stockdata/broadmoney
+    #A: it also does not explain the 2015 spike
+    #A: it is more like stock market goes before m0 m1 m2
 
 
     # Q:unstable period. Shorter period when volatile, Longer period when less volatile
@@ -602,6 +627,10 @@ def main():
     # A: This is just a randomwalk approach. After you trade, the price can still go higher or lower.
     # A: So maybe the 1/E analogy here is not the best
 
+    #Q: where to get institution holding data?
+    #A: no idea. It is possible to scrape all fund and check their holding. But this can only be done for top 10 holding stocks and each season due to publicatino periodicty.
+    #A: It is in general not possible to get all fund portfolio data to see if they are buying more or not.
+    #A: This makes institution data only useful on individual stock and not useful to predict the whole market
 """
 summmary
 the bigger the freq the more predictable, the more useless the data

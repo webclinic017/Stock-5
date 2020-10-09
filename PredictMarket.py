@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
 import DB
 import LB
+from functools import partial
 
 
 
@@ -22,25 +23,28 @@ def run(debug=0):
     """
     1. update index
     2. update all stocks
+
     3. (todo industry) check if index volume is consistent with past gain for index
     4. (todo idustry) calculate how many stocks are overma
     5. (done) check if top n stocks are doing well or not
-    6. check if best 3 industry are doing well or not
-    7. (todo maybe unessesary) use index to calculate time since last peak
-    8. (todo not useful atm) overlay of the new year period month
-    9. calculate how many institution are holding stocks
-    10. us market for potential crash
-    11. Never buy at market all time high (90%) and no volume. Check together with all 3 indexes
-    11. Steepness. If the price gained or falled too steep, it is mostlikely in sinoid transition phase
-    12. Fundamental values: sales, return data
+    6. (todo) check if best 3 industry are doing well or not
+    8. (todo relatively not included atm) overlay of the new year period month
+    9. (todo currently no way access) calculate how many institution are holding stocks  http://datapc.eastmoney.com/emdatacenter/JGCC/Index?color=w&type=
+    10. (done but not that useful) rsi freq combination.
+    11. (todo finished partly) Price and vol volatility
+
+    12. check volatiliy adj macd
+    13. support and resistance for index and all stocks
+    14. us market volatility?
+    16. baidu xueqiu weibo google trend index
+    17. Fundamental values: sales, return data
+
 
     divide and conquer: choose most simple case for all variables
     1. Long period instead of short period
     2. Group of stocks(index, industry ETF) instead of individual stocks
     3. Only Buy Signals or Sell signals instead of both
-    4.
-
-    overlay technique: if there is a variable like freq or threshhold, instead of using one, use ALL of them and then combine them into one result
+    4. Overlay technique: Multiple freq results instead of one. If there is a variable like freq or threshhold, instead of using one, use ALL of them and then combine them into one result
 
     NOTE:
     DEBUG level 0 = only show combined final result like r4:buy
@@ -64,11 +68,12 @@ def run(debug=0):
     df_result= pd.merge(df_sh, df_sz, how='left', on="trade_date", suffixes=["", ""], sort=False)
     df_result= pd.merge(df_result, df_cy, how='left', on="trade_date", suffixes=["", ""], sort=False)
 
+    #df_result["year"]=((df_result.index).astype(str).str.slice(0,4)).astype(int)
     df_result["r:buy_sell"]=0.0
     df_result["r:buy"]=0.0
     df_result["r:sell"]=0.0
 
-    #d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
+    d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
 
     # 0 CREATE INDEX VOLUME
     #step_zero()
@@ -81,17 +86,23 @@ def run(debug=0):
     #step4(df_result=df_result, d_preload=d_preload,debug=debug)
 
     # 5 TOP N Stock
-    #step5(df_result=df_result, d_preload=d_preload,debug=debug)
+    step5(df_result=df_result, d_preload=d_preload,debug=debug)
 
     # 6 TOP INDUSTRY
     #step6(df_result=df_result)
 
     # 8 SEASONAL
-    step8(df_result=df_result)
+    #step8(df_result=df_result)
 
+    # 10 RSI
+    #step10(df_result=df_result,debug=debug)
 
-    # 11 NEVER BUY AT MARKET at 90% HIGH
+    #  NEVER BUY AT MARKET at 90% HIGH
     #step_eleven()
+
+    # 11 VOLATILITY (maybe only good to distinguish crazy and normal time)
+    #step11(df_result=df_result,debug=debug)
+
 
     #12 combine r1..rn buy and sell signal into one
     buy_count_help=0
@@ -115,6 +126,13 @@ def run(debug=0):
 
     #13 combine buy and sell signal into one
     df_result["r:buy_sell"]=df_result["r:buy"]+( df_result["r:sell"] * (-1))
+    for counter in range(1,12):
+        if f"r{counter}:buy" in df_result.columns and f"r{counter}:buy" in df_result.columns:
+            df_result[f"r{counter}:buy_sell"]=df_result[f"r{counter}:buy"].add(df_result[f"r{counter}:sell"]*(-1),fill_value=0)
+
+
+    #14 evaluation different result against each other
+
 
     # Save excel
     LB.to_csv_feather(df=df_result,a_path=a_path)
@@ -412,32 +430,55 @@ def step5(df_result,d_preload, debug=0):
 
 def step5_single(df_result, debug=False):
     # 2. Generate step 5 buy sell signal
-    r5_freq_result=[]
+    r5_freq_buy_result=[]
+    r5_freq_sell_result=[]
     df_result["r5:buy"]=0.0
     df_result["r5:sell"]=0.0 # step5 does not produce any sell signal
 
-    for freq in [120,180,240,300,360]:
+    for freq in [120,240,500]:
         print(f"step5 close{freq}...")
+        #rolling norm
         topn_close_name = Alpha.rollingnorm(df=df_result, freq=freq, abase="r5:topn_index", inplace=True)
 
-        # 2.1 Buy if past normalized return is < 0.2
-        df_helper = df_result.loc[(df_result[topn_close_name] < 0.25)]
-        df_result[f"r5:topn_close{freq}_buy"] = 1 - df_helper[topn_close_name]
+        #is max
+        df_result["topn_emax"]=df_result["r5:topn_index"].expanding().max()
+        is_top_pct = Alpha.ismax(df=df_result, abase="r5:topn_index", emax="topn_emax",inplace=True, q=0.85, score=1)
 
-        r5_freq_result+=[f"r5:topn_close{freq}_buy"]
+        # 2.1 Buy if past normalized return is < 0.2
+        df_helper = df_result.loc[(df_result[topn_close_name] < 0.20)]
+        df_result[f"r5:topn_close{freq}_buy"] = 1 - df_helper[topn_close_name]
+        r5_freq_buy_result+=[f"r5:topn_close{freq}_buy"]
+
+        # 2.2 Sell if they are not at top 15% and there is no buy signal = bear but not bear enough
+        df_helper = df_result[(df_result[is_top_pct]==-1)&(df_result[f"r5:topn_close{freq}_buy"].isna())]
+        df_helper["sell_helper"]=1
+        df_result[f"r5:topn_close{freq}_sell"] =df_helper["sell_helper"]
+        r5_freq_sell_result += [f"r5:topn_close{freq}_sell"]
+
         if debug<2:
             del df_result[topn_close_name]
+            del df_result["topn_emax"]
+            del df_result[is_top_pct]
 
     # combine all freq into one
     counter=0
-    for freq_result in r5_freq_result:
+    for freq_result in r5_freq_buy_result:
         df_result["r5:buy"] = df_result["r5:buy"].add(df_result[freq_result],fill_value=0)
         counter+=1
+        if debug<1:del df_result[freq_result]
 
-        if debug<1:
-            del df_result[freq_result]
+    counter = 0
+    for freq_result in r5_freq_sell_result:
+        df_result["r5:sell"] = df_result["r5:sell"].add(df_result[freq_result], fill_value=0)
+        counter += 1
+        if debug < 1: del df_result[freq_result]
 
     df_result["r5:buy"]=df_result["r5:buy"]/counter
+    df_result["r5:sell"]=df_result["r5:sell"]/counter
+
+    #for now exclude sell result
+    del df_result["r5:sell"]
+
 
 def step6(df_result):
     """Check how the 3 best industries are doing
@@ -460,7 +501,7 @@ def step8(df_result, debug=0):
     2. overlay of first month prediction effect
     3. overlay of day of month effect
     """
-
+    #PART 1
     #init
     df_trade_date=DB.get_trade_date()
 
@@ -478,9 +519,22 @@ def step8(df_result, debug=0):
         df_result[division]=df_result[division].astype(int)
         df_result[division]=df_result[division].replace(df_division["pct_chg"].to_dict())
         df_result[division] = df_result[division].astype(float)
-        df_result["r8:buy_sell"]+=df_result[division]
+        #df_result["r8:buy_sell"]+=df_result[division]
 
-    #overlay of chinese new year effect
+
+    #PART 2
+    df_sh=DB.get_asset(ts_code="000001.SH",asset="I")
+    df_sh=LB.trade_date_to_calender(df_sh)
+    #overlay of chinese new year effect(compare ny gain against others. If strong then the whole year is strong)
+    # in order to give a more real prediction, we conduct the prediction step by step from the past
+
+    df_sh_helper=df_sh[df_sh["month"]==2]
+    df_result=df_sh_helper.groupby("year").mean()
+    df_result.to_csv("test.csv")
+    #todo unfinished because I feel it will not be better than other existing signals
+    #overlay of first month (compare first month gain against others. If strong then the whole year is strong)
+
+
 
     #overlay first and last week of year
 
@@ -570,15 +624,119 @@ def step_eleven():
 
 
 
-    #1000
-    #500
-    #240
+
+
+def step10(df_result, debug=0):
+    """
+    rsi freq: this step is to check if different freq combination of rsi would make a better rsi signal
+    """
+
+    df_result["r10:buy"] =0
+    df_result["r10:sell"] =0
+    for counter, freq in enumerate([20,40,60,80,100,120,180,240,300,360]):
+        rsi_name=Alpha.rsi(df=df_result,abase="close_sh",freq=freq, inplace=True)
+
+
+        # create buy signal
+        df_helper = df_result.loc[(df_result[rsi_name] < 50)]
+        df_result[f"r10:close_sh{freq}_buy"] = df_helper[rsi_name]
+
+
+        # create sell signal
+        df_helper = df_result.loc[(df_result[rsi_name] > 50)]
+        df_result[f"r10:close_sh{freq}_sell"] = df_helper[rsi_name]
+
+
+        df_result["r10:buy"] = df_result["r10:buy"].add(df_result[f"r10:close_sh{freq}_buy"], fill_value=0)
+        df_result["r10:sell"] = df_result["r10:sell"].add(df_result[f"r10:close_sh{freq}_sell"], fill_value=0)
+
+        if debug<1:
+            del df_result[rsi_name]
+
+    df_result["r10:buy"]= df_result["r10:buy"]/(counter+1)
+    df_result["r10:sell"]= df_result["r10:sell"]/(counter+1)
 
 
 
+def step11(df_result, debug=0, index="sh"):
+    """
+    Different kind of volatility: against past, intraday, against other stock
+
+    1. check time with volatility against itself in the past = rolling
+    2. check time with volatility against others now
+    3. check time with intraday volatility
+    4. check time with low volatility and uptrend (This does not exist in A Stock)
+
+    method 1: 1. calculate price_std with freq overlay. 2. calculate together with close rolling norm
+    method 2: 1. calculate price_std and rolling norm overlay together in one step
+    Note: this method tried using BOTH method and the result is okish, all signals have almost the same threshhold which is bad. Therefore I conclude that this method is not that much useful.
+    Note: all other steps like 3,4,5 are using method 2 and got good result
+    """
+    #1. Check volatility AGAINST PAST
+    #1.1 check time with PRICE volatility AGAINST PAST
+    #result -> can predict crazy and normal time
+
+
+    #normalize price
+    df_result[f"r11:buy"]=0.0
+    df_result[f"r11:sell"]=0.0
+    divideby=1
+    for freq in [120,240,500]:
+        print(f"step11 {index} close{freq}", )
+        #normalize close
+        norm_close_name = Alpha.rollingnorm(df=df_result, abase=f"close_{index}", freq=freq, inplace=True)
+
+        #calcualte close std
+        df_result[f"close_std{freq}"]=df_result[f"close_{index}"].rolling(freq).std()
+
+        # normalize result(dirty way, should not be like that because it knows future)
+        norm_close_std_name = Alpha.norm(df=df_result, abase=f"close_std{freq}", inplace=True)
+
+        # generate buy signal: volatiliy is low and past price is low = Buy
+        # volatility < 0.2, past gain < 0.4: buy. indicates turning point
+        df_helper=df_result[ (df_result[norm_close_name]<0.3) & (df_result[norm_close_std_name]< 0.2)]
+        df_result[f"r11:norm{freq}_buy"] =  (1- df_helper[norm_close_name]) +(1 - df_helper[norm_close_std_name])
+        df_result[f"r11:buy"] = df_result[f"r11:buy"].add(df_result[f"r11:norm{freq}_buy"], fill_value=0)
+
+        # generate Sell signal: volatiliy is low and past price is high = Sell
+        # volatility < 0.2, past gain > 0.8: buy. indicates turning point
+        df_helper = df_result[(df_result[norm_close_name] > 0.7) & (df_result[norm_close_std_name] < 0.2)]
+        df_result[f"r11:norm{freq}_sell"] =  (df_helper[norm_close_name]) + (1 - df_helper[norm_close_std_name])
+        df_result[f"r11:sell"] = df_result[f"r11:sell"].add(df_result[f"r11:norm{freq}_sell"], fill_value=0)
+
+
+        #increment divideby
+        divideby += 1
+
+        #debug
+        if debug < 2:
+            del df_result[norm_close_name]
+            del df_result[f"close_std{freq}"]
+            del df_result[norm_close_std_name]
+            del df_result[f"r11:norm{freq}_buy"]
+            del df_result[f"r11:norm{freq}_sell"]
+
+
+    #normalize
+    df_result[f"r11:buy"]=df_result[f"r11:buy"] / (divideby*2)
+    df_result[f"r11:sell"]=df_result[f"r11:sell"] / (divideby*2)
 
 
 
+    #generate sell signal: volatiliy is low and past price is high = Sell
+
+
+    #1.2 check time with VOL volatility AGAINST PAST
+    #Result: ok but not as good as price std (because volume is not mean normalized?)
+    """
+    func_vol_partial = partial(func, abase="vol_sh")
+    LB.frequency_ovelay(df=df_result, func=func_vol_partial, a_freqs=[[20, 40, 60, 120, 240]], a_names=["sh_vol_std", "vol_sh"], debug=debug)
+    df_result.loc[df_result["year"] < 2000, "sh_vol_std"] = 0.0
+    """
+
+    #2. Volatility against other stock
+
+    #3. Volatility intraday
 
 
 

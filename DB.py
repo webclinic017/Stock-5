@@ -958,21 +958,22 @@ def update_asset_re(df, asset):
     # print(f"{ts_code} abv_ma_days finished")
 
 
-def update_asset_bundle(bundle_name, bundle_func, market="CN", big_update=True, step=1):
+def update_asset_bundle(bundle_name, bundle_func, market="CN", big_update=True, a_asset=["E"], step=1):
     """updates other information from tushare such as blocktrade,sharefloat
     check out LB.c_asset_E_bundle() for more
     """
-    df_ts_code = get_ts_code(a_asset=["E"], market=market)
+    df_ts_code = get_ts_code(a_asset=a_asset, market=market)
     for ts_code in df_ts_code.index[::step]:
-        a_path = LB.a_path(f"Market/{market}/Asset/E/{bundle_name}/{ts_code}")
+        a_path = LB.a_path(f"Market/{market}/Asset/{a_asset[0]}/{bundle_name}/{ts_code}")
         if os.path.isfile(a_path[1]) and (not big_update):
             print(ts_code, bundle_name, "Up-to-date")
         else:
             df = bundle_func(ts_code)
-            df = LB.df_reverse_reindex(df)
-            df = LB.set_index(df,set_index="ts_code")
-            LB.to_csv_feather(df=df, a_path=a_path, skip_csv=True)
-            print(ts_code, bundle_name, "UPDATED")
+            if not df.empty:
+                df = LB.df_reverse_reindex(df)
+                df = LB.set_index(df,set_index="ts_code")
+                LB.to_csv_feather(df=df, a_path=a_path, skip_csv=True)
+                print(ts_code, bundle_name, "UPDATED")
 
 
 def update_asset_qdii():
@@ -1479,13 +1480,18 @@ def update_all_in_one_cn(big_update=False):
 
     # 1.0. ASSET - Indicator bundle
     if False:
-        # update each asset one after another
-        for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle().items()):
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+        # E: update each E asset one after another
+        for asset in ["E","FD"]:
+            for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
+                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False, "a_asset":[asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+
+
     else:
-        # update all asset at same time
-        a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle().items()]
-        LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+        # update all E asset at same time
+        for asset in ["FD"]:
+            a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
+            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False, "a_asset":[asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+
 
     # 1.0. GENERAL - CAL_DATE
     # update_trade_cal()  # always update
@@ -1524,14 +1530,20 @@ def update_all_in_one_cn_v2(big_update=False):
 
     # 1.0. ASSET - Indicator bundle (MANUALLY UPDATE)
 
+    # 1.0. ASSET - Indicator bundle
     if False:
-        # update each asset one after another
-        for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle().items()):
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+        # E: update each E asset one after another
+        for asset in ["E", "FD"]:
+            for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
+                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False, "a_asset": [asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+
+
     else:
-        # update all asset at same time
-        a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle().items()]
-        LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+        # update all E asset at same time
+        for asset in ["FD"]:
+            a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
+            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False, "a_asset": [asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+
 
 
     # 1.0. GENERAL - CAL_DATE
@@ -1589,8 +1601,10 @@ if __name__ == '__main__':
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
-        update_trade_date()
-        #update_all_in_one_cn_v2()
+        #update_trade_date()
+        update_all_in_one_cn()
+
+
 
 
 

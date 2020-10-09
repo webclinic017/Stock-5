@@ -658,7 +658,7 @@ def asset_seasonal_statistic_stock():
         LB.to_csv_feather(df=df_division_result, a_path=a_path, skip_feather=True)
 
 
-    # add new year data todo
+
 
 def asset_prob_gain_asset(asset="E"):
     """

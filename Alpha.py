@@ -174,6 +174,8 @@ def slope(df, abase, freq, re, inplace, name, cols):
     df[f"{name}"] = re(df[abase],freq).apply(apply_poly_fit)
     return alpha_return(locals())
 
+
+
 """This strategy works best, when the trend is up.
     -if price is low and there is a highpass, this might be the turning point
     -The lower the price, the higher the highpass, the stronger the signal to break the downtrend
@@ -186,9 +188,9 @@ def slope(df, abase, freq, re, inplace, name, cols):
     -if cj score is high, e.g. 0.8. you buy, the price moves flat and score goes down to .e.g.0.0. This means the signal failed. it was a whipsaw
     -This function has a lot of potential and can be improved in many ways: unstable period, find a good freq, using lowpass somehow, addin extrema
     """
-
 @alpha_wrap
 def cj(df, abase, freq, inplace, name, cols):
+    """my support and resistance function?"""
     hp = highpass(df=df, abase="close", freq=freq, inplace=False)
 
     #naive
@@ -2281,6 +2283,7 @@ def DFT_MUSIC():
 
 """alpha aggregation + analysis = not creating but analyzing alphas"""
 # trend exchange. How long a trend lasts in average
+#deprecated@ use consequtive count in LB instead
 def trend_swap(df, column, value):
     try:
         df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()

@@ -159,8 +159,16 @@ def my_concept(src="ts"):
 def my_concept_detail(id="",ts_code="",fields="id,concept_name,ts_code,name,in_date,out_date"):
     return get(func=pro.concept_detail, fname="pro.concept_detail", kwargs=locals())
 
+
+def my_cn_m(start_m="00000000", end_m="99999999",fields='month,m0,m1,m2,m0_yoy,m1_yoy,m2_yoy',):
+    return get(func=pro.cn_m, fname="pro.cn_m", kwargs=locals())
+
 if __name__ == '__main__':
 
-    df = ts.pro_bar(ts_code='000001.SZ', asset='E', start_date='20180101', end_date='20181011')
+    df = my_cn_m()
+    df=LB.df_reverse_reindex(df)
+    df["month"]=df["month"].astype(int)
+    df=df[df["month"]> 199001]
+    df["m1-m2"]=df["m1_yoy"]-df["m2_yoy"]
 
     df.to_csv("test.csv",encoding="utf-8_sig")

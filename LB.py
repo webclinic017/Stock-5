@@ -582,25 +582,30 @@ def c_index_label():
     return ["trade_date", "date", "ann_date", "end_date", "cal_date"]
 
 
-def c_asset_E_bundle():
-    return {"block_trade": _API_Tushare.my_block_trade,
-            "holder_trade": _API_Tushare.my_holder_trade,
-            "margin_detail": _API_Tushare.my_margin_detail,
-            "top10_holders": _API_Tushare.my_top10_holders,
-            "suspended": _API_Tushare.my_suspended,
-            "dividend": _API_Tushare.my_dividend,
-            "share_float": _API_Tushare.my_share_float,
-            "forecast": _API_Tushare.my_forecast,
+def c_asset_E_bundle(asset="E"):
+    if asset=="E":
+        return {"block_trade": _API_Tushare.my_block_trade,
+                "holder_trade": _API_Tushare.my_holder_trade,
+                "margin_detail": _API_Tushare.my_margin_detail,
+                "top10_holders": _API_Tushare.my_top10_holders,
+                "suspended": _API_Tushare.my_suspended,
+                "dividend": _API_Tushare.my_dividend,
+                "share_float": _API_Tushare.my_share_float,
+                "forecast": _API_Tushare.my_forecast,
 
-            # financial
-            "fina_indicator": _API_Tushare.my_fina_indicator,
-            "income": _API_Tushare.my_income,
-            "balancesheet": _API_Tushare.my_balancesheet,
-            "cashflow": _API_Tushare.my_cashflow
+                # financial
+                "fina_indicator": _API_Tushare.my_fina_indicator,
+                "income": _API_Tushare.my_income,
+                "balancesheet": _API_Tushare.my_balancesheet,
+                "cashflow": _API_Tushare.my_cashflow
 
-            # not implemented because not assetable
-            # "repurchase": _API_Tushare.my_repurchase,
-            }
+                # not implemented because not assetable
+                # "repurchase": _API_Tushare.my_repurchase,
+                }
+
+    if asset== "FD":
+        return {"fund_portfolo": _API_Tushare.my_fund_portfolo
+                }
 
 
 def c_op():
@@ -919,6 +924,55 @@ def custom_pairwise_cartesian(a_array, n=1):
 # for some reason the last one is always wrong
 def custom_pairwise_overlap(iterables):
     return list(zip(iterables, iterables[1:] + iterables[:1]))[:-1]
+
+"""this might be one of the most important technique that I have discovered"""
+def frequency_ovelay(df, func, a_freqs, a_names,debug=0):
+    """
+    this meta function takes a single function, generates different freq and overlay them together
+
+    :param df: df of the operation base
+    :param func: short function that is to be repeated with freq
+    :param a_freqs: [[20,60,120],[60,120,240]] or [[20,60,120],]
+    :param a_names: ["rname", "f1name","f2name"] or ["rname", "f1name"]
+    :return: empty
+    """
+
+    rname=a_names[0]
+    f1name = a_names[1]
+    df[rname] = 0.0
+    divideby = 1
+
+    a_freq1=a_freqs[0]
+
+    if len(a_freqs) == 1 and len(a_names) == 2:
+        #case 1: 1 loop
+        for  freq1 in a_freq1:
+            df[f"{rname}_{f1name}{freq1}"] = func(df=df, freq1=freq1)
+            df[f"{rname}"] = df[f"{rname}"].add(df[f"{rname}_{f1name}{freq1}"], fill_value=0)
+            divideby+=1
+
+            if debug<3:
+                del df[f"{rname}_{f1name}{freq1}"]
+
+
+    elif len(a_freqs) == 2 and len(a_names) == 3:
+        # case 2: 2 loops
+        a_freq2 = a_freqs[1]
+        f2name = a_names[2]
+
+        for  freq1 in a_freq1:
+            for counter, freq2 in a_freq2:
+                df[f"{rname}_{f1name}{freq1}_{f2name}{freq2}"] = func(df=df, freq1=freq1, freq2=freq2)
+                df[f"{rname}"] = df[f"{rname}"].add(df[f"{rname}_{f1name}{freq1}_{f2name}{freq2}"], fill_value=0)
+                divideby += 1
+
+                if debug < 3:
+                    del df[f"{rname}_{f1name}{freq1}"]
+
+    else:
+        raise AssertionError
+
+    df[f"{rname}"] = df[f"{rname}"] / divideby
 
 
 def drange(start, end, step):
