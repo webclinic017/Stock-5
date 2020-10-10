@@ -143,7 +143,7 @@ def my_cctv_news(day):
     return finance.run_query(query(finance.CCTV_NEWS).filter(finance.CCTV_NEWS.day == day))
 
 def my_total_margin(date=""):
-    date=LB.switch_trade_date(str(date))
+    date=LB.df_switch_trade_date(str(date))
     return finance.run_query(query(finance.STK_MT_TOTAL).filter(finance.STK_MT_TOTAL.date == date).limit(10))
 
 def my_get_bars(jq_code,freq):
@@ -157,5 +157,5 @@ def my_get_industry_stocks(industry_code):
 
 
 if __name__ == '__main__':
-    share_holder(LB.switch_ts_code("000002.SZ"))
+    share_holder(LB.df_switch_ts_code("000002.SZ"))
 

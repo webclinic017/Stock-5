@@ -256,7 +256,7 @@ def main():
         df[index_label] = df[index_label].astype(int)
         df = pd.merge(df_sh.copy().reset_index(), df, how='left', left_on=["trade_date"], right_on=[index_label], sort=False)
         df = df.set_index("trade_date")
-        LB.remove_columns(df, [index_label])
+        LB.columns_remove(df, [index_label])
         a_important_labels = [x for x in a_important_labels if x != index_label]
         for label in a_important_labels:
             df[label] = df[label].fillna(method="ffill")

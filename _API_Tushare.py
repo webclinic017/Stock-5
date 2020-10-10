@@ -29,11 +29,11 @@ def get(func, fname, kwargs, df_fallback=pd.DataFrame()):
 
 def my_pro_bar(asset: str, ts_code: str, freq: str, start_date: str, end_date: str, adj="qfq", factors=[]):
     """for FD limited to 1000 rows. For E, limited to 4000 Rows"""
-    return get(func=ts.pro_bar, fname="ts.pro_bar", kwargs=locals(), df_fallback=LB.empty_df("pro_bar"))
+    return get(func=ts.pro_bar, fname="ts.pro_bar", kwargs=locals(), df_fallback=LB.df_empty("pro_bar"))
 
 def my_hk_daily( ts_code, start_date="00000000", end_date="30000000"):
     """for FD limited to 1000 rows. For E, limited to 4000 Rows"""
-    return get(func=pro.hk_daily, fname="pro.hk_daily", kwargs=locals(), df_fallback=LB.empty_df("pro_bar"))
+    return get(func=pro.hk_daily, fname="pro.hk_daily", kwargs=locals(), df_fallback=LB.df_empty("pro_bar"))
 
 
 def my_query(api_name="", ts_code="000001.SZ", start_date="00000000", end_date="00000000"):
@@ -56,35 +56,35 @@ def my_trade_cal(api_name="trade_cal", start_date="00000000", end_date="00000000
 
 
 def my_holder_trade(ts_code): #IMPORTANT! holder_trade instead of holdertrade in my version!
-    return get(func=pro.stk_holdertrade, fname="pro.stk_holdertrade", kwargs=locals(), df_fallback=LB.empty_df("holder_trade"))
+    return get(func=pro.stk_holdertrade, fname="pro.stk_holdertrade", kwargs=locals(), df_fallback=LB.df_empty("holder_trade"))
 
 
 def my_pledge_stat(ts_code):
-    return get(func=pro.pledge_stat, fname="pro.pledge_stat", kwargs=locals(), df_fallback=LB.empty_df("pledge_stat"))
+    return get(func=pro.pledge_stat, fname="pro.pledge_stat", kwargs=locals(), df_fallback=LB.df_empty("pledge_stat"))
 
 
 def my_cashflow(ts_code, start_date="00000000", end_date="30000000"):
-    return get(func=pro.cashflow, fname="pro.cashflow", kwargs=locals(), df_fallback=LB.empty_df("cashflow"))
+    return get(func=pro.cashflow, fname="pro.cashflow", kwargs=locals(), df_fallback=LB.df_empty("cashflow"))
 
 
 def my_fina_indicator(ts_code, start_date="00000000", end_date="30000000"):
-    return get(func=pro.fina_indicator, fname="pro.fina_indicator", kwargs=locals(), df_fallback=LB.empty_df("fina_indicator"))
+    return get(func=pro.fina_indicator, fname="pro.fina_indicator", kwargs=locals(), df_fallback=LB.df_empty("fina_indicator"))
 
 
 def my_balancesheet(ts_code, start_date="00000000", end_date="30000000"):
-    return get(func=pro.balancesheet, fname="pro.balancesheet", kwargs=locals(), df_fallback=LB.empty_df("balancesheet"))
+    return get(func=pro.balancesheet, fname="pro.balancesheet", kwargs=locals(), df_fallback=LB.df_empty("balancesheet"))
 
 
 def my_income(ts_code, start_date="00000000", end_date="30000000"):
-    return get(func=pro.income, fname="pro.income", kwargs=locals(), df_fallback=LB.empty_df("income"))
+    return get(func=pro.income, fname="pro.income", kwargs=locals(), df_fallback=LB.df_empty("income"))
 
 
 def my_block_trade(ts_code):
-    return get(func=pro.block_trade, fname="pro.block_trade", kwargs=locals(), df_fallback=LB.empty_df("block_trade"))
+    return get(func=pro.block_trade, fname="pro.block_trade", kwargs=locals(), df_fallback=LB.df_empty("block_trade"))
 
 
 def my_share_float(ts_code):
-    return get(func=pro.share_float, fname="pro.share_float", kwargs=locals(), df_fallback=LB.empty_df("share_float"))
+    return get(func=pro.share_float, fname="pro.share_float", kwargs=locals(), df_fallback=LB.df_empty("share_float"))
 
 
 def my_repurchase(ann_date):
@@ -132,19 +132,19 @@ def my_yc_cb(ts_code="", curve_type="", trade_date="",start_date="00000000", end
 
 
 def my_margin_detail(ts_code):
-    return get(func=pro.margin_detail, fname="pro.margin_detail", kwargs=locals(),df_fallback=LB.empty_df("margin_detail"))
+    return get(func=pro.margin_detail, fname="pro.margin_detail", kwargs=locals(), df_fallback=LB.df_empty("margin_detail"))
 
 def my_top10_holders(ts_code,start_date="00000000",end_date="30000000"):
-    return get(func=pro.top10_holders, fname="pro.top10_holders", kwargs=locals(), df_fallback=LB.empty_df("top10_holders"))
+    return get(func=pro.top10_holders, fname="pro.top10_holders", kwargs=locals(), df_fallback=LB.df_empty("top10_holders"))
 
 def my_suspended(ts_code):
-    return get(func=pro.suspend_d, fname="pro.suspend_d", kwargs=locals(),df_fallback=LB.empty_df("suspended"))
+    return get(func=pro.suspend_d, fname="pro.suspend_d", kwargs=locals(), df_fallback=LB.df_empty("suspended"))
 
 def my_dividend(ts_code):
-    return get(func=pro.dividend, fname="pro.dividend", kwargs=locals(),df_fallback=LB.empty_df("dividend"))
+    return get(func=pro.dividend, fname="pro.dividend", kwargs=locals(), df_fallback=LB.df_empty("dividend"))
 
 def my_forecast(ts_code):
-    return get(func=pro.forecast, fname="pro.forecast", kwargs=locals(),df_fallback=LB.empty_df("forecast"))
+    return get(func=pro.forecast, fname="pro.forecast", kwargs=locals(), df_fallback=LB.df_empty("forecast"))
 
 
 def my_major_news(start_date="",end_date="",fields="title,content,pub_time,src"):

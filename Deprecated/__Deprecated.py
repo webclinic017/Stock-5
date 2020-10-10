@@ -177,7 +177,7 @@ def auto_corr_multiple():
             portfolio_writer.save()
             return
         except Exception as e:
-            LB.close_file(path)
+            LB.file_close(path)
             LB.sound("close_excel.mp3")
             print(e)
             time.sleep(10)

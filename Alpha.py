@@ -7,6 +7,7 @@ from scipy.stats import gmean
 import talib
 import DB
 import math
+import scipy
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -190,7 +191,6 @@ def slope(df, abase, freq, re, inplace, name, cols):
     """
 @alpha_wrap
 def cj(df, abase, freq, inplace, name, cols):
-    """my support and resistance function?"""
     hp = highpass(df=df, abase="close", freq=freq, inplace=False)
 
     #naive
@@ -372,10 +372,13 @@ def IFT(df, abase, inplace, name, cols, min=0, max=1):
 
 
 def apply_poly_fit(s, degree=1):
+    def polyfit_slope(s_index, s_data, degree=1):
+        return np.polyfit(s_index, s_data, degree)[0]  # if degree is 1, then [0] is slope
+
     """Trend apply = 1 degree polynomials"""
     """ maybe normalize s before apply"""
     index = range(0, len(s))
-    return LB.polyfit_slope(index, s, degree=degree)
+    return polyfit_slope(index, s, degree=degree)
 
 
 def apply_norm(series, min=0, max=1):
@@ -559,7 +562,7 @@ def geomean(df, abase, freq, re, inplace, name, cols):
 """Point: complex functions """
 
 """overall test function to compare other function"""
-def MESA(df):
+def mesa(df):
     """Using Sine, leadsine to find turning points"""
     ts_code = "000002.SZ"
     df = DB.get_asset(ts_code=ts_code)
@@ -1641,7 +1644,7 @@ def cdl(df, abase):
 
     df[abase] = (df[df[a_positive_columns] == 100].sum(axis='columns') + df[df[a_negative_columns] == -100].sum(axis='columns')) / 100
     # IMPORTANT! only removing column is the solution because slicing dataframe does not modify the original df
-    LB.remove_columns(df, a_positive_columns + a_negative_columns)
+    LB.df_columns_remove(df, a_positive_columns + a_negative_columns)
     return abase
 
 
@@ -1831,6 +1834,22 @@ def vola(df, abase, freq, inplace, name, cols):
     df[name]=df[f"{name}[q]"]/df[abase]
     return alpha_return(locals())
 
+@alpha_wrap
+def consequtive_count(df, abase, inplace, name, cols, count=1):
+    s=df[abase]
+    if count==1:
+        df[name]= s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
+    elif count==0:
+        s.replace({0: 1, 1: 0}, inplace=True)
+        df[name] = s * (s.groupby((s != s.shift()).cumsum()).cumcount() + 1)
+        s.replace({0: 1, 1: 0}, inplace=True)
+    else:
+        raise AssertionError
+
+    return alpha_return(locals())
+
+
+
 
 """Point: Not implemented"""
 def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 10}, df_asset=pd.DataFrame(), delay=3):
@@ -1942,7 +1961,7 @@ def support_resistance_horizontal_expansive(start_window=240, rolling_freq=5, st
     return df_asset
 
 
-def support_resistance_horizontal_responsive(start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 4, "und": 4}, df_asset=pd.DataFrame(), delay=3):
+def support_resistance_horizontal_responsive(df_asset,start_window=240, rolling_freq=5, step=10, spread=[4, 0.2], bins=10, d_rs={"abv": 4, "und": 4},  delay=3):
     """
     start_window: when iterating in the past, how big should the minimum window be. not so relevant actually
     rolling_freq: when creating rolling min or max, how long should past be considered
@@ -2141,7 +2160,7 @@ def trend2(df: pd.DataFrame, abase: str, thresh_log=-0.043, thresh_rest=0.7237, 
         # a_remove.append(market_suffix + "rsi" + str(i))
         # a_remove.append(market_suffix + "phase" + str(i))
         pass
-    LB.remove_columns(df, a_remove)
+    LB.df_columns_remove(df, a_remove)
 
     # calculate final trend =weighted trend of previous
     return trend_name
@@ -2204,7 +2223,7 @@ def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str =
         # a_remove.append(market_suffix + "rsi" + str(i))
         # a_remove.append(market_suffix + "phase" + str(i))
         pass
-    LB.remove_columns(df, a_remove)
+    LB.df_columns_remove(df, a_remove)
 
     # calculate final trend =weighted trend of previous
     df[trend_name] = df[f"{trend_name}2"] * 0.80 + df[f"{trend_name}5"] * 0.12 + df[f"{trend_name}10"] * 0.04 + df[f"{trend_name}20"] * 0.02 + df[f"{trend_name}60"] * 0.01 + df[f"{trend_name}240"] * 0.01
@@ -2212,7 +2231,7 @@ def trend(df, abase, thresh_log=-0.043, thresh_rest=0.7237, market_suffix: str =
 
 
 
-
+#INTERFACES
 def linear_kalman_filter():
     """http://www.mesasoftware.com/seminars/PredictiveIndicators.pdf
     Guesses the error caused by phast values = difference of past_close and past kalman
@@ -2246,7 +2265,7 @@ def pure_predictor():
            """
 
 
-def FIR_filter():
+def fir_filter():
     """http://www.mesasoftware.com/seminars/TAOTN2002.pdf
     http://www.mesasoftware.com/papers/TimeWarp.pdf
 
@@ -2274,24 +2293,14 @@ def goertzel_filter():
     """
 
 
-def DFT_MUSIC():
+def dft_music():
     """http://stockspotter.com/Files/fouriertransforms.pdf
     a DFT with MUSIC algorithm to find the useful and dominant spectrum
     """
 
 
 
-"""alpha aggregation + analysis = not creating but analyzing alphas"""
-# trend exchange. How long a trend lasts in average
-#deprecated@ use consequtive count in LB instead
-def trend_swap(df, column, value):
-    try:
-        df_average_bull = df.groupby(df[column].ne(df[column].shift()).cumsum())[column].value_counts()
-        df_average_bull = df_average_bull.reset_index(level=0, drop=True)
-        mean_cross_over_days = df_average_bull.loc[value].mean()
-        return mean_cross_over_days
-    except:
-        return np.nan
+
 
 
 
@@ -2302,7 +2311,7 @@ def trend_swap(df, column, value):
 
 if __name__ == '__main__':
     df = DB.get_asset(ts_code="399001.SZ", asset="I")
-    df = LB.ohlcpp(df)
+    df = LB.df_ohlcpp(df)
 
 
     #mini=minima(df=df, abase="close", n=60, inplace=True)

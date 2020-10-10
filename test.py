@@ -89,8 +89,8 @@ def asset_beat_index(start_date="00000000",end_date=LB.today()):
 
         #run and evaluate
         for key,df_compare in {"index":df_exchange, "industry1":df_industry1,"industry2":df_industry2,"industry3":df_industry3}.items():
-            df_asset_slim=LB.ohlcpp(df_asset).reset_index()
-            df_index_slim=LB.ohlcpp(df_compare).reset_index()
+            df_asset_slim=LB.df_ohlcpp(df_asset).reset_index()
+            df_index_slim=LB.df_ohlcpp(df_compare).reset_index()
 
             df_asset_slim["trade_date"]=df_asset_slim["trade_date"].astype(int)
             df_index_slim["trade_date"]=df_index_slim["trade_date"].astype(int)
@@ -146,7 +146,7 @@ def year_beat_index():
     for key,df in d_index.items():
         df_year=LB.timeseries_to_year(df)
         df_year["year"]=df_year.index
-        df_year["year"]=df_year["year"].apply(LB.get_trade_date_datetime_y).astype(int)
+        df_year["year"]=df_year["year"].apply(LB.trade_date_to_year).astype(int)
         d_index_y[key]=df_year.set_index("year")
 
     #preload aset
@@ -155,7 +155,7 @@ def year_beat_index():
     for ts_code, df_asset in d_e.items():
         df_asset_y=LB.timeseries_to_year(df_asset)
         df_asset_y["year"] = df_asset_y.index
-        df_asset_y["year"] = df_asset_y["year"].apply(LB.get_trade_date_datetime_y).astype(int)
+        df_asset_y["year"] = df_asset_y["year"].apply(LB.trade_date_to_year).astype(int)
         d_e_y[ts_code] = df_asset_y.set_index("year")
 
     for ts_compare,df_compare in d_index_y.items():
@@ -308,9 +308,5 @@ def pattern_bull():
 
 
 
-
-"1.test how good stocks at their maximum perform"
-"2.use indicator to see how many stocks are at their maximum"
-"3.simplyfy the gathering process each day to make more frequent update"
 
 

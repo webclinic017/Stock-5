@@ -17,7 +17,7 @@ pd.options.mode.chained_assignment = None  # default='warn'
 # pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
 # ts.set_token("c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32")
 
-def break_tushare_limit_helper(func, kwargs, limit=1000):
+def tushare_limit_breaker(func, kwargs, limit=1000):
     """for some reason tushare only allows fund，forex to be given at max 1000 entries per request"""
     df = func(**kwargs)
     len_df_this = len(df)
@@ -78,12 +78,12 @@ def update_trade_date(freq="D", market="CN", start_date="00000000", end_date=LB.
         xls = pd.ExcelFile(path_indicator)
 
         # get all different groups
-        a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],  # 1-5
-                    [LB.get_trade_date_datetime_m, "monthofyear"],  # 1-12
-                    [LB.get_trade_date_datetime_d, "dayofmonth"],  # 1-31
+        a_groups = [[LB.trade_date_to_datetime_dayofweek, "dayofweek"],  # 1-5
+                    [LB.trade_date_to_datetime_m, "monthofyear"],  # 1-12
+                    [LB.trade_date_to_datetime_d, "dayofmonth"],  # 1-31
                     [LB.get_trade_date_datetime_weekofyear, "weekofyear"],  # 1-51
-                    [LB.get_trade_date_datetime_dayofyear, "dayofyear"],  # 1-365
-                    [LB.get_trade_date_datetime_s, "seasonofyear"],  # 1-365
+                    [LB.trade_date_to_dayofyear, "dayofyear"],  # 1-365
+                    [LB.trade_date_to_datetime_s, "seasonofyear"],  # 1-365
                     ]
 
         # transform all trade_date into different format
@@ -115,7 +115,7 @@ def update_trade_date(freq="D", market="CN", start_date="00000000", end_date=LB.
         df_trade_cal_D = get_trade_cal_D(market=market, a_is_open=[0, 1])
 
         # count the non trading sequence
-        df_trade_cal_D["is_open_counter"] = LB.consequtive_counter(s=df_trade_cal_D["is_open"], count=0)
+        df_trade_cal_D["is_open_counter"] = Alpha.consequtive_count(df=df_trade_cal_D, abase="is_open", count=0, inplace=False)
 
         # shift 1 because we want to find the first day AFTER HOLIDAZ
         df_trade_cal_D["is_open_counter"] = df_trade_cal_D["is_open_counter"].shift(1)
@@ -261,7 +261,7 @@ def update_ts_code(asset="E", market="CN", big_update=True):
             a_df_instances = []
             for industry_code in df_member.index:
                 a_industry = _API_JQ.my_get_industry_stocks(industry_code)
-                a_industry = [LB.switch_ts_code(x) for x in a_industry]
+                a_industry = [LB.df_switch_ts_code(x) for x in a_industry]
                 df_industry = pd.DataFrame(index=a_industry)
                 df_industry.index.name = "ts_code"
                 df_industry["index_code"] = industry_code
@@ -403,7 +403,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
         return df
 
     def helper_F(ts_code, start_date, end_date):
-        df = break_tushare_limit_helper(func=_API_Tushare.my_fx_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
+        df = tushare_limit_breaker(func=_API_Tushare.my_fx_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
         df = LB.df_reverse_reindex(df)
         for column in ["open", "high", "low", "close"]:
             df[column] = (df[f"bid_{column}"] + df[f"ask_{column}"]) / 2
@@ -413,7 +413,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
     def helper_FD(ts_code, freq, asset, start_date, end_date, adj=None, market="CN"):
         if ".OF" in str(ts_code):
             # 场外基金
-            df = break_tushare_limit_helper(func=_API_Tushare.my_fund_nav, kwargs={"ts_code": ts_code}, limit=1000)
+            df = tushare_limit_breaker(func=_API_Tushare.my_fund_nav, kwargs={"ts_code": ts_code}, limit=1000)
             LB.df_reverse_reindex(df)
 
             df_helper = pd.DataFrame()
@@ -426,7 +426,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
 
         else:
             # 场内基金
-            df = break_tushare_limit_helper(func=_API_Tushare.my_fund_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
+            df = tushare_limit_breaker(func=_API_Tushare.my_fund_daily, kwargs={"ts_code": ts_code, "start_date": f"{start_date}", "end_date": f"{end_date}"}, limit=1000)
             if df.empty:
                 print("not good")
 
@@ -458,6 +458,103 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
                 df = LB.df_reverse_reindex(df)
                 LB.remove_columns(df, ["pre_close", "amount", "change", "adj_factor"])
             return df
+
+    # add technical indicators. but us stock still might use it .maybe change later
+    def update_asset_point(df, asset):
+        Alpha.ivola(df=df, inplace=True)  # 0.890578031539917 for 300 loop
+        Alpha.period(df=df, inplace=True)  # 0.2 for 300 loop
+        Alpha.pjup(df=df, inplace=True)  # 1.0798187255859375 for 300 loop
+        Alpha.pjdown(df=df, inplace=True)  # 1.05 independend for 300 loop
+
+    # For all Pri indices and derivates. ordered after FILO
+    def update_asset_re(df, asset):
+        LB.time_counter()
+        # close pgain fgain
+        for freq in [5, 10, 20, 60, 120, 240, 500]:
+            Alpha.pgain(df=df, abase="close", freq=freq, inplace=True)  # past gain includes today = today +yesterday comp_gain
+        for freq in [5, 10, 20, 60, 120, 240, 500]:
+            Alpha.fgain(df=df, abase="close", freq=freq, inplace=True)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        LB.time_counter("close fgain")
+        # 52w high and low
+        for freq in [20, 60, 240, 500]:
+            df[f"{freq}d_high"] = Alpha.max(df=df, abase="close", freq=freq, re=pd.Series.rolling, inplace=False)
+        for freq in [20, 60, 240, 500]:
+            df[f"{freq}d_low"] = Alpha.min(df=df, abase="close", freq=freq, re=pd.Series.rolling, inplace=False)
+        LB.time_counter("52w high/low")
+        # open pgain fgain
+        for freq in [1, 2, 5]:
+            Alpha.pgain(df=df, abase="open", freq=freq, inplace=True)  # past gain includes today = today +yesterday comp_gain
+        for freq in [1, 2, 5]:
+            Alpha.fgain(df=df, abase="open", freq=freq, inplace=True)  # future gain does not include today = tomorrow+atomorrow comp_gain
+        LB.time_counter("open fgain")
+        # counts how many percent of past n days are positive
+        for freq in [5, 10, 20]:
+            Alpha.pos(df=df, abase="pct_chg", freq=freq, inplace=True)
+        LB.time_counter("pos")
+        # alpha and Beta, lower the better
+        if asset in ["I", "E", "FD"]:
+            for ts_code in LB.c_index():
+                for freq in [5, 20, 60, 240]:
+                    Alpha.ab(df=df, abase="close", freq=freq, re=pd.Series.rolling, vs=ts_code, inplace=True)
+        LB.time_counter("beta")
+        # sharp ratio
+        for freq in [5, 20, 60, 240]:
+            Alpha.sharp(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
+        Alpha.sharp(df=df, abase="pct_chg", re=pd.Series.expanding, freq=240, inplace=True)
+        LB.time_counter("sharp")
+        # gmean. 5 sec too slow
+        # for freq in [5,20, 60, 240][::-1]:
+        #     Alpha.geomean(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
+        # Alpha.geomean(df=df, abase="pct_chg", re=pd.Series.expanding, freq=240, inplace=True)
+        # LB.time_counter("geomean")
+        # std
+        for freq in [5, 20, 60, 240]:
+            Alpha.std(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
+        LB.time_counter("std")
+        # is_max
+        emax = Alpha.max(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
+        Alpha.ismax(df=df, abase="close", emax=emax, inplace=True)
+        LB.time_counter("ismax")
+        # is_min
+        emin = Alpha.min(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
+        Alpha.ismin(df=df, abase="close", emin=emin, inplace=True)
+        LB.time_counter("ismin")
+        # entropy(waaay to slow)
+        # for freq in [5, 20, 60, 240]:
+        #     Alpha.entropy(df=df, abase="close", re=pd.Series.rolling, freq=freq, inplace=True)
+        # Alpha.entropy(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
+        # LB.time_counter("entropy")
+        # ta
+        for sfreq, bfreq in [(10, 20), (20, 60), (120, 240), (240, 500)]:
+            Alpha.macd(df=df, abase="close", freq=sfreq, freq2=bfreq, type=1, score=10, inplace=True)
+        LB.time_counter("macd")
+        for freq in [5, 20, 60, 240]:
+            Alpha.rsi(df=df, abase="close", freq=freq, inplace=True)
+        LB.time_counter("rsi")
+        for freq in [5, 20, 60, 240]:
+            Alpha.abv_ma(df=df, abase="close", freq=freq, inplace=True)
+        LB.time_counter("abv_ma")
+        Alpha.laguerre_rsi_u(df=df, abase="close", inplace=True)
+        LB.time_counter("laguerre")
+        for freq in [5, 20, 60, 240]:
+            Alpha.cj(df=df, abase="close", freq=freq, inplace=True)
+        LB.time_counter("cj")
+        # Testing - 高送转
+        # 1. total share/ first day share
+        # 2. difference between today share and tomorrow share
+        if "total_share" in df.columns:
+            df["norm_total_share"] = df["total_share"] / df.at[df["total_share"].first_valid_index(), "total_share"]
+            df["pct_total_share"] = df["norm_total_share"].pct_change()
+            df["e_pct_total_share"] = df["pct_total_share"].expanding(240).mean()
+        LB.time_counter("share")
+
+        # 3. trend swap. how long a trend average lasts too slow
+        # for freq in a_freqs:
+        #     #expanding
+        #     for until_index,df_expand in custom_expand(df,freq).items():
+        #         df.at[until_index,f"e_abv_ma_days{freq}"]=LB.trend_swap(df_expand, f"abv_ma{freq}", 1)
+        # print(f"{ts_code} abv_ma_days finished")
+
 
     def run(df_ts_codes):
         # iteratve over ts_code
@@ -650,7 +747,7 @@ def update_asset_G(asset=["E"], big_update=True, step=1):
         print("pre processing ts_code", ts_code)
         df_asset["dv_ttm"] = df_asset["dv_ttm"].astype(float)
 
-        df_nummeric = LB.get_numeric_df(df_asset)
+        df_nummeric = LB.df_to_numeric(df_asset)
 
         df_nummeric["divide_helper"] = 1  # counts how many asset are there at one day
         d_preload[ts_code] = df_nummeric
@@ -861,102 +958,6 @@ def update_asset_stock_market_all(start_date="00000000", end_date=LB.today(), as
     print("Date_Base UPDATED")
 
 
-def update_asset_point(df, asset):
-    Alpha.ivola(df=df, inplace=True)  # 0.890578031539917 for 300 loop
-    Alpha.period(df=df, inplace=True)  # 0.2 for 300 loop
-    Alpha.pjup(df=df, inplace=True)  # 1.0798187255859375 for 300 loop
-    Alpha.pjdown(df=df, inplace=True)  # 1.05 independend for 300 loop
-
-
-# For all Pri indices and derivates. ordered after FILO
-def update_asset_re(df, asset):
-    LB.time_counter()
-    # close pgain fgain
-    for freq in [5, 10, 20, 60, 120, 240, 500]:
-        Alpha.pgain(df=df, abase="close", freq=freq, inplace=True)  # past gain includes today = today +yesterday comp_gain
-    for freq in [5, 10, 20, 60, 120, 240, 500]:
-        Alpha.fgain(df=df, abase="close", freq=freq, inplace=True)  # future gain does not include today = tomorrow+atomorrow comp_gain
-    LB.time_counter("close fgain")
-    # 52w high and low
-    for freq in [20, 60, 240, 500]:
-        df[f"{freq}d_high"] = Alpha.max(df=df, abase="close", freq=freq, re=pd.Series.rolling, inplace=False)
-    for freq in [20, 60, 240, 500]:
-        df[f"{freq}d_low"] = Alpha.min(df=df, abase="close", freq=freq, re=pd.Series.rolling, inplace=False)
-    LB.time_counter("52w high/low")
-    # open pgain fgain
-    for freq in [1, 2, 5]:
-        Alpha.pgain(df=df, abase="open", freq=freq, inplace=True)  # past gain includes today = today +yesterday comp_gain
-    for freq in [1, 2, 5]:
-        Alpha.fgain(df=df, abase="open", freq=freq, inplace=True)  # future gain does not include today = tomorrow+atomorrow comp_gain
-    LB.time_counter("open fgain")
-    # counts how many percent of past n days are positive
-    for freq in [5, 10, 20]:
-        Alpha.pos(df=df, abase="pct_chg", freq=freq, inplace=True)
-    LB.time_counter("pos")
-    # alpha and Beta, lower the better
-    if asset in ["I", "E", "FD"]:
-        for ts_code in LB.c_index():
-            for freq in [5, 20, 60, 240]:
-                Alpha.ab(df=df, abase="close", freq=freq, re=pd.Series.rolling, vs=ts_code, inplace=True)
-    LB.time_counter("beta")
-    # sharp ratio
-    for freq in [5, 20, 60, 240]:
-        Alpha.sharp(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
-    Alpha.sharp(df=df, abase="pct_chg", re=pd.Series.expanding, freq=240, inplace=True)
-    LB.time_counter("sharp")
-    # gmean. 5 sec too slow
-    # for freq in [5,20, 60, 240][::-1]:
-    #     Alpha.geomean(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
-    # Alpha.geomean(df=df, abase="pct_chg", re=pd.Series.expanding, freq=240, inplace=True)
-    # LB.time_counter("geomean")
-    # std
-    for freq in [5, 20, 60, 240]:
-        Alpha.std(df=df, abase="pct_chg", re=pd.Series.rolling, freq=freq, inplace=True)
-    LB.time_counter("std")
-    # is_max
-    emax = Alpha.max(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
-    Alpha.ismax(df=df, abase="close", emax=emax, inplace=True)
-    LB.time_counter("ismax")
-    # is_min
-    emin = Alpha.min(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
-    Alpha.ismin(df=df, abase="close", emin=emin, inplace=True)
-    LB.time_counter("ismin")
-    # entropy(waaay to slow)
-    # for freq in [5, 20, 60, 240]:
-    #     Alpha.entropy(df=df, abase="close", re=pd.Series.rolling, freq=freq, inplace=True)
-    # Alpha.entropy(df=df, abase="close", re=pd.Series.expanding, freq=240, inplace=True)
-    # LB.time_counter("entropy")
-    # ta
-    for sfreq, bfreq in [(10, 20), (20, 60), (120, 240), (240, 500)]:
-        Alpha.macd(df=df, abase="close", freq=sfreq, freq2=bfreq, type=1, score=10, inplace=True)
-    LB.time_counter("macd")
-    for freq in [5, 20, 60, 240]:
-        Alpha.rsi(df=df, abase="close", freq=freq, inplace=True)
-    LB.time_counter("rsi")
-    for freq in [5, 20, 60, 240]:
-        Alpha.abv_ma(df=df, abase="close", freq=freq, inplace=True)
-    LB.time_counter("abv_ma")
-    Alpha.laguerre_rsi_u(df=df, abase="close", inplace=True)
-    LB.time_counter("laguerre")
-    for freq in [5, 20, 60, 240]:
-        Alpha.cj(df=df, abase="close", freq=freq, inplace=True)
-    LB.time_counter("cj")
-    # Testing - 高送转
-    # 1. total share/ first day share
-    # 2. difference between today share and tomorrow share
-    if "total_share" in df.columns:
-        df["norm_total_share"] = df["total_share"] / df.at[df["total_share"].first_valid_index(), "total_share"]
-        df["pct_total_share"] = df["norm_total_share"].pct_change()
-        df["e_pct_total_share"] = df["pct_total_share"].expanding(240).mean()
-    LB.time_counter("share")
-
-    # 3. trend swap. how long a trend average lasts too slow
-    # for freq in a_freqs:
-    #     #expanding
-    #     for until_index,df_expand in custom_expand(df,freq).items():
-    #         df.at[until_index,f"e_abv_ma_days{freq}"]=LB.trend_swap(df_expand, f"abv_ma{freq}", 1)
-    # print(f"{ts_code} abv_ma_days finished")
-
 
 def update_asset_bundle(bundle_name, bundle_func, market="CN", big_update=True, a_asset=["E"], step=1):
     """updates other information from tushare such as blocktrade,sharefloat
@@ -988,12 +989,12 @@ def update_asset_xueqiu(asset="E", market="CN"):
         print(f"update xueqiu {ts_code}")
         a_path = LB.a_path(f"Market/{market}/Asset/E/xueqiu_raw/{ts_code}")
         if not os.path.isfile(a_path[1]):
-            code = LB.switch_ts_code(ts_code)
+            code = LB.df_switch_ts_code(ts_code)
             df_xueqiu = _API_JQ.break_jq_limit_helper_xueqiu(code=code)
 
             if df_xueqiu.empty:
                 continue
-            df_xueqiu["trade_date"] = df_xueqiu["day"].apply(LB.switch_trade_date)
+            df_xueqiu["trade_date"] = df_xueqiu["day"].apply(LB.df_switch_trade_date)
             df_xueqiu["trade_date"] = df_xueqiu["trade_date"].astype(int)
             df_xueqiu = df_xueqiu[["trade_date", "follower", "new_follower", "discussion", "new_discussion", "trade", "new_trade"]]
             df_xueqiu = df_xueqiu.set_index("trade_date", drop=True)
@@ -1010,7 +1011,7 @@ def update_asset_intraday(asset="I", freq="15m"):
         print(f"update intraday {asset, freq, ts_code}")
         a_path = LB.a_path(f"Market/CN/Asset/{asset}/{freq}/{ts_code}")
         if not os.path.isfile(a_path[1]):
-            jq_code = LB.switch_ts_code(ts_code)
+            jq_code = LB.df_switch_ts_code(ts_code)
             df = _API_JQ.my_get_bars(jq_code=jq_code, freq=freq)
             df["ts_code"] = ts_code
             df = df.set_index("date", drop=True)
@@ -1171,12 +1172,12 @@ def update_date_seasonal_stats(group_instance="asset_E"):
     df_group = get_stock_market_all().reset_index() if group_instance == "" else get_asset(ts_code=group_instance, asset="G").reset_index()
 
     # get all different groups
-    a_groups = [[LB.get_trade_date_datetime_dayofweek, "dayofweek"],
-                [LB.get_trade_date_datetime_d, "dayofmonth"],
+    a_groups = [[LB.trade_date_to_datetime_dayofweek, "dayofweek"],
+                [LB.trade_date_to_datetime_d, "dayofmonth"],
                 [LB.get_trade_date_datetime_weekofyear, "weekofyear"],
-                [LB.get_trade_date_datetime_dayofyear, "dayofyear"],
-                [LB.get_trade_date_datetime_m, "monthofyear"],
-                [LB.get_trade_date_datetime_s, "seasonofyear"], ]
+                [LB.trade_date_to_dayofyear, "dayofyear"],
+                [LB.trade_date_to_datetime_m, "monthofyear"],
+                [LB.trade_date_to_datetime_s, "seasonofyear"], ]
 
     # transform all trade_date into different date format
     for group in a_groups:
@@ -1237,7 +1238,7 @@ def update_date_news(a_news=["jq_cctv_news", "ts_major_news", "ts_cctv"]):
             print(today)
             a_path = LB.a_path(f"Market/CN/Date/News/{news}/{today}")
             if not os.path.isfile(a_path[1]):
-                df = d_news[news](LB.switch_trade_date(today))
+                df = d_news[news](LB.df_switch_trade_date(today))
                 if not df.empty:
                     LB.to_csv_feather(df=df, a_path=a_path, skip_feather=True)
 
@@ -1260,6 +1261,32 @@ def get(a_path=[], set_index=""):  # read feather first
     else:
         print("DB READ File Not Exist!", f"{a_path[0]}.feather")
         return pd.DataFrame()
+
+def get_trade_cal_D(start_date="00000000", end_date="30000000", a_is_open=[1], market="CN"):
+    df = get(LB.a_path(f"Market/{market}/General/trade_cal_D"), set_index="cal_date")
+    df.index.name = "trade_date"
+    df.index= df.index.astype(int)
+    return df[(df["is_open"].isin(a_is_open)) & (df.index >= int(start_date)) & (df.index <= int(end_date))]
+
+
+def get_trade_date(start_date="000000", end_date=LB.today(), freq="D", market="CN"):
+    df = get(LB.a_path(f"Market/{market}/General/trade_date_{freq}"), set_index="trade_date")
+    # return df[(df.index >= int(start_date)) & (df.index <= int(end_date))]
+    df= LB.df_between(df=df, start_date=start_date, end_date=end_date)
+    df.index=df.index.astype(int)
+    return df
+
+def get_last_trade_date(freq="D", market="CN", type=str):
+    df_trade_date = get_trade_date(start_date="00000000", end_date=LB.today(), freq=freq, market=market)
+    return type(df_trade_date.index[-1])
+
+
+def get_next_trade_date(freq="D", market="CN"):
+    df = get_trade_cal_D(a_is_open=[1])
+    last_trade_date = get_last_trade_date(freq, market)
+    df = df[df.index > int(last_trade_date)].reset_index()
+    return df.at[0, "trade_date"]
+
 
 
 def get_ts_code(a_asset=["E"], market="CN", d_queries={}):
@@ -1308,30 +1335,7 @@ def get_date(trade_date, a_asset=["E"], freq="D", market="CN"):  # might need ge
     return pd.concat(a_df, sort=False) if len(a_df) > 1 else a_df[0]
 
 
-def get_trade_date(start_date="000000", end_date=LB.today(), freq="D", market="CN"):
-    df = get(LB.a_path(f"Market/{market}/General/trade_date_{freq}"), set_index="trade_date")
-    # return df[(df.index >= int(start_date)) & (df.index <= int(end_date))]
-    df= LB.df_between(df=df, start_date=start_date, end_date=end_date)
-    df.index=df.index.astype(int)
-    return df
 
-def get_trade_cal_D(start_date="00000000", end_date="30000000", a_is_open=[1], market="CN"):
-    df = get(LB.a_path(f"Market/{market}/General/trade_cal_D"), set_index="cal_date")
-    df.index.name = "trade_date"
-    df.index= df.index.astype(int)
-    return df[(df["is_open"].isin(a_is_open)) & (df.index >= int(start_date)) & (df.index <= int(end_date))]
-
-
-def get_last_trade_date(freq="D", market="CN", type=str):
-    df_trade_date = get_trade_date(start_date="00000000", end_date=LB.today(), freq=freq, market=market)
-    return type(df_trade_date.index[-1])
-
-
-def get_next_trade_date(freq="D", market="CN"):
-    df = get_trade_cal_D(a_is_open=[1])
-    last_trade_date = get_last_trade_date(freq, market)
-    df = df[df.index > int(last_trade_date)].reset_index()
-    return df.at[0, "trade_date"]
 
 
 def get_stock_market_all(market="CN"):
@@ -1358,7 +1362,7 @@ def get_example_column(asset="E", freq="D", numeric_only=False, notna=True, mark
         df = df.dropna(how="all", axis=1)
 
     # nummeric only or not
-    return list(LB.get_numeric_df(df).columns) if numeric_only else list(df.columns)
+    return list(LB.df_to_numeric(df).columns) if numeric_only else list(df.columns)
 
 
 # path =["column_name", True]
@@ -1378,7 +1382,7 @@ def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_asset=["I", "
                     s.name = instance
                     df_group = df_group.append(s, sort=False)
                 df_group.index.name = "concept"
-                df_group = df_group[["count"] + list(LB.get_numeric_df(df_ts_code).columns)]
+                df_group = df_group[["count"] + list(LB.df_to_numeric(df_ts_code).columns)]
             else:
                 df_groupbyhelper = df_ts_code.groupby(group)
                 df_group = df_groupbyhelper.mean()
@@ -1601,8 +1605,8 @@ if __name__ == '__main__':
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
-        #update_trade_date()
-        update_all_in_one_cn()
+        update_trade_date()
+        #update_all_in_one_cn()
 
 
 

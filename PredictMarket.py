@@ -33,9 +33,8 @@ def run(debug=0):
     10. (done but not that useful) rsi freq combination.
     11. (todo finished partly) Price and vol volatility
 
-    12. check volatiliy adj macd
+    12. (todo with all stocks and industry) check volatiliy adj macd
     13. support and resistance for index and all stocks
-    14. us market volatility?
     16. baidu xueqiu weibo google trend index
     17. Fundamental values: sales, return data
 
@@ -70,20 +69,33 @@ def run(debug=0):
 
     #df_result["year"]=((df_result.index).astype(str).str.slice(0,4)).astype(int)
     df_result["r:buy_sell"]=0.0
-    df_result["r:buy"]=0.0
-    df_result["r:sell"]=0.0
+    df_result["ra:buy_sell"]=0.0
 
     d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
 
     # 0 CREATE INDEX VOLUME
     #step_zero()
+    # todo Normal function needs to be volatility adjusted. they dont work in crazy time. but MACD works in crazy time.
+    # distinguish index vs d_preload
+    # manage debu
+    # manage names
+    # manage efficiency
+    # macd buys on bull, sell on bear, all other signal is inverse. MACD is good on crazy time. all other are bad on crazy time.
+    #idea: use indicator that are slower to change. overma is hard to change, you can not simply change from abv ma to under ma for all stocks. volume is easier to change.
+    #after knowing when to buy, what time to sell then?
 
+
+    # Distinguish crazy and normal time
+    stepi1(df_result=df_result,debug=debug)
+
+    # 0 MACD on index
+    step0(df_result=df_result, debug=debug)
 
     # 3 VOLUME
-    #step3(df_result=df_result,debug=debug)
+    step3(df_result=df_result,debug=debug)
 
     # 4 OVERMA
-    #step4(df_result=df_result, d_preload=d_preload,debug=debug)
+    step4(df_result=df_result, d_preload=d_preload,debug=debug)
 
     # 5 TOP N Stock
     step5(df_result=df_result, d_preload=d_preload,debug=debug)
@@ -104,31 +116,35 @@ def run(debug=0):
     #step11(df_result=df_result,debug=debug)
 
 
-    #12 combine r1..rn buy and sell signal into one
-    buy_count_help=0
-    sell_count_help=0
-    for counter in range(1,12):
-        if f"r{counter}:buy" in df_result.columns:
-            if df_result[f"r{counter}:buy"].sum()>0:
-                buy_count_help+=1
-                df_result["r:buy"]=df_result["r:buy"].add(df_result[f"r{counter}:buy"],fill_value=0)
 
-        if f"r{counter}:sell" in df_result.columns:
-            if df_result[f"r{counter}:sell"].sum() > 0:
-                sell_count_help += 1
-                df_result["r:sell"] = df_result["r:sell"].add(df_result[f"r{counter}:sell"], fill_value=0)
-
-    df_result["r:buy"]=df_result["r:buy"]/buy_count_help
-    df_result["r:sell"]=df_result["r:sell"]/sell_count_help
-
-    print(f"buy sell count helper",buy_count_help,sell_count_help)
+    # 13 combine buy and sell signal into one
+    # df_result["r:buy_sell"] = df_result["r:buy"] + (df_result["r:sell"] * (-1))
+    divideby=0
+    for counter in range(-50, 50):
+        if counter not in [0]:#because thats macd
+            if f"r{counter}:buy" in df_result.columns and f"r{counter}:sell" in df_result.columns:
+                df_result[f"r{counter}:buy_sell"] = df_result[f"r{counter}:buy"].add(df_result[f"r{counter}:sell"] * (-1), fill_value=0)
+                df_result["r:buy_sell"] =df_result["r:buy_sell"].add(df_result[f"r{counter}:buy_sell"], fill_value=0)
+                divideby+=1
+            elif f"r{counter}:buy_sell" in df_result.columns:
+                df_result["r:buy_sell"] = df_result["r:buy_sell"].add(df_result[f"r{counter}:buy_sell"], fill_value=0)
+                divideby += 1
 
 
-    #13 combine buy and sell signal into one
-    df_result["r:buy_sell"]=df_result["r:buy"]+( df_result["r:sell"] * (-1))
-    for counter in range(1,12):
-        if f"r{counter}:buy" in df_result.columns and f"r{counter}:buy" in df_result.columns:
-            df_result[f"r{counter}:buy_sell"]=df_result[f"r{counter}:buy"].add(df_result[f"r{counter}:sell"]*(-1),fill_value=0)
+    df_result["r:buy_sell"]=df_result["r:buy_sell"]/divideby
+
+    #adjust by volatility with macd freq overlay method
+    df_result["ra:buy_sell"]=0.0
+    for divideby, thresh in enumerate([0.2,0,22,0,24,0.26,0,28,0.3]):
+        df_result[f"ra:buy_sell{thresh}"]=0.0
+        df_result[f"ra:buy_sell{thresh}"].loc[df_result["volatility"] <= thresh]= df_result["r:buy_sell"]
+        df_result[f"ra:buy_sell{thresh}"].loc[df_result["volatility"] > thresh]= df_result["r0:buy_sell"]
+        df_result["ra:buy_sell"] +=df_result[f"ra:buy_sell{thresh}"]
+
+        if debug<2:
+            del df_result[f"ra:buy_sell{thresh}"]
+
+    df_result["ra:buy_sell"]=df_result["ra:buy_sell"]/divideby
 
 
     #14 evaluation different result against each other
@@ -136,6 +152,31 @@ def run(debug=0):
 
     # Save excel
     LB.to_csv_feather(df=df_result,a_path=a_path)
+
+def stepi1(df_result, debug=0,index="sh"):
+    """calculate volatility to distinguish between normal time and crazy time"""
+
+    df_result["volatility"] = 0.0
+    a_volatility_freq = []
+    counter = 0
+    a_freqs = [120, 240, 360, 500]
+    for freq in a_freqs:
+        df_result[f"volatility{freq}"] = df_result[f"close_{index}"].rolling(freq).std()
+        a_volatility_freq += [f"volatility{freq}"]
+        counter += 1
+
+    for freq_vola in a_volatility_freq:
+        df_result["volatility"] = df_result["volatility"].add(df_result[freq_vola], fill_value=0)
+
+    df_result["volatility"] = df_result["volatility"] / counter
+
+    # normalize result in dirty way
+    df_result["volatility"] = Alpha.norm(df=df_result, abase="volatility", inplace=False)
+
+    for freq in a_freqs:
+        del df_result[f"volatility{freq}"]
+
+
 
 
 def step_zero():
@@ -221,10 +262,19 @@ def step3(df_result, debug=0):
     df_result[f"r3:buy"] = df_result[f"r3:buy"] / df_result["index_counter"]
     df_result[f"r3:sell"] = df_result[f"r3:sell"] / df_result["index_counter"]
 
+    #combine buy and sell
+    df_result["r3:buy_sell"] = df_result[f"r3:buy"].add(df_result[f"r3:sell"] * (-1), fill_value=0)
+
+
+    #adjust with volatility
+
+
     if debug < 3:
         del df_result["sz_counter"]
         del df_result["cy_counter"]
         del df_result["index_counter"]
+        del df_result[f"r3:buy"]
+        del df_result[f"r3:sell"]
 
 
 
@@ -319,10 +369,17 @@ def step4(df_result, d_preload, debug=0):
     df_result[f"r4:buy"] = df_result[f"r4:buy"] / df_result["index_counter"]
     df_result[f"r4:sell"] = df_result[f"r4:sell"] / df_result["index_counter"]
 
+    # combine buy and sell
+    df_result["r4:buy_sell"] = df_result[f"r4:buy"].add(df_result[f"r4:sell"]*(-1),fill_value=0)
+
+    # adjust with volatility. they r4 useful when not crazy time
+
     if debug<3:
         del df_result["sz_counter"]
         del df_result["cy_counter"]
         del df_result["index_counter"]
+        del df_result[f"r4:buy"]
+        del df_result[f"r4:sell"]
 
 
 
@@ -428,7 +485,7 @@ def step5(df_result,d_preload, debug=0):
     step5_single(df_result=df_result,debug=debug)
 
 
-def step5_single(df_result, debug=False):
+def step5_single(df_result, debug=0):
     # 2. Generate step 5 buy sell signal
     r5_freq_buy_result=[]
     r5_freq_sell_result=[]
@@ -477,8 +534,16 @@ def step5_single(df_result, debug=False):
     df_result["r5:sell"]=df_result["r5:sell"]/counter
 
     #for now exclude sell result
-    del df_result["r5:sell"]
+    df_result["r5:sell"]=0.0
 
+    # combine buy and sell
+    df_result["r5:buy_sell"] = df_result[f"r5:buy"].add(df_result[f"r5:sell"]*(-1),fill_value=0)
+
+    # adjust with volatility
+
+    if debug < 2:
+        del df_result["r5:buy"]
+        del df_result["r5:sell"]
 
 def step6(df_result):
     """Check how the 3 best industries are doing
@@ -539,88 +604,6 @@ def step8(df_result, debug=0):
     #overlay first and last week of year
 
 
-
-def step_eleven():
-    """check if all three index and US index is all their all time high
-    """
-
-    def max_expanding_statistic(df, min_periods=1000):
-        name=f"expanding_close_max"
-        name2=f"near_expanding_close_max"
-
-        df[name]=df["close"].expanding(min_periods=min_periods).max()
-        df[name2]= (df["close"]/df[name]) > 0.85
-        df[name2] =df[name2].astype(int)
-        result= df[name2].mean()
-        print(result)
-        return result
-
-    def max_rolling_statistic(df,periods=1000,min_periods=240):
-        name=f"rolling_close_max" if periods=="max" else f"rolling_close_{periods}"
-        name2=f"near_rolling_close_max" if periods=="max" else f"near_rolling_close_{periods}"
-
-        df[name]=df["close"].rolling(periods, min_periods=min_periods).max()
-        df[name2]= (df["close"]/df[name]) > 0.85
-        df[name2] =df[name2].astype(int)
-
-
-
-    #init
-    df_sh = DB.get_asset(ts_code="000001.SH", asset="I")
-    df_sz = DB.get_asset(ts_code="399001.SZ", asset="I")
-    df_cy = DB.get_asset(ts_code="399006.SZ", asset="I")
-
-
-    # 1. check a index how long since the past they are at all time high using expanding
-    #max = expanding
-    max_expanding_statistic(df=df_sh, min_periods=1111)
-    max_expanding_statistic(df=df_sz, min_periods=1111)
-    max_expanding_statistic(df=df_cy, min_periods=1111)
-    # result: 0.11, 0.05, 0.08 for sh, sz, cy
-
-    #non-max : rolling
-    for period in [2000, 1500, 1000, 500,240]:
-        print(f"{period}")
-        max_rolling_statistic(df=df_sh, periods=period,min_periods=240)
-        max_rolling_statistic(df=df_sz, periods=period,min_periods=240)
-        max_rolling_statistic(df=df_cy, periods=period,min_periods=240)
-
-    #df_sh.to_csv("df_sh.csv")
-    #df_sh.to_csv("df_sz.csv")
-    #df_sh.to_csv("df_cy.csv")
-
-    """
-    2. check the time since the last all time high to estimate roughly the next high and low
-    """
-    df_sh["day_since_max"]=LB.consequtive_counter(df_sh["near_expanding_close_max"],count=0)
-
-
-    """
-    3. check if major indicies (sh,sz,cy,nasdaq) are at their high
-    """
-
-    #max period: expanding_close_max
-    sh_last=df_sh["near_expanding_close_max"].iat[-1]
-    sz_last=df_sz["near_expanding_close_max"].iat[-1]
-    cy_last=df_cy["near_expanding_close_max"].iat[-1]
-
-    print("expanding max check result is:", (sh_last+sz_last+cy_last)/3)
-
-
-    df_result = df_sh[["close"]]
-    for period in [1000]:
-        df_result[f"sh_{period}"]=df_sh[f"near_rolling_close_{period}"]
-        df_result[f"sz_{period}"]=df_sz[f"near_rolling_close_{period}"]
-        df_result[f"cy_{period}"]=df_cy[f"near_rolling_close_{period}"]
-    df_result.to_excel("result.xlsx")
-
-
-    for period in [2000, 1500, 1000, 500, 240]:
-        sh_last = df_sh[f"near_rolling_close_{period}"].iat[-1]
-        sz_last = df_sz[f"near_rolling_close_{period}"].iat[-1]
-        cy_last = df_cy[f"near_rolling_close_{period}"].iat[-1]
-
-        print(f"rolling {period} result is:", (sh_last + sz_last + cy_last) / 3)
 
 
 
@@ -738,12 +721,42 @@ def step11(df_result, debug=0, index="sh"):
 
     #3. Volatility intraday
 
+def step0(df_result, debug=0, index="sh"):
+
+    """MACD"""
+
+    #create all macd
+    a_results_col=[]
+    for sfreq in [120,180,240]:
+        for bfreq in [180,240,300,360]:
+            if sfreq<bfreq:
+                a_cols=macd(df=df_result, abase=f"close_{index}", freq=sfreq, freq2=bfreq, inplace=True, type=4, score=1)
+                print(a_cols)
+
+                a_results_col+=[a_cols[0]]
+                if debug < 2:
+                    for counter in range(1,len(a_cols)):
+                        del df_result[a_cols[counter]]
+
+    #add all macd results together
+    df_result["r0:buy_sell"]=0.0
+    for counter, result_col in enumerate(a_results_col):
+        df_result["r0:buy_sell"]=df_result["r0:buy_sell"].add(df_result[result_col],fill_value=0)
+        if debug <2:
+            del df_result[result_col]
+    df_result["r0:buy_sell"]=df_result["r0:buy_sell"]/counter
+
+    #calculate overlay freq volatility: adjust the result with volatility (because macd works best on high volatile time)
+    df_result["r0:buy_sell"] = df_result["r0:buy_sell"] * df_result["volatility"]
 
 
 if __name__ == '__main__':
 
 
-    run()
+    #run()
+    df=DB.get_asset()
+    df=support_resistance_horizontal_expansive(df_asset=df)
+    df.to_csv("support.csv")
 
 
 

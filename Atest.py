@@ -32,7 +32,7 @@ Btest (Backtest):
 """
 
 
-def extrema_rdm_2(df, abase, a_n=[60]):
+def asset_extrema_rdm_2(df, abase, a_n=[60]):
     """
     Second longer version of finding extrema and using it to calculate high and lows
     Strengh of resistance support are defined by:
@@ -114,6 +114,191 @@ def extrema_rdm_2(df, abase, a_n=[60]):
     df[["close"] + a_rs_names + a_trend_name + ["total_support_resistance", "abv_support", "und_resistance", "rs23_challenge"]].plot(legend=True)
     plt.show()
 
+
+def asset_extrema():
+    """
+    This test tries to combine two rules.
+    1. The long term trend longer the better
+    2. The price the lower the better
+
+    This seems to be contradicting at first. But the idea is to buy stock have keep their current rend as low as possible.
+
+    If trend goes down, loss limit. Else always go in and buy stocks with good trend.
+
+    More details:
+    1. How long is the trend in the past and how long for future?
+    2. How strong is the trend?
+    3.
+
+    procedure:
+    1. first find the last significant turning point(High/low) for that period
+    2. check if close is in up or downtrend since then
+    3. check from that turning point, smaller freq high/low.
+    4. if highs are higher, lows are higher, then in uptrend.
+    5. Slope of trend
+
+
+
+    1. Calculate reverse from today on all high /lows and make regression on then. if the regression does not fit anymore. then the trend is the last strongest trend.
+    A: Done that. the problem is tat trend exhange happens too often. So by default, it rarely fits perfect, even if it fits perfect, it changes very quickly.
+    A: sometimes you have to skip last couple high/lows because they are a new trend
+    """
+
+    df = DB.get_asset(ts_code="000001.SH", asset="I")
+    df = LB.df_ohlcpp(df)
+    df = df.reset_index()
+
+    df["hp"] = highpass(df=df, abase="close", freq=20, inplace=False)
+    df["lp"] = lowpass(df=df, abase="close", freq=20, inplace=False)
+
+    order = 20
+    signal = 100
+    distance = 1
+    abase = "close"
+
+    from scipy.signal import argrelmin, argrelmax, peak_prominences
+
+    def outlier_remove(array, n_neighbors=20, match=1):
+        from sklearn.neighbors import LocalOutlierFactor
+
+        X = [[x] for x in array]
+        clf = LocalOutlierFactor(n_neighbors=n_neighbors)
+        a_predict = clf.fit_predict(X)
+
+        a_result = []
+        for predict, value in zip(a_predict, array):
+            print(f"predict", predict, value)
+            if predict == match:
+                a_result.append(value)
+        return a_result
+
+    """
+    rules
+    0. Basically: Starting a new trend requires BOTH high and low to be consistent
+    1. If only one deviates, it continues the previous trend.
+    2. the result is a signal that is very safe and does not take risk.
+
+
+    1. only one outlier allowed. if second time the low is not strictly higher than last one, it a downtrend.
+    2. if A extrema has no confirmation, and the B has 2. B dominates
+    3. Extrema with the most recent information dominates
+
+    """
+
+    # init
+    x = df[abase]
+    lp = df["lp"]
+
+    # peaks, _ = find_peaks(x,prominence=0,width=60)
+    bottom = argrelmin(x.to_numpy(), order=order)[0]
+    peaks = argrelmax(x.to_numpy(), order=order)[0]
+
+    # data cleaning
+    bottom_noutlier = outlier_remove(bottom, n_neighbors=20, match=1)
+    bottom_outlier = outlier_remove(bottom, n_neighbors=2, match=-1)
+
+    # prominence in case needed
+    prominences = peak_prominences(x, peaks)[0]
+    contour_heights = x[peaks] - prominences
+
+    # 1. iteration assign value/pct_chg of extrema
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{label}_pvalue"] = df.loc[extrema, "close"]
+        df[f"{label}_fvalue"] = df[f"{label}_pvalue"].fillna(method="ffill")
+        df[f"{label}_value_pct_chg"] = df[f"{label}_fvalue"].pct_change()
+
+    h_peak = df[f"peakk_value_pct_chg"]
+    h_bott = df[f"bott_value_pct_chg"]
+
+    # 2. iteration assign signal
+    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
+        df[f"{label}_diff"] = 0
+
+        # for now the peak and bott are actually the SAME
+        if label == "peakk":
+            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+        elif label == "bott":
+            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
+
+        df[f"{label}_diff"] = df[f"{label}_diff"].replace(0, np.nan).fillna(method="ffill")
+        df[f"{label}_diff"] = df[f"{label}_diff"] * 40
+
+    # This is actually a second function to generate PLOT
+    # simualte past iteration
+    if False:
+        matplotlib.use("TkAgg")
+        for counter, (index, df) in enumerate(LB.custom_expand(df, 1000).items()):
+            if counter % 20 != 0:
+                continue
+
+            print(counter, index)
+
+            # array of extrema without nan = shrink close only to extrema
+            s_bott_pvalue = df["bott_pvalue"].dropna()
+            s_peakk_pvalue = df["peakk_pvalue"].dropna()
+
+            dict_residuals_bott = {}
+            dict_residuals_peakk = {}
+            dict_regression_bott = {}
+            dict_regression_peakk = {}
+
+            # do regression with extrema with all past extrema. The regression with lowest residual wins
+            for counter, _ in enumerate(s_bott_pvalue):
+                if counter > 3:
+                    # bott
+                    s_part_pvalue = s_bott_pvalue.tail(counter)
+                    distance = index - s_part_pvalue.index[0]
+                    # s_part_pvalue[index]=df.at[index,"close"]
+                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                    dict_residuals_bott[counter] = residual / distance ** 2
+                    dict_regression_bott[counter] = (s_part_pvalue, s_bott_lg)
+
+                    # peak
+                    s_part_pvalue = s_peakk_pvalue.tail(counter)
+                    distance = index - s_part_pvalue.index[0]
+                    # s_part_pvalue[index] = df.at[index, "close"]
+                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
+                    dict_residuals_peakk[counter] = residual / distance ** 2
+                    dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
+
+            # find the regression with least residual
+            from operator import itemgetter
+            n = 1
+            dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+            dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
+
+            # plot them
+            for key, residual in dict_min_residuals_bott.items():
+                _, s_bott_lg = dict_regression_bott[key]
+                plt.plot(s_bott_lg)
+
+            for key, residual in dict_min_residuals_peakk.items():
+                _, s_peakk_lg = dict_regression_peakk[key]
+                plt.plot(s_peakk_lg)
+
+            # plot chart
+            plt.plot(df["close"])
+            # plt.show()
+            plt.savefig(f"Plot/extrema/{index}.jpg")
+            plt.clf()
+            plt.close()
+
+    # add macd signal for comparison
+    label = macd(df=df, freq=360, freq2=500, abase="close", type=4, score=df["close"].max(), inplace=True)
+    label = label[0]
+
+    plt.plot(x)
+    plt.plot(df[label])
+
+    plt.plot(df["bott_diff"])
+    # plt.plot(df["peakk_diff"])
+
+    plt.plot(df["bott_pvalue"], "1")
+    plt.plot(df["peakk_pvalue"], "1")
+
+    plt.show()
 
 def generic_comparison(df, abase):
     """
@@ -479,30 +664,30 @@ def asset_start_season(df, n=1, type="year"):
     if type == "monthofyear":  # 1-12
         suffix1 = "_y"
         suffix2 = "_m"
-        df_year = LB.timeseries_convert(df, "Y")
-        df_month = LB.timeseries_convert(df, "W")
+        df_year = LB.df_to_freq(df, "Y")
+        df_month = LB.df_to_freq(df, "W")
 
         df_year["index_copy"] = df_year.index
-        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
 
         df_month["index_copy"] = df_month.index
-        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
-        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
+        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.trade_date_to_month(x))  # can be way more efficient
         df_month = df_month[df_month["month"] == n]
 
         df_combined = pd.merge(df_year, df_month, on="year", how="left", suffixes=[suffix1, suffix2], sort=False)
     elif type == "seasonofyear":  # 1-4
         suffix1 = "_y"
         suffix2 = "_s"
-        df_year = LB.timeseries_convert(df, "Y")
-        df_season = LB.timeseries_convert(df, "S")
+        df_year = LB.df_to_freq(df, "Y")
+        df_season = LB.df_to_freq(df, "S")
 
         df_year["index_copy"] = df_year.index
-        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
+        df_year["year"] = df_year["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
 
         df_season["index_copy"] = df_season.index
-        df_season["year"] = df_season["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
-        df_season["season"] = df_season["index_copy"].apply(lambda x: LB.get_trade_date_datetime_s(x))  # can be way more efficient
+        df_season["year"] = df_season["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
+        df_season["season"] = df_season["index_copy"].apply(lambda x: LB.trade_date_to_season(x))  # can be way more efficient
         df_season = df_season[df_season["season"] == n]
 
         df_combined = pd.merge(df_year, df_season, on="year", how="left", suffixes=[suffix1, suffix2], sort=False)
@@ -511,17 +696,17 @@ def asset_start_season(df, n=1, type="year"):
     elif type == "weekofmonth":  # 1-6
         suffix1 = "_m"
         suffix2 = "_w"
-        df_month = LB.timeseries_convert(df, "M")
-        df_week = LB.timeseries_convert(df, "W")
+        df_month = LB.df_to_freq(df, "M")
+        df_week = LB.df_to_freq(df, "W")
 
         df_month["index_copy"] = df_month.index
-        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
-        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
+        df_month["year"] = df_month["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
+        df_month["month"] = df_month["index_copy"].apply(lambda x: LB.trade_date_to_month(x))  # can be way more efficient
 
         df_week["index_copy"] = df_week.index
-        df_week["year"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_y(x))  # can be way more efficient
-        df_week["month"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_m(x))  # can be way more efficient
-        df_week["weekofmonth"] = df_week["index_copy"].apply(lambda x: LB.get_trade_date_datetime_weekofmonth(x))  # can be way more efficient
+        df_week["year"] = df_week["index_copy"].apply(lambda x: LB.trade_date_to_year(x))  # can be way more efficient
+        df_week["month"] = df_week["index_copy"].apply(lambda x: LB.trade_date_to_month(x))  # can be way more efficient
+        df_week["weekofmonth"] = df_week["index_copy"].apply(lambda x: LB.trade_date_to_weekofmonth(x))  # can be way more efficient
         df_week = df_week[df_week["weekofmonth"] == n]
 
         df_combined = pd.merge(df_month, df_week, on=["year", "month"], how="left", suffixes=[suffix1, suffix2], sort=False)
@@ -712,190 +897,7 @@ def asset_prob_gain_asset(asset="E"):
             LB.to_excel(path=path, d_df={"Overview": df_result, "Heat": df_heat})
 
 
-def asset_extrema():
-    """
-    This test tries to combine two rules.
-    1. The long term trend longer the better
-    2. The price the lower the better
 
-    This seems to be contradicting at first. But the idea is to buy stock have keep their current rend as low as possible.
-
-    If trend goes down, loss limit. Else always go in and buy stocks with good trend.
-
-    More details:
-    1. How long is the trend in the past and how long for future?
-    2. How strong is the trend?
-    3.
-
-    procedure:
-    1. first find the last significant turning point(High/low) for that period
-    2. check if close is in up or downtrend since then
-    3. check from that turning point, smaller freq high/low.
-    4. if highs are higher, lows are higher, then in uptrend.
-    5. Slope of trend
-
-
-
-    1. Calculate reverse from today on all high /lows and make regression on then. if the regression does not fit anymore. then the trend is the last strongest trend.
-    A: Done that. the problem is tat trend exhange happens too often. So by default, it rarely fits perfect, even if it fits perfect, it changes very quickly.
-    A: sometimes you have to skip last couple high/lows because they are a new trend
-    """
-
-    df = DB.get_asset(ts_code="000001.SH", asset="I")
-    df = LB.ohlcpp(df)
-    df = df.reset_index()
-
-    df["hp"] = highpass(df=df, abase="close", freq=20, inplace=False)
-    df["lp"] = lowpass(df=df, abase="close", freq=20, inplace=False)
-
-    order = 20
-    signal = 100
-    distance = 1
-    abase = "close"
-
-    from scipy.signal import argrelmin, argrelmax, peak_prominences
-
-    def outlier_remove(array, n_neighbors=20, match=1):
-        from sklearn.neighbors import LocalOutlierFactor
-
-        X = [[x] for x in array]
-        clf = LocalOutlierFactor(n_neighbors=n_neighbors)
-        a_predict = clf.fit_predict(X)
-
-        a_result = []
-        for predict, value in zip(a_predict, array):
-            print(f"predict", predict, value)
-            if predict == match:
-                a_result.append(value)
-        return a_result
-
-    """
-    rules
-    0. Basically: Starting a new trend requires BOTH high and low to be consistent
-    1. If only one deviates, it continues the previous trend.
-    2. the result is a signal that is very safe and does not take risk.
-
-
-    1. only one outlier allowed. if second time the low is not strictly higher than last one, it a downtrend.
-    2. if A extrema has no confirmation, and the B has 2. B dominates
-    3. Extrema with the most recent information dominates
-
-    """
-
-    # init
-    x = df[abase]
-    lp = df["lp"]
-
-    # peaks, _ = find_peaks(x,prominence=0,width=60)
-    bottom = argrelmin(x.to_numpy(), order=order)[0]
-    peaks = argrelmax(x.to_numpy(), order=order)[0]
-
-    # data cleaning
-    bottom_noutlier = outlier_remove(bottom, n_neighbors=20, match=1)
-    bottom_outlier = outlier_remove(bottom, n_neighbors=2, match=-1)
-
-    # prominence in case needed
-    prominences = peak_prominences(x, peaks)[0]
-    contour_heights = x[peaks] - prominences
-
-    # 1. iteration assign value/pct_chg of extrema
-    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
-        df[f"{label}_pvalue"] = df.loc[extrema, "close"]
-        df[f"{label}_fvalue"] = df[f"{label}_pvalue"].fillna(method="ffill")
-        df[f"{label}_value_pct_chg"] = df[f"{label}_fvalue"].pct_change()
-
-    h_peak = df[f"peakk_value_pct_chg"]
-    h_bott = df[f"bott_value_pct_chg"]
-
-    # 2. iteration assign signal
-    for counter, (label, extrema) in enumerate({"bott": bottom, "peakk": peaks}.items()):
-        df[f"{label}_diff"] = 0
-
-        # for now the peak and bott are actually the SAME
-        if label == "peakk":
-            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-        elif label == "bott":
-            df.loc[(h_peak > 0.05) | (df["close"] / df[f"peakk_fvalue"] > 1.05), f"{label}_diff"] = signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-            df.loc[(h_bott < -0.05) | (df["close"] / df[f"bott_fvalue"] < 0.95), f"{label}_diff"] = -signal  # df["bott_diff"]=df["bott_ffill"].diff()*500
-
-        df[f"{label}_diff"] = df[f"{label}_diff"].replace(0, np.nan).fillna(method="ffill")
-        df[f"{label}_diff"] = df[f"{label}_diff"] * 40
-
-    # This is actually a second function to generate PLOT
-    # simualte past iteration
-    if False:
-        matplotlib.use("TkAgg")
-        for counter, (index, df) in enumerate(LB.custom_expand(df, 1000).items()):
-            if counter % 20 != 0:
-                continue
-
-            print(counter, index)
-
-            # array of extrema without nan = shrink close only to extrema
-            s_bott_pvalue = df["bott_pvalue"].dropna()
-            s_peakk_pvalue = df["peakk_pvalue"].dropna()
-
-            dict_residuals_bott = {}
-            dict_residuals_peakk = {}
-            dict_regression_bott = {}
-            dict_regression_peakk = {}
-
-            # do regression with extrema with all past extrema. The regression with lowest residual wins
-            for counter, _ in enumerate(s_bott_pvalue):
-                if counter > 3:
-                    # bott
-                    s_part_pvalue = s_bott_pvalue.tail(counter)
-                    distance = index - s_part_pvalue.index[0]
-                    # s_part_pvalue[index]=df.at[index,"close"]
-                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
-                    dict_residuals_bott[counter] = residual / distance ** 2
-                    dict_regression_bott[counter] = (s_part_pvalue, s_bott_lg)
-
-                    # peak
-                    s_part_pvalue = s_peakk_pvalue.tail(counter)
-                    distance = index - s_part_pvalue.index[0]
-                    # s_part_pvalue[index] = df.at[index, "close"]
-                    s_bott_lg, residual = LB.polyfit_full(s_part_pvalue.index, s_part_pvalue)
-                    dict_residuals_peakk[counter] = residual / distance ** 2
-                    dict_regression_peakk[counter] = (s_part_pvalue, s_bott_lg)
-
-            # find the regression with least residual
-            from operator import itemgetter
-            n = 1
-            dict_min_residuals_bott = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
-            dict_min_residuals_peakk = dict(sorted(dict_residuals_bott.items(), key=itemgetter(1), reverse=True)[-n:])
-
-            # plot them
-            for key, residual in dict_min_residuals_bott.items():
-                _, s_bott_lg = dict_regression_bott[key]
-                plt.plot(s_bott_lg)
-
-            for key, residual in dict_min_residuals_peakk.items():
-                _, s_peakk_lg = dict_regression_peakk[key]
-                plt.plot(s_peakk_lg)
-
-            # plot chart
-            plt.plot(df["close"])
-            # plt.show()
-            plt.savefig(f"Plot/extrema/{index}.jpg")
-            plt.clf()
-            plt.close()
-
-    # add macd signal for comparison
-    label = macd(df=df, freq=360, freq2=500, abase="close", type=4, score=df["close"].max(), inplace=True)
-    label = label[0]
-
-    plt.plot(x)
-    plt.plot(df[label])
-
-    plt.plot(df["bott_diff"])
-    # plt.plot(df["peakk_diff"])
-
-    plt.plot(df["bott_pvalue"], "1")
-    plt.plot(df["peakk_pvalue"], "1")
-
-    plt.show()
 
 
 def asset_intraday_analysis():
@@ -940,9 +942,9 @@ def asset_intraday_analysis():
         for intraday in a_intraday:
             df_day = DB.get_asset(ts_code=ts_code, asset=asset)
             df_filter = df[df["intraday"] == intraday]
-            df_filter["trade_date"] = df_filter["day"].apply(LB.switch_trade_date)
+            df_filter["trade_date"] = df_filter["day"].apply(LB.df_switch_trade_date)
             df_filter["trade_date"] = df_filter["trade_date"].astype(int)
-            df_final = pd.merge(LB.ohlcpp(df=df_day), df_filter, on="trade_date", suffixes=["_d", "_15m"], sort=False)
+            df_final = pd.merge(LB.df_ohlcpp(df=df_day), df_filter, on="trade_date", suffixes=["_d", "_15m"], sort=False)
 
             df_final["pct_chg_d"] = df_final["pct_chg_d"].shift(-1)
             df_final.to_csv(f"intraday_prediction_{ts_code}.csv")
@@ -1227,7 +1229,7 @@ def asset_bullishness(start_date=00000000,end_date=99999999,market="CN", step=1)
 
         if len(df_asset) > 240:
 
-            d_asset_freq = {freq: LB.timeseries_convert(df_asset, freq) for freq in ["D", "M", "Y"]}
+            d_asset_freq = {freq: LB.df_to_freq(df_asset, freq) for freq in ["D", "M", "Y"]}
 
             # scale close to all start at 1
             df_asset["close"] = df_asset["close"] / df_asset.at[df_asset.index[0], "close"]
@@ -1534,7 +1536,8 @@ if __name__ == '__main__':
         #asset_bullishness(start_date=00000000,end_date=end_date,market="CN", step=1)
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
-
+    df=DB.get_asset()
+    asset_extrema_rdm_2(df=df, abase="close")
     # asset_extrema()
     # #prob_gain_asset()
     # df=DB.get_asset()

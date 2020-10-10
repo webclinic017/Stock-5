@@ -256,14 +256,14 @@ def pledge_ratio(df: pd.DataFrame, abase: str): return abase
 
 def co_pct_chg(df: pd.DataFrame, abase: str = "co_pct_chg"):
     add_to = "co_pct_chg"
-    add_column(df, add_to, "pct_chg", 1)
+    column_add(df, add_to, "pct_chg", 1)
     df[add_to] = (df["open"] / df["close"].shift(1))
     return add_to
 
 
 def pjup(df: pd.DataFrame, abase: str = "pjup", gain: Gain = Gain.g2):  # TODO test if 2 pct gap is better
     add_to = "pjup"
-    add_column(df, add_to, "pct_chg", 1)
+    column_add(df, add_to, "pct_chg", 1)
     df[add_to] = 0
     df[add_to] = ((df["low"] > df["high"].shift(1)) & (df["pct_chg"] >= gain.value)).astype(int)  # today low bigger than yesterday high and pct _chg > 2
     return add_to
@@ -271,7 +271,7 @@ def pjup(df: pd.DataFrame, abase: str = "pjup", gain: Gain = Gain.g2):  # TODO t
 
 def pjdown(df: pd.DataFrame, abase: str = "pjdown", lose: Lose = Lose.l2):
     add_to = "pjdown"
-    add_column(df, add_to, "pct_chg", 1)
+    column_add(df, add_to, "pct_chg", 1)
     df[add_to] = 0
     df[add_to] = ((df["high"] < df["low"].shift(1)) & (df.pct_chg <= lose.value)).astype(int)  # yesterday low bigger than todays high and pct _chg < -2
     return add_to
@@ -279,21 +279,21 @@ def pjdown(df: pd.DataFrame, abase: str = "pjdown", lose: Lose = Lose.l2):
 
 def period(df: pd.DataFrame, abase: str = "period"):
     add_to = "period"
-    add_column(df, add_to, "ts_code", 1)
+    column_add(df, add_to, "ts_code", 1)
     df[add_to] = (range(1, len(df.index) + 1))
     return add_to
 
 
 def ivola(df: pd.DataFrame, abase: str = "ivola"):
     add_to = "ivola"
-    add_column(df, add_to, "pct_chg", 1)
+    column_add(df, add_to, "pct_chg", 1)
     df[add_to] = df[["close", "high", "low", "open"]].std(axis=1)
     return add_to
 
 
 def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
     add_to = f"{abase}.sharp{freq.value}"
-    add_column(df, add_to, abase, 1)
+    column_add(df, add_to, abase, 1)
     df[add_to] = df[abase].rolling(freq.value).apply(Alpha.apply_sharp)
     return add_to
 
@@ -301,7 +301,7 @@ def sharp(df: pd.DataFrame, freq: BFreq, abase: str = "pct_chg"):
 # past n days until today. including today
 def pgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
     add_to = f"{abase}.pgain{freq.value}"
-    add_column(df, add_to, f"close", 1)
+    column_add(df, add_to, f"close", 1)
     try:
         df[add_to] = df[abase].pct_change(periods=freq.value)
     except Exception as e:
@@ -315,21 +315,21 @@ def pgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
 # day1: Signal tells you to buy. day2: BUY. day3. SELL
 def fgain(df: pd.DataFrame, freq: BFreq, abase: str = "open"):
     add_to = f"{abase}.fgain{freq.value}"
-    add_column(df, add_to, f"close", 1)
+    column_add(df, add_to, f"close", 1)
     df[add_to] = df[f"{abase}.pgain{freq.value}"].shift(-int(freq.value))
     return add_to
 
 
 def pct_chg_close(df: pd.DataFrame, abase: str = "pct_chg_close"):
     add_to = f"pct_chg_close"
-    add_column(df, add_to, "close", 1)
+    column_add(df, add_to, "close", 1)
     df[add_to] = (1 + df["close"].pct_change())
     return add_to
 
 
 def pct_chg_open(df: pd.DataFrame, abase: str = "pct_chg_open"):
     add_to = f"pct_chg_open"
-    add_column(df, add_to, "pct_chg", 1)
+    column_add(df, add_to, "pct_chg", 1)
     df[add_to] = (1 + df["open"].pct_change())
     return add_to
 
@@ -362,7 +362,7 @@ def cdl(df: pd.DataFrame, abase: str):
 
 def crossma(df: pd.DataFrame, abase: str, Sfreq1: SFreq, Sfreq2: SFreq):
     add_to = LB.indi_name(abase=abase, deri="crossma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, abase, 1)
+    column_add(df, add_to, abase, 1)
     df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
     df[add_to] = (df[add_to].diff()).fillna(0)
     return add_to
@@ -370,7 +370,7 @@ def crossma(df: pd.DataFrame, abase: str, Sfreq1: SFreq, Sfreq2: SFreq):
 
 def overma(df: pd.DataFrame, abase: str, Sfreq1: SFreq, Sfreq2: SFreq):
     add_to = LB.indi_name(abase=abase, deri="overma", d_variables={"Sfreq1": Sfreq1, "Sfreq2": Sfreq2})
-    add_column(df, add_to, abase, 1)
+    column_add(df, add_to, abase, 1)
     df[add_to] = (df[abase].rolling(Sfreq1.value).mean() > df[abase].rolling(Sfreq2.value).mean()).astype(float)
     return add_to
 
@@ -770,7 +770,7 @@ def rsi(df: pd.DataFrame, abase: str, freq: BFreq):
 @deco_try_ignore  # try ignore because all talib function can not handle nan input values. so this wrapper ignores all nan input values and creates add_to_column at one point
 def deri_tec(df: pd.DataFrame, abase: str, ideri: ADeri, func, **kwargs):
     add_to = LB.indi_name(abase=abase, deri=ideri.value, d_variables=kwargs)
-    add_column(df, add_to, abase, 1)
+    column_add(df, add_to, abase, 1)
     df[add_to] = func(df[abase], **kwargs)
     return add_to
 
@@ -843,7 +843,7 @@ def deri_sta(df: pd.DataFrame, abase: str, ideri: ADeri, freq: BFreq, re: RE, co
     reFunc = pd.Series.rolling if re == RE.r else pd.Series.expanding
 
     add_to = LB.indi_name(abase=abase, deri=ideri, d_variables={"freq": freq, "re": re.value, "corr_name": corr_with} if corr_with else {"freq": freq, "re": re.value})
-    add_column(df, add_to, abase, 1)
+    column_add(df, add_to, abase, 1)
 
     # https://pandas.pydata.org/pandas-docs/stable/reference/window.html
 
