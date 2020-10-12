@@ -137,7 +137,7 @@ def asset_extrema():
     4. if highs are higher, lows are higher, then in uptrend.
     5. Slope of trend
 
-
+    #Result: MACD is quicker and a bit quicker and less noise than using extrema to define trade signals
 
     1. Calculate reverse from today on all high /lows and make regression on then. if the regression does not fit anymore. then the trend is the last strongest trend.
     A: Done that. the problem is tat trend exhange happens too often. So by default, it rarely fits perfect, even if it fits perfect, it changes very quickly.
@@ -298,7 +298,10 @@ def asset_extrema():
     plt.plot(df["bott_pvalue"], "1")
     plt.plot(df["peakk_pvalue"], "1")
 
+    df.to_csv("test.csv")
     plt.show()
+
+
 
 def generic_comparison(df, abase):
     """
@@ -1514,10 +1517,7 @@ def date_volatility():
 
 
 if __name__ == '__main__':
-    # for column in ["ivola","close.pgain5","close.pgain10","close.pgain20","close.pgain60","close.pgain120","close.pgain240"]:
-    #     atest_manu(fname="gq_rsi", a_abase=[column])
-    #
-    #
+
 
     pr = cProfile.Profile()
     pr.enable()
@@ -1536,23 +1536,5 @@ if __name__ == '__main__':
         #asset_bullishness(start_date=00000000,end_date=end_date,market="CN", step=1)
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
-    df=DB.get_asset()
-    asset_extrema_rdm_2(df=df, abase="close")
-    # asset_extrema()
-    # #prob_gain_asset()
-    # df=DB.get_asset()
-    # Plot.plot_distribution(df,abase="pct_chg")
 
-    # for asset in ["E","I","G"]:
-    #     for column in ["pct_chg"]:
-    #         distribution(asset=asset,column=column)
-    #
-    # distribution(asset="E", column="turnover_rate")
-
-    # no_better_name()
-    # atest_auto()
-    # start_tester(asset="E",type="monthofyear")
-    # df_sh=DB.get_asset("000001.SH",asset="I")
-    # start_year_relation(df_sh,month=1)
-    # pr.disable()
-    # pr.print_stats(sort='file')
+    asset_extrema()

@@ -1728,6 +1728,43 @@ def macd_tor(df, abase, freq, inplace, name, cols):
     df[f"{name}"] = df[f"{name}"].fillna(method="ffill")
     return alpha_return(locals())
 
+@alpha_wrap
+def timeclassifier(df, abase,  inplace, name, cols, a_freqs=[60, 120,240,360]):
+    """use volatility to distinguish between normal time and crazy time
+    Very useful, especially together with macd. Some indicator are good on bull, some are bad. This function distinguishes the time and creates space for usage.
+
+
+    TO GET A CLEAN SIGNAL, USE SH INDEX. BECAUSE IT HAS MOST CLEAR DISTINGUISH. SZ CAN PRODUCE WHIPSAW
+    WORKS ONLY ON MEAN STATIONARY TIME SERIES
+
+    todo: find a solution to distinguish for non stationary time series like 茅台
+    todo: the solution must also keep the price amplitude and be a continous signal
+
+    Don't work:
+    - highpass (because in both directions)
+    - low pass
+    - normalize (because it makes them stationary, but loses the amplitude information)
+    - volume (because not stationary, 2008 and 2015 volume very different)
+
+    Try:
+    - some external factors like search volume
+    -
+
+    """
+
+    df[name] = 0.0
+    #create freq, add together, normalize
+    for divideby, freq in enumerate(a_freqs):
+        helper= df[abase].rolling(freq).std()
+        df[name] = df[name].add(helper, fill_value=0)
+    df[name] = df[name] / (divideby+1)
+
+    # normalize result in dirty way
+    df[name] = norm(df=df, abase=name, inplace=False)
+
+    return alpha_return(locals())
+
+
 
 @alpha_wrap
 def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
@@ -1743,6 +1780,8 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
 
 
         Works good on high volatile time, works bad on flat times. check out function vola. It describes volatility and can be good used together with macd
+
+        TYPE 4 works best
         """
 
     df[f"{name}[dif]"] = 0
@@ -1773,7 +1812,7 @@ def macd(df, abase, freq, freq2, inplace, name, cols, type=1, score=10):
         df[f"{name}[ema2]"] = zlema(df=df, abase=abase, freq=freq2, gain=1.8, inplace=False)
         df.loc[(df[f"{name}[ema1]"] > df[f"{name}[ema2]"]), f"{name}"] = score
         df.loc[(df[f"{name}[ema1]"] < df[f"{name}[ema2]"]), f"{name}"] = -score
-    elif type == 4:  # macd with lowpass constructed from highpass. This basically replaces abv_ma
+    elif type == 4:  # Best variation: macd with lowpass constructed from highpass. This basically replaces abv_ma
         df[f"{name}[ema1]"] = lowpass(df=df,abase=abase,freq=freq,inplace=False)
         df[f"{name}[ema2]"] = lowpass(df=df,abase=abase,freq=freq2,inplace=False)
         df.loc[(df[f"{name}[ema1]"] > df[f"{name}[ema2]"]), f"{name}"] = score

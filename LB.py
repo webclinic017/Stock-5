@@ -123,7 +123,7 @@ def trade_date_to_weekofmonth(trade_date):
     trade_date = trade_date_to_datetime(trade_date)
     return (trade_date.isocalendar()[1] - trade_date.replace(day=1).isocalendar()[1] + 1)
 
-def trade_date_to_calender(df):
+def trade_date_to_calender(df,add=["year","season","month","day","weekofyear","dayofweek"]):
     """
     str trade_date to seasonal stats
     return:
@@ -155,6 +155,10 @@ def trade_date_to_calender(df):
     df["dayofweek"] =df["dayofweek"].replace("Thursday",4)
     df["dayofweek"] =df["dayofweek"].replace("Friday",5)
 
+    #remove colums that are unwanted
+    for col in ["index_copy","year","season","month","day","weekofyear","dayofweek"]:
+        if col not in add:
+            del df[col]
 
     return df
 
@@ -227,6 +231,10 @@ def c_G_queries():
 
 def c_index_queries(market="CN"):
     return {"I": [f"ts_code in {c_index(market=market)}"]}
+
+
+def c_market_queries(market="主板"):
+    return {"E": [f"market == '{market}'"]}
 
 
 def c_index(market="CN"):

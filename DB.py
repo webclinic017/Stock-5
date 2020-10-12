@@ -1290,7 +1290,9 @@ def get_next_trade_date(freq="D", market="CN"):
 
 
 def get_ts_code(a_asset=["E"], market="CN", d_queries={}):
-    """d_query contains only entries that are TRUE. e.g. {"E": ["industry1 == '医疗设备'", "period > 240 "]}"""
+    """
+    d_query: only entries that are TRUE.
+    Example: {"E": ["industry1 == '医疗设备'", "period > 240 "]}"""
     a_result = []
     for asset in a_asset:
         df = get(LB.a_path(f"Market/{market}/General/ts_code_{asset}"), set_index="ts_code")
@@ -1341,6 +1343,16 @@ def get_date(trade_date, a_asset=["E"], freq="D", market="CN"):  # might need ge
 def get_stock_market_all(market="CN"):
     return get(LB.a_path(f"Market/{market}/Asset/G/D/all_stock_market"), set_index="trade_date")
 
+def get_stock_market_overview(market="CN",fields=["close","vol"]):
+    df_sh=get_asset(ts_code="000001.SH",asset="I")
+    df_sz=get_asset(ts_code="399001.SZ",asset="I")
+    df_cy=get_asset(ts_code="399006.SZ",asset="I")
+    df_sh=df_sh[fields].rename(columns={key:f"{key}_sh" for key in fields})
+    df_sz=df_sz[fields].rename(columns={key:f"{key}_sz" for key in fields})
+    df_cy=df_cy[fields].rename(columns={key:f"{key}_cy" for key in fields})
+    df_result= pd.merge(df_sh, df_sz, how='left', on="trade_date", suffixes=["", ""], sort=False)
+    df_result= pd.merge(df_result, df_cy, how='left', on="trade_date", suffixes=["", ""], sort=False)
+    return df_result
 
 def get_example_column(asset="E", freq="D", numeric_only=False, notna=True, market="CN"):
     """get the latest column of the asset file"""

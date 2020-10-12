@@ -631,6 +631,21 @@ def main():
     #A: no idea. It is possible to scrape all fund and check their holding. But this can only be done for top 10 holding stocks and each season due to publicatino periodicty.
     #A: It is in general not possible to get all fund portfolio data to see if they are buying more or not.
     #A: This makes institution data only useful on individual stock and not useful to predict the whole market
+
+
+    #Q: How to make money:
+    #A: Distinguish two phases: normal and crazy
+    #A: Normal time strategy is buy low sell high. The market is in cycle mode.
+    #A: Crazy time strategy is to buy and hold. The market is in uptrend.
+    #A: Some strategy buy on bull sell on bear. Some strategy the otherway around. Usethem carefully and think what time they are useful first.
+    #A:
+
+    #Q: Fundamental FB to predict market
+    #A: https://www.legulegu.com/stockdata/below-net-asset-statistics
+    #A: it has some predictability, but it does not work 100%. I won't use it for now
+
+
+
 """
 summmary
 the bigger the freq the more predictable, the more useless the data
