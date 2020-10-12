@@ -190,7 +190,8 @@ def update_ts_code(asset="E", market="CN", big_update=True):
 
             # add State Government for each stock
             df["state_company"] = False
-            for ts_code in df.index:
+            #for now exclude them
+            """for ts_code in df.index:
                 print("update state_company", ts_code)
                 df_government = get_asset(ts_code=ts_code, freq="top10_holders", market=market, a_columns=["holder_name", "hold_ratio"])
                 if df_government.empty:  # if empty, assume it is False
@@ -203,7 +204,7 @@ def update_ts_code(asset="E", market="CN", big_update=True):
                     if ("公司" in top_holder_name) or (len(top_holder_name) > 3):
                         counter += 1
                 df.at[ts_code, "state_company"] = True if counter >= 1 else False
-
+"""
         elif asset == "I":
             df_SSE = _API_Tushare.my_index_basic(market='SSE')
             df_SZSE = _API_Tushare.my_index_basic(market='SZSE')
@@ -399,7 +400,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
             df = _API_Tushare.my_hk_daily(ts_code=ts_code, start_date=str(start_date), end_date=str(end_date))
 
         df = LB.df_reverse_reindex(df)
-        LB.remove_columns(df, ["pre_close", "change"])
+        LB.df_columns_remove(df, ["pre_close", "change"])
         return df
 
     def helper_F(ts_code, start_date, end_date):
@@ -576,7 +577,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
 
             # file exists--> check latest_trade_date, else update completely new
             if os.path.isfile(a_path[1]):  # or os.path.isfile(a_path[1])
-                continue  # TODO to be removed
+
                 try:
                     df_saved = get_asset(ts_code=ts_code, asset=asset, freq=freq, market=market)  # get latest file trade_date
                     asset_latest_trade_date = str(df_saved.index[-1])
@@ -1538,6 +1539,7 @@ def update_all_in_one_cn(big_update=False):
     # # 3.3. DATE - BASE
     # update_asset_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, asset=["E"])  # SMART
 
+
 def update_all_in_one_cn_v2(big_update=False):
     # 0. ALWAYS UPDATE
     # 1. ONLY ON BIG UPDATE: OVERRIDES EVERY THING EVERY TIME
@@ -1546,8 +1548,9 @@ def update_all_in_one_cn_v2(big_update=False):
 
     # 1.0. ASSET - Indicator bundle (MANUALLY UPDATE)
 
+
     # 1.0. ASSET - Indicator bundle
-    if False:
+    """if False:
         # E: update each E asset one after another
         for asset in ["E", "FD"]:
             for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
@@ -1559,28 +1562,35 @@ def update_all_in_one_cn_v2(big_update=False):
         for asset in ["FD"]:
             a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
             LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False, "a_asset": [asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
-
+"""
 
 
     # 1.0. GENERAL - CAL_DATE
     update_trade_cal()  # always update
 
+
+
+
     # # 1.3. GENERAL - TS_CODE
-    for asset in ["sw_industry1", "sw_industry2","sw_industry3","concept"]  + ["I","E","G","F"]:
-        continue
+    for asset in ["I","E","G","F"]:
         update_ts_code(asset)  # ALWAYS UPDATE
+
+    for asset in ["sw_industry1", "sw_industry2","sw_industry3","concept"]:
+        continue
+        update_ts_code(asset)  # SOMETIMES UPDATE
 
     # # 1.5. GENERAL - TRADE_DATE (later than ts_code because it counts ts_codes)
     for freq in ["D"]:  # Currently only update D and W, because W is needed for pledge stats
         update_trade_date(freq)  # ALWAYS UPDATE
 
-
-    print("wat")
     # 2.2. ASSET
+
+    #I
     #LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False, "miniver":True}, a_partial=LB.multi_steps(4))  # SMART
 
-    print("wat2")
+    #E
     LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False, "miniver":True}, a_partial=LB.multi_steps(4))  # SMART
+
     # update_asset_G(big_update=big_update)  # update concept is very very slow. = Night shift
 
 

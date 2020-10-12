@@ -338,9 +338,41 @@ def norm(df, abase, inplace, name, cols, min=0, max=1):
     df[name] = (((max - min) * (df[abase] - series_min)) / (series_max - series_min)) + min
     return alpha_return(locals())
 
+"""
+naive version of rolling norm with apply. very slow. deprecated
+@alpha_wrap
+def rollingnorm_slow(df, abase, inplace, name, cols, freq, min=0, max=1):
+    df[name] = df[abase].rolling(freq).apply(apply_norm)
+    return alpha_return(locals())
+    """
+
 @alpha_wrap
 def rollingnorm(df, abase, inplace, name, cols, freq, min=0, max=1):
-    df[name] = df[abase].rolling(freq).apply(apply_norm)
+    #quicker version without using apply
+    #1. create columns of past day value
+    #2. find min and max value of these columns
+    #3. normalize todays value
+    #4. delete these columns
+
+    a_cols=[]
+
+    #step 1
+    for i in range(1,freq):# don't add +1 because today also count 1 day. so rolling 5 = today + past 4 days
+        df[f"{abase}{i}"]=df[abase].shift(i)
+        a_cols+=[f"{abase}{i}"]
+
+    #step 2
+    df[f'rollingnorm_freq{freq}_max'] = df[a_cols].max(axis=1)
+    df[f'rollingnorm_freq{freq}_min'] = df[a_cols].min(axis=1)
+
+    #step 3
+    df[name]= (((max - min) * (df[abase] - df[f'rollingnorm_freq{freq}_min'])) / (df[f'rollingnorm_freq{freq}_max'] - df[f'rollingnorm_freq{freq}_min'])) + min
+    df[name]=df[name].clip(min,max)
+
+    #step 4
+    a_cols+=[f'rollingnorm_freq{freq}_max',f'rollingnorm_freq{freq}_min']
+    df.drop(a_cols,inplace=True,axis=1)
+
     return alpha_return(locals())
 
 @alpha_wrap
@@ -1729,10 +1761,9 @@ def macd_tor(df, abase, freq, inplace, name, cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def timeclassifier(df, abase,  inplace, name, cols, a_freqs=[60, 120,240,360]):
+def detect_crazy(df, abase, inplace, name, cols, a_freqs=[60, 120, 240, 360]):
     """use volatility to distinguish between normal time and crazy time
     Very useful, especially together with macd. Some indicator are good on bull, some are bad. This function distinguishes the time and creates space for usage.
-
 
     TO GET A CLEAN SIGNAL, USE SH INDEX. BECAUSE IT HAS MOST CLEAR DISTINGUISH. SZ CAN PRODUCE WHIPSAW
     WORKS ONLY ON MEAN STATIONARY TIME SERIES
@@ -1763,6 +1794,64 @@ def timeclassifier(df, abase,  inplace, name, cols, a_freqs=[60, 120,240,360]):
     df[name] = norm(df=df, abase=name, inplace=False)
 
     return alpha_return(locals())
+
+@alpha_wrap
+def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_iteration=[10, 510, 10]):
+    """
+    this function detects in what mode/phase the cy stock is
+    """
+
+    #init
+    fol_rolling_norm=f"fol_{abase}_{a_iteration}"
+    df[fol_rolling_norm] = 0.0
+    a_del_cols=[]
+
+    #create fol for rolling norm
+    for divideby, freq in enumerate(range(10, 510, 10)):
+        print(f"freq is {freq}")
+        one_rolling_norm = rollingnorm(df=df, abase=abase, freq=freq, inplace=True)
+        df[fol_rolling_norm] +=  df[one_rolling_norm]
+        a_del_cols+=[one_rolling_norm]
+
+
+    #normalize
+    df[fol_rolling_norm] = df[fol_rolling_norm] / (divideby+1)
+
+    #produce bull or bear market. 1 means bull, -1 means bear.
+    bull_bear = 0.0
+    for trade_date in df.index:
+
+        # loop over each day
+        signal = df.at[trade_date, fol_rolling_norm]
+        if signal > 0.8:  # bull
+            bull_bear = bull_val
+        elif signal < 0.2:
+            bull_bear = bear_val  # reset portfolio to 0
+        else:
+            # variation 1: no nothing and use previous high as guideline
+            # variation 2: interpret it as sell signal if previous signal was buy. interpret as buy if previous signal was sell.
+            # variation 3: use a low freq strategy to take a deeper look into it
+            pass
+
+        # assign value at end of day
+        df.at[trade_date, "bull_bear"] = bull_bear
+
+
+    # delete waste columns
+    df.drop(a_del_cols, axis=1, inplace=True)
+    del df[fol_rolling_norm]
+
+    return alpha_return(locals())
+
+
+@alpha_wrap
+def fol(df, abase, inplace, name, cols, func, kwargs, iteration_list):
+    """this function takes any function and kwargs and performs one combine function"""
+    #todo find a general method
+    return alpha_return(locals())
+
+
+
 
 
 
@@ -2349,8 +2438,8 @@ def dft_music():
 
 
 if __name__ == '__main__':
-    df = DB.get_asset(ts_code="399001.SZ", asset="I")
-    df = LB.df_ohlcpp(df)
+    df_result = DB.get_asset(ts_code="399001.SZ", asset="I")
+    df_result = LB.df_ohlcpp(df_result)
 
 
     #mini=minima(df=df, abase="close", n=60, inplace=True)
@@ -2358,20 +2447,20 @@ if __name__ == '__main__':
     #extrema=extrema_diff(df=df, abase="close", n=60, n2=120,inplace=True)
     import matplotlib as plt
 
-    label_240=cj(df=df,abase="close",inplace=True,freq=240)
-    df=df.reset_index()
-    df["close"].plot()
-    df[label_240].plot(secondary_y=True)
+    label_240=cj(df=df_result, abase="close", inplace=True, freq=240)
+    df_result=df_result.reset_index()
+    df_result["close"].plot()
+    df_result[label_240].plot(secondary_y=True)
     plt.show()
-    UI.plot_chart(df, ["close", label_240], {})
-    df.to_csv("test.csv")
+    UI.plot_chart(df_result, ["close", label_240], {})
+    df_result.to_csv("test.csv")
 
-    maxima_l=maxima(df=df, abase="close", n=120, inplace=True)
-    minima_l=minima(df=df, abase="close", n=120, inplace=True)
-    maxima_d=extrema_dis(df=df, abase=maxima_l, inplace=True)
-    minima_d=extrema_dis(df=df, abase=minima_l, inplace=True)
-    df["diff"]=df[maxima_d]-df[minima_d]
-    UI.plot_chart(df, ["close", "diff", maxima_d, minima_d, maxima_l, minima_l], {maxima_l: "x", minima_l: "o"})
+    maxima_l=maxima(df=df_result, abase="close", n=120, inplace=True)
+    minima_l=minima(df=df_result, abase="close", n=120, inplace=True)
+    maxima_d=extrema_dis(df=df_result, abase=maxima_l, inplace=True)
+    minima_d=extrema_dis(df=df_result, abase=minima_l, inplace=True)
+    df_result["diff"]= df_result[maxima_d] - df_result[minima_d]
+    UI.plot_chart(df_result, ["close", "diff", maxima_d, minima_d, maxima_l, minima_l], {maxima_l: "x", minima_l: "o"})
     pass
 
 

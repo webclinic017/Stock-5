@@ -11,6 +11,7 @@ import smtplib
 from email.message import EmailMessage
 import math
 import re
+import os
 import itertools
 from win32com.client import Dispatch
 import traceback
@@ -23,6 +24,7 @@ from playsound import playsound
 from numba import jit
 import numba
 import enum
+import pathlib
 import time
 
 pro = ts.pro_api('c473f86ae2f5703f58eecf9864fa9ec91d67edbc01e3294f6a4f9c32')
@@ -678,6 +680,16 @@ def set_index(df,set_index):
         else:
             raise BaseException("none of the index labels are in the columns")
 
+
+def delete_folder_content(path):
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            os.remove(os.path.join(root, file))
+
+def delete_assets():
+    delete_folder_content("\Market\CN\Asset\E\D")
+
+
 def file_open(filepath):
     filepath = f"{filepath}"
     if platform.system() == 'Darwin':  # macOS
@@ -1072,8 +1084,7 @@ def today():
 
 
 if __name__ == '__main__':
-    pass
-    print("what")
+    delete_assets()
 
 
 
