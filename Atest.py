@@ -1200,13 +1200,70 @@ def asset_volatility(start_date, end_date, assets, freq):
     DB.to_excel_with_static_data(df_result, path=path, sort=["final_volatility_rank", True], a_assets=assets)
 
 
+
+
+def asset_FD_portfolio_stock():
+    """
+    this function creates a statistic about the most hold stock by fund
+
+    1. at all time
+    2. at current time
+    """
+
+    #INIT
+    df_ts_code=DB.get_ts_code(a_asset=["FD"])
+    df_result = DB.get_ts_code(a_asset=["E"])
+    range_obj=range(1990,pd.datetime.now().date().year+1)
+    for year in range_obj:
+        df_result[f"{year}_count"] = 0
+        df_result[f"{year}_rank"] = 0
+
+
+    #loop over each fund
+    for ts_code in df_ts_code.index:
+        try:
+            df_asset=DB.get_asset(ts_code=ts_code,asset="FD",freq="fund_portfolio")
+        except:
+            continue
+
+        if df_asset.empty:
+            continue
+        else:
+            print("counting from FD port folio ",ts_code)
+
+
+        df_asset["count"]=1
+        df_asset=df_asset[df_asset["stk_mkv_ratio"]>0]#remove IPO stocks that are not on market yet. I don't know why and funds buy them.
+        LB.trade_date_to_calender(df=df_asset,add=["year"])
+
+        for year in range_obj:
+            #check only one particular year
+            df_asset_filtered=df_asset[df_asset["year"]==year]
+
+            #group by counts
+            df_asset_count=df_asset_filtered.groupby("symbol").sum()
+
+            df_result[f"{year}_count"]=df_result[f"{year}_count"].add(df_asset_count["count"],fill_value=0)
+
+    #rank these results
+    for year in range_obj:
+        df_result[f"{year}_rank"]=df_result[f"{year}_count"].rank(ascending=False)
+        del df_result[f"{year}_count"]
+
+    #save
+    a_path = LB.a_path(f"Market/CN/ATest/fund_portfolio/all_time_statistic")
+    LB.to_csv_feather(df=df_result, a_path=a_path)
+
+
+
+
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
-def asset_bullishness(start_date=00000000,end_date=99999999,market="CN", step=1):
+def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99999999,market="CN", step=1, a_asset=["E", "I", "FD", "F", "G"]):
     # init
 
+    if df_ts_code.empty:
+        df_ts_code = DB.get_ts_code(a_asset=[a_asset], market=market)[::1]
 
-    df_ts_code = DB.get_ts_code(a_asset=["E", "I", "FD", "F", "G"], market=market)[::1]
-    df_ts_code = DB.get_ts_code(a_asset=["E"], market=market)[::1]
     df_result = pd.DataFrame()
 
     #preload 3 main index
@@ -1254,8 +1311,10 @@ def asset_bullishness(start_date=00000000,end_date=99999999,market="CN", step=1)
 
 
             #check how long a stock is abv ma 5,10,20,60,120,240
+
             for freq in [20,60,240]:
-                df_result.at[ts_code, f"abv_ma{freq}"]=df_asset[f'close.abv_ma(freq={freq})'].mean()
+                abvma_name=Alpha.abv_ma(df=df_asset,abase="close",freq=freq,inplace=True)
+                df_result.at[ts_code, f"abv_ma{freq}"]=df_asset[abvma_name].mean()
 
             #monotonie: how monotone the
 
@@ -1370,16 +1429,14 @@ def asset_bullishness(start_date=00000000,end_date=99999999,market="CN", step=1)
                               # a_beta[0] * 0.05 + \
                               # a_beta[1] * 0.05 + \
                               # a_beta[2] * 0.05
-    df_result["final_rank_4:6"] =df_result["geomean_rank"]*0.4+df_result["trend_rank"]*0.6
-    df_result["final_rank_5:5"] =df_result["geomean_rank"]*0.5+df_result["trend_rank"]*0.5
-    df_result["final_rank_6:4"] =df_result["geomean_rank"]*0.6+df_result["trend_rank"]*0.4
-    df_result["final_rank_7:3"] =df_result["geomean_rank"]*0.7+df_result["trend_rank"]*0.3
 
-    df_result["final_rank_sum"]=df_result["final_rank_4:6"]+df_result["final_rank_5:5"]+df_result["final_rank_6:4"]+df_result["final_rank_7:3"]
+    df_result["final_rank"]=df_result["geomean_rank"]*0.5+df_result["trend_rank"]*0.5
+    df_result["final_position"]=df_result["final_rank"].rank(ascending=True)
 
-    df_result.to_csv("temp_result.csv")
-
+    df_result.to_csv(f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}.csv", encoding='utf-8_sig')
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}.xlsx", group_result=True, market=market)
+    return df_result
+
 
 
 def asset_candlestick_analysis_once(ts_code, pattern, func):
@@ -1530,11 +1587,8 @@ if __name__ == '__main__':
     #     lol["period"]=Alpha.period(df=lol,inplace=False)
     #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
 
-    asset_seasonal_statistic_sh()
-    for end_date in [20000101,20020101,20040101,20060101,20060101,20080101,20100101,20120101,20140101,20160101,20180101]:
-        pass
-        #asset_bullishness(start_date=00000000,end_date=end_date,market="CN", step=1)
+    asset_FD_portfolio_stock()
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 
-    asset_extrema()
+

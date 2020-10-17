@@ -230,13 +230,27 @@ def c_sfreq():
 def c_G_queries():
     return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','zj_industry1','jq_industry1','jq_industry2','concept','market'] "]}
 
+def c_G_queries_small_groups():
+    return {"G": ["on_asset == 'E'", "group in ['sw_industry2', 'jq_industry2','zj_industry1'] "]}
+
+def c_G_queries_mini_groups():
+    return {"G": ["on_asset == 'E'", "group in ['sw_industry2'] "]}
+
 
 def c_index_queries(market="CN"):
     return {"I": [f"ts_code in {c_index(market=market)}"]}
 
 
+def remove_prefix(text, prefix):
+    if text.endswith(prefix):
+        return text[:len(prefix)]
+    return text  # or whatever
+
 def c_market_queries(market="主板"):
     return {"E": [f"market == '{market}'"]}
+
+def c_instance_queries(instance="高速公路"):
+    return {"G": [f"instance == '{instance}'"]}
 
 
 def c_index(market="CN"):
@@ -289,7 +303,7 @@ def c_asset_E_bundle(asset="E"):
                 }
 
     if asset== "FD":
-        return {"fund_portfolo": _API_Tushare.my_fund_portfolo
+        return {"fund_portfolio": _API_Tushare.my_fund_portfolio
                 }
 
 
@@ -684,10 +698,16 @@ def set_index(df,set_index):
 def delete_folder_content(path):
     for root, dirs, files in os.walk(path):
         for file in files:
-            os.remove(os.path.join(root, file))
+            to_delete=os.path.join(root, file)
+            print("DELETE FILE",to_delete)
+            os.remove(to_delete)
 
-def delete_assets():
-    delete_folder_content("\Market\CN\Asset\E\D")
+
+def delete_asset(asset="E"):
+    if asset=="E":
+        delete_folder_content("Market\CN\Asset\E\D")
+    elif asset=="I":
+        delete_folder_content("Market\CN\Asset\I\D")
 
 
 def file_open(filepath):
@@ -810,7 +830,7 @@ def sound(file="error.mp3"):
     except:
         pass
 
-def a_path(path: str = ""):
+def a_path(path: str = ""): # csv = 0. feather = 1
     return [x for x in [f"{path}.csv", f"{path}.feather"]]
 
 
@@ -1084,7 +1104,7 @@ def today():
 
 
 if __name__ == '__main__':
-    delete_assets()
+    pass
 
 
 

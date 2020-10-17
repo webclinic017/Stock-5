@@ -10,6 +10,7 @@ import cProfile
 from tqdm import tqdm
 import traceback
 import Alpha
+import datetime
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -160,7 +161,7 @@ def update_trade_date(freq="D", market="CN", start_date="00000000", end_date=LB.
         LB.to_csv_feather(df, a_path, index_relevant=True)
 
 
-def update_ts_code(asset="E", market="CN", big_update=True):
+def update_ts_code(asset="E", market="CN", night_shift=True):
     print("start update ts_code ", market, asset)
     if market == "CN":
         if asset == "E":
@@ -378,7 +379,7 @@ def update_asset_US(asset="E", step=1, api="investpy"):
         LB.to_csv_feather(df=df, a_path=a_path, skip_csv=True)
 
 
-def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True, miniver=True):
+def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True, miniver=True):
     def merge_saved_df_helper(df, df_saved):
         df.set_index("trade_date", inplace=True)
         df.index = df.index.astype(int)  # IMPORTANT
@@ -557,6 +558,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
         # print(f"{ts_code} abv_ma_days finished")
 
 
+    #MAIN FUNCTION STARTS HERE
     def run(df_ts_codes):
         # iteratve over ts_code
         for ts_code in df_ts_codes.index[::step]:
@@ -586,13 +588,23 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
                     print(asset, ts_code, freq, end_date, "EMPTY - START UPDATE", asset_latest_trade_date, " to today")
 
                 # file exist and on latest date--> finish, else update
-                if (str(asset_latest_trade_date) == str(real_latest_trade_date)):
-
+                if (int(asset_latest_trade_date) == int(real_latest_trade_date)):
                     print(asset, ts_code, freq, end_date, "Up-to-date", real_latest_trade_date)
                     continue
                 else:  # file exists and not on latest date
                     # file exists and not on latest date, AND stock trades--> update
-                    complete_new_update = False
+                    print(asset, ts_code, freq, end_date, "Exist but not on latest date", real_latest_trade_date)
+
+                    #NORMALLY: USE OLD WAY TO UPDATE ONLY LAST FEW ROWS
+                    #NEW WAY: STILL DO COMPLETE NEW UPDATE IF LAST DATE IS NOT CORRECT
+                    # currently I don't truss the manual update, the manual update even takes longer than rewrite the asset with new data.
+                    # no need to delete file as the new result will override it
+
+                    complete_new_update = True # new way
+                    #complete_new_update = False #old way
+
+            else:
+                print(asset, ts_code, freq, end_date, "File Not exist. UPDATE!", real_latest_trade_date)
 
             # file not exist or not on latest_trade_date --> update
             if (asset == "E" and freq == "D"):
@@ -733,7 +745,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, big_update=True,
     run(df_ts_codes=df_ts_codes)
 
 
-def update_asset_G(asset=["E"], big_update=True, step=1):
+def update_asset_G(asset=["E"], night_shift=True, step=1):
     """
     for each possible G instance:
         for each member of G instance:
@@ -746,7 +758,6 @@ def update_asset_G(asset=["E"], big_update=True, step=1):
     # preparation. operations that has to be done for all stocks ONCE
     for ts_code, df_asset in d_preload.items():
         print("pre processing ts_code", ts_code)
-        df_asset["dv_ttm"] = df_asset["dv_ttm"].astype(float)
 
         df_nummeric = LB.df_to_numeric(df_asset)
 
@@ -754,7 +765,7 @@ def update_asset_G(asset=["E"], big_update=True, step=1):
         d_preload[ts_code] = df_nummeric
 
     # loop over all stocks
-    for group, a_instance in LB.c_d_groups(asset=["E"]).items():
+    for group, a_instance in LB.c_d_groups(assets=["E"]).items():
         for instance in a_instance:
 
             # get member of that instance
@@ -764,9 +775,9 @@ def update_asset_G(asset=["E"], big_update=True, step=1):
             else:
                 df_members = df_ts_code[df_ts_code[group] == instance]
 
-            df_instance = pd.DataFrame()
 
             # loop over all members individually
+            df_instance = pd.DataFrame()
             for counter, ts_code in enumerate(df_members.index):
                 try:
                     df_asset = d_preload[ts_code]
@@ -782,18 +793,28 @@ def update_asset_G(asset=["E"], big_update=True, step=1):
 
                     # added in init preload
                     # df_asset["divide_helper"] = 1  # counts how many asset are there at one day
+
+                    #in case there are inf or na values.
+                    df_asset=df_asset.replace([np.inf, -np.inf], np.nan)
+
+                    #add together
                     df_instance = df_instance.add(df_asset, fill_value=0)
 
-            # save df_instance as asset
+
+            # put all instances together
             if not df_instance.empty:
                 df_instance = df_instance.div(df_instance["divide_helper"], axis=0)
                 df_instance = df_instance[example_column]  # align columns
                 df_instance.insert(0, "ts_code", f"{group}_{instance}")
+
+            #if this is not the case, then to feather will be error
+            df_instance.index=df_instance.index.astype(int)
+
             LB.to_csv_feather(df_instance, LB.a_path(f"Market/CN/Asset/G/D/{group}_{instance}"), skip_csv=True)
             print(f"{group}_{instance} UPDATED")
 
 
-def update_asset_G2(asset=["E"], big_update=True, step=1):
+def update_asset_G2(asset=["E"], night_shift=True, step=1):
     """
     DEPRECATED!
 
@@ -825,7 +846,7 @@ def update_asset_G2(asset=["E"], big_update=True, step=1):
     #
     #
     # # if small update and saved_date==last trade_date
-    # if last_trade_date == last_saved_date and (not big_update):
+    # if last_trade_date == last_saved_date and (not night_shift):
     #     return print("ALL GROUP Up-to-date")
     #
     # #     # initialize trade_date
@@ -890,14 +911,14 @@ def update_asset_G2(asset=["E"], big_update=True, step=1):
         print(key, "UPDATED")
 
 
-def update_asset_stock_market_all(start_date="00000000", end_date=LB.today(), asset=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], big_update=False):
+def update_asset_stock_market_all(start_date="00000000", end_date=LB.today(), asset=["E"], freq="D", market="CN", comparison_index=["000001.SH", "399001.SZ", "399006.SZ"], night_shift=False):
     """ In theory this should be exactly same as Asset_E
     """  # TODO make this same as asset_E
 
     # check if big update and if the a previous saved file exists
     last_saved_date = "19990104"
     last_trade_date = get_last_trade_date("D")
-    if not big_update:
+    if not night_shift:
         try:
             df_saved = get_stock_market_all()
             last_saved_date = df_saved.index[len(df_saved) - 1]
@@ -946,7 +967,7 @@ def update_asset_stock_market_all(start_date="00000000", end_date=LB.today(), as
     df_result = pd.DataFrame(a_result)
 
     # if small update, append new data to old data
-    if (not df_saved.empty) and (not big_update):
+    if (not df_saved.empty) and (not night_shift):
         df_result = df_saved.append(df_result, sort=False)
 
     # add comp chg and index
@@ -960,21 +981,21 @@ def update_asset_stock_market_all(start_date="00000000", end_date=LB.today(), as
 
 
 
-def update_asset_bundle(bundle_name, bundle_func, market="CN", big_update=True, a_asset=["E"], step=1):
+def update_asset_bundle(bundle_name, bundle_func, market="CN", night_shift=True, a_asset=["E"], step=1, skip_csv=True):
     """updates other information from tushare such as blocktrade,sharefloat
     check out LB.c_asset_E_bundle() for more
     """
     df_ts_code = get_ts_code(a_asset=a_asset, market=market)
     for ts_code in df_ts_code.index[::step]:
         a_path = LB.a_path(f"Market/{market}/Asset/{a_asset[0]}/{bundle_name}/{ts_code}")
-        if os.path.isfile(a_path[1]) and (not big_update):
+        if os.path.isfile(a_path[1]) and (not night_shift):
             print(ts_code, bundle_name, "Up-to-date")
         else:
             df = bundle_func(ts_code)
             if not df.empty:
                 df = LB.df_reverse_reindex(df)
                 df = LB.set_index(df,set_index="ts_code")
-                LB.to_csv_feather(df=df, a_path=a_path, skip_csv=True)
+                LB.to_csv_feather(df=df, a_path=a_path, skip_csv=skip_csv)
                 print(ts_code, bundle_name, "UPDATED")
 
 
@@ -1068,7 +1089,7 @@ def update_asset_beta_table(asset1="I", asset2="E", freq=240):
         LB.to_csv_feather(df=df_result, a_path=a_path, skip_csv=True)
 
 
-def update_date(asset="E", freq="D", market="CN", big_update=True, step=1, start_date="000000", end_date=LB.today(), naive=False):
+def update_date(asset="E", freq="D", market="CN", night_shift=True, step=1, start_date="000000", end_date=LB.today(), naive=False):
     """step -1 might be wrong if trade dates and asset are updated seperately. then they will not align
         step 1 always works
         naive: approach always works, but is extremly slow
@@ -1093,8 +1114,8 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1, start
         a_path = LB.a_path(f"Market/{market}/Date/{asset}/{freq}/{trade_date}")
         a_date_result = []
 
-        # date file exists AND not big_update. If big_update, then always overwrite
-        if os.path.isfile(a_path[1]) and (not big_update):
+        # date file exists AND not night_shift. If night_shift, then always overwrite
+        if os.path.isfile(a_path[1]) and (not night_shift):
 
             if naive:  # fallback strategies is the naive approach
                 continue
@@ -1110,7 +1131,7 @@ def update_date(asset="E", freq="D", market="CN", big_update=True, step=1, start
                         d_lookup_table[ts_code] += step
                 print(asset, freq, trade_date, "date file Up-to-date")
 
-        # date file does not exist or big_update
+        # date file does not exist or night_shift
         else:
             for counter, (ts_code, df_asset) in enumerate(d_preload.items()):
 
@@ -1279,7 +1300,15 @@ def get_trade_date(start_date="000000", end_date=LB.today(), freq="D", market="C
 
 def get_last_trade_date(freq="D", market="CN", type=str):
     df_trade_date = get_trade_date(start_date="00000000", end_date=LB.today(), freq=freq, market=market)
-    return type(df_trade_date.index[-1])
+
+    #Depends on the hour: if it is 2am morning, then it is latest trade date, but market has not opended yet.
+    today_hour=datetime.datetime.now().hour
+    if today_hour > 16:
+        # after 1 hour of stock close. Should get latest data
+        return type(df_trade_date.index[-1])
+    else:
+        #return the yesterdays trade date as the latest
+        return type(df_trade_date.index[-2])
 
 
 def get_next_trade_date(freq="D", market="CN"):
@@ -1469,7 +1498,7 @@ def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=
 def preload_index(market="CN",step=1):
     return preload(asset="I", freq="D", on_asset=True, step=step, query_df="", period_abv=240, d_queries_ts_code=LB.c_index_queries(market=market), reset_index=False,market=market)
 
-def update_all_in_one_us(big_update=False):
+def update_all_in_one_us(night_shift=False):
     # ts_code
     for asset in ["I", "E", "FD"]:
         update_ts_code(asset=asset, market="US")
@@ -1482,14 +1511,14 @@ def update_all_in_one_us(big_update=False):
     # update trade_date (using index)
 
 
-def update_all_in_one_hk(big_update=False):
+def update_all_in_one_hk(night_shift=False):
     update_trade_cal(market="HK")
     update_trade_date(market="HK")
     update_ts_code(asset="E", market="HK")
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"market": "HK", "asset": "E", "freq": "D", "big_update": False}, a_partial=LB.multi_steps(2))  # SMART
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"market": "HK", "asset": "E", "freq": "D", "night_shift": False}, a_partial=LB.multi_steps(2))  # SMART
 
 
-def update_all_in_one_cn(big_update=False):
+def update_all_in_one_cn(night_shift=False):
     # 0. ALWAYS UPDATE
     # 1. ONLY ON BIG UPDATE: OVERRIDES EVERY THING EVERY TIME
     # 2. ON BOTH BIG AND SMALL UPDATE: OVERRIDES EVERYTHING EVERY TIME
@@ -1500,14 +1529,14 @@ def update_all_in_one_cn(big_update=False):
         # E: update each E asset one after another
         for asset in ["E","FD"]:
             for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
-                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False, "a_asset":[asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "night_shift": False, "a_asset":[asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
 
 
     else:
         # update all E asset at same time
         for asset in ["FD"]:
             a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False, "a_asset":[asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "night_shift": False, "a_asset":[asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
 
 
     # 1.0. GENERAL - CAL_DATE
@@ -1522,25 +1551,25 @@ def update_all_in_one_cn(big_update=False):
     #    update_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.2. ASSET
-    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False}, a_partial=LB.multi_steps(4))  # SMART
-    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False}, a_partial=LB.multi_steps(4))  # SMART
-    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False}, a_partial=LB.multi_steps(8))  # SMART
-    # update_asset_G(big_update=big_update)  # update concept is very very slow. = Night shift
-    # multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False}, a_partial=LB.multi_steps(1))  # SMART
+    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False}, a_partial=LB.multi_steps(4))  # SMART
+    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "night_shift": False}, a_partial=LB.multi_steps(4))  # SMART
+    # LB.multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False}, a_partial=LB.multi_steps(8))  # SMART
+    # update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
+    # multi_process(func=update_asset_EIFD_D, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "night_shift": False}, a_partial=LB.multi_steps(1))  # SMART
 
     # 3.2. DATE
-    # date_step = [-1, 1] if big_update else [-1, 1]
-    # LB.multi_process(func=update_date, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
-    # LB.multi_process(func=update_date, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "big_update": False, "naive":True}, a_partial=LB.multi_steps(1))  # SMART
-    # LB.multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
-    # LB.multi_process(func=update_date, a_kwargs={"asset": "G", "freq": "D", "market": "CN", "big_update": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
-    # LB.multi_process(func=update_date, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "big_update": False, "naive":True}, a_partial=LB.multi_steps(1))  # SMART
+    # date_step = [-1, 1] if night_shift else [-1, 1]
+    # LB.multi_process(func=update_date, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
+    # LB.multi_process(func=update_date, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "night_shift": False, "naive":True}, a_partial=LB.multi_steps(1))  # SMART
+    # LB.multi_process(func=update_date, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
+    # LB.multi_process(func=update_date, a_kwargs={"asset": "G", "freq": "D", "market": "CN", "night_shift": False, "naive":False}, a_partial=LB.multi_steps(1))  # SMART
+    # LB.multi_process(func=update_date, a_kwargs={"asset": "F", "freq": "D", "market": "CN", "night_shift": False, "naive":True}, a_partial=LB.multi_steps(1))  # SMART
 
     # # 3.3. DATE - BASE
-    # update_asset_stock_market_all(start_date="19990101", end_date=today(), big_update=big_update, asset=["E"])  # SMART
+    # update_asset_stock_market_all(start_date="19990101", end_date=today(), night_shift=night_shift, asset=["E"])  # SMART
 
 
-def update_all_in_one_cn_v2(big_update=False):
+def update_all_in_one_cn_v2(night_shift=False):
     # 0. ALWAYS UPDATE
     # 1. ONLY ON BIG UPDATE: OVERRIDES EVERY THING EVERY TIME
     # 2. ON BOTH BIG AND SMALL UPDATE: OVERRIDES EVERYTHING EVERY TIME
@@ -1554,44 +1583,35 @@ def update_all_in_one_cn_v2(big_update=False):
         # E: update each E asset one after another
         for asset in ["E", "FD"]:
             for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
-                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "big_update": False, "a_asset": [asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
+                LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "night_shift": False, "a_asset": [asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
 
 
     else:
         # update all E asset at same time
         for asset in ["FD"]:
             a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "big_update": False, "a_asset": [asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "night_shift": False, "a_asset": [asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
 """
 
 
     # 1.0. GENERAL - CAL_DATE
     update_trade_cal()  # always update
 
-
-
-
     # # 1.3. GENERAL - TS_CODE
-    for asset in ["I","E","G","F"]:
+    for asset in ["I","E","G"]:#"F" sometimes bug
         update_ts_code(asset)  # ALWAYS UPDATE
 
     for asset in ["sw_industry1", "sw_industry2","sw_industry3","concept"]:
-        continue
-        update_ts_code(asset)  # SOMETIMES UPDATE
+        if night_shift: update_ts_code(asset)  # SOMETIMES UPDATE
 
     # # 1.5. GENERAL - TRADE_DATE (later than ts_code because it counts ts_codes)
     for freq in ["D"]:  # Currently only update D and W, because W is needed for pledge stats
         update_trade_date(freq)  # ALWAYS UPDATE
 
     # 2.2. ASSET
-
-    #I
-    #LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "big_update": False, "miniver":True}, a_partial=LB.multi_steps(4))  # SMART
-
-    #E
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "big_update": False, "miniver":True}, a_partial=LB.multi_steps(4))  # SMART
-
-    # update_asset_G(big_update=big_update)  # update concept is very very slow. = Night shift
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "miniver":True}, a_partial=LB.multi_steps(4))  # 40 mins
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":True}, a_partial=LB.multi_steps(4))  # 60 mins
+    update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
 
 
 
@@ -1621,13 +1641,16 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
-        big_update = False
+        night_shift = False
 
         # update_all_in_one_hk()
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
-        update_trade_date()
+        for asset in ["FD"]:
+            a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
+            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "night_shift": False, "a_asset": [asset], "skip_csv":False}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
+
         #update_all_in_one_cn()
 
 

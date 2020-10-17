@@ -15,43 +15,115 @@ from scipy.signal import argrelextrema
 import DB
 import LB
 import builtins
+import Atest
 from functools import partial
 
 
-def update_data():
-    """
-    1. update index
-    2. update all stocks
-    """
+
+
+def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
+
+    def portfolio1():
+        """
+        doesn't work well, deprecated
+        :return:
+        """
+
+        # use the cy trend signal as base (= cy fol rollingnorm)
+        fol_rolling_name = f"{index}_fol_rolling_norm"
+        df_result[fol_rolling_name] = fol_rolling_norm(df=df_result, abase=f"close_{index}", inplace=False, freq_obj=range(10, 510, 10))
+
+        """
+        port folio 1 tries to use fol rolling norm to generate buy and sell signals
+        
+        :return: 
+        """
+        df_result[f"{index}_trendmode_buy_sell"]=0.0
+
+        #tracks the highest or lowest signal since this trend happens
+        max_value = 0
+
+        for trade_date in df_result.index:
+            today_trend=df_result.at[trade_date,"cy_trend"]
+            today_trend_thresh=df_result.at[trade_date, fol_rolling_name]
+
+            #check the rollin max threshhold since start of this trend
+            if today_trend>0 and max_value>=0:# not first day bull
+                max_value=builtins.max(max_value,today_trend_thresh)
+            elif today_trend>0 and max_value<=0:# first day bull
+                max_value = 0 # reset since new trend started
+            elif today_trend<0 and max_value<=0:#not first day bear
+                max_value=builtins.min(max_value,today_trend_thresh)
+            elif today_trend<0 and max_value>=0:# first day bear
+                max_value = 0 # reset since new trend started
+
+            # after having updated the max_value, generate signal
+            # in bull market, buy if thresh is lower than 0.6
+            # in bear market, sell if thresh is higher than 0.4
+            today_max_value_diff = max_value - today_trend_thresh
+            if today_trend>0:
+                if today_trend_thresh>0.9:#sell in uptrend
+                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = -today_trend_thresh*0.25
+                elif today_max_value_diff > 0.5:#buy in uptrend
+                    df_result.at[trade_date,f"{index}_trendmode_buy_sell"] = today_max_value_diff
+
+
+            elif today_trend<0:
+                if today_trend_thresh<0.1: # buy in downtrend
+                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = (1-today_trend_thresh)*0.25
+                if today_max_value_diff < -0.5: #sell in downtrend
+                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = today_max_value_diff
+
+
+        #to_cyclemode_pquota(df_result=df_result, abase=f"{index}_trendmode_buy_sell", index=index)
 
 
 
-    DB.update_all_in_one_cn_v2()
+    def to_trendmode_pquota(index):
+        """portfolio 2 tries to use a smaller overma to generate buy and sell signals"""
+        overma_name=step4(df_result=df_result, d_preload=d_preload, a_freq_close=[ 60, 120], a_freq_overma=[ 60, 120], index=index)
+        #in bad time, sell except if overma shows buy
+        #in good time, buy except if overma shows sell
+        #portfolio ranges from 0 to 1
+
+        df_result[f"{index}_trendmode_pquota"]=0.0
+        df_result.loc[df_result["cy_trend"]>0,f"{index}_trendmode_pquota"]=0.8
+
+        #sell in good time:
+        df_helper=df_result[ df_result["cy_trend"]>0]
+        df_result[f"{index}_trendmode_pquota"]=df_result[f"{index}_trendmode_pquota"].add(df_helper[overma_name]*1,fill_value=0)
+
+        #buy in bad time:
+        df_helper = df_result[ df_result["cy_trend"]<0]
+        df_result[f"{index}_trendmode_pquota"]=df_result[f"{index}_trendmode_pquota"].add(df_helper[overma_name]*0.25,fill_value=0)
+
+        df_result[f"{index}_trendmode_pquota"].clip(0,1,inplace=True)
+
+    to_trendmode_pquota(index=index)
+    return
 
 
-
-
-def predict(df_result, d_preload, debug=0, index="sh"):
-    def normaltime_signal(df_result):
+def predict_cyclemode(df_result, d_preload, debug=0, index="sh"):
+    def normaltime_signal(df_result,index="sh"):
         divideby = 0
         for counter in range(-50, 50):
             if counter not in [0]:  # because thats macd
-                if f"r{counter}:buy_sell" in df_result.columns:
-                    df_result["r:buy_sell"] = df_result["r:buy_sell"].add(df_result[f"r{counter}:buy_sell"], fill_value=0)
+                if f"{index}_r{counter}:buy_sell" in df_result.columns:
+                    df_result[f"{index}_r:buy_sell"] = df_result[f"{index}_r:buy_sell"].add(df_result[f"{index}_r{counter}:buy_sell"], fill_value=0)
                     divideby += 1
-        df_result["r:buy_sell"] = df_result["r:buy_sell"] / divideby
+        df_result[f"{index}_r:buy_sell"] = df_result[f"{index}_r:buy_sell"] / divideby
 
-    def alltime_signal(df_result):
+    def alltime_signal(df_result,index="sh"):
         # when switching between normal time strategy and crazy time strategy, there is no way to gradually switch. You either choose one or the other because crazy time is very volatile. In this time. I choose macd for crazy time.
 
-        df_result["ra:buy_sell"] = 0.0
+        df_result[f"{index}_ra:buy_sell"] = 0.0
         for divideby, thresh in enumerate([0.35]):
-            df_result[f"ra:buy_sell{thresh}"] = 0.0
-            df_result.loc[df_result["volatility"] <= thresh, f"ra:buy_sell{thresh}"] = df_result["r:buy_sell"]  # normal time
-            df_result.loc[df_result["volatility"] > thresh, f"ra:buy_sell{thresh}"] = df_result["r0:buy_sell"]  # crazy time
-            df_result["ra:buy_sell"] += df_result[f"ra:buy_sell{thresh}"]
-            del df_result[f"ra:buy_sell{thresh}"]
-        df_result["ra:buy_sell"] = df_result["ra:buy_sell"] / (divideby + 1)
+            df_result[f"{index}_ra:buy_sell{thresh}"] = 0.0
+            df_result.loc[df_result["sh_volatility"] <= thresh, f"{index}_ra:buy_sell{thresh}"] = df_result[f"{index}_r:buy_sell"]  # normal time
+            df_result.loc[df_result["sh_volatility"] > thresh, f"{index}_ra:buy_sell{thresh}"] = df_result[f"{index}_r0:buy_sell"]  # crazy time
+            df_result[f"{index}_ra:buy_sell"] += df_result[f"{index}_ra:buy_sell{thresh}"]
+            del df_result[f"{index}_ra:buy_sell{thresh}"]
+        df_result[f"{index}_ra:buy_sell"] = df_result[f"{index}_ra:buy_sell"] / (divideby + 1)
 
     """
     APPROACH: divide and conquer: choose most simple case for all variables
@@ -65,13 +137,14 @@ def predict(df_result, d_preload, debug=0, index="sh"):
     3. (todo industry) check if index volume is consistent with past gain for index
     4. (todo idustry) calculate how many stocks are overma
     5. (done) check if top n stocks are doing well or not
-    6. (todo) check if best 3 industry are doing well or not
-    8. (todo relatively not included atm) overlay of the new year period month
     9. (todo currently no way access) calculate how many institution are holding stocks  http://datapc.eastmoney.com/emdatacenter/JGCC/Index?color=w&type=
-    10. (done but not that useful) rsi freq combination.
     11. (todo finished partly) Price and vol volatility
     12. (todo with all stocks and industry) check volatiliy adj macd
-    17. Fundamental values: sales, return data
+    
+    not working well 
+    17. Fundamental values not to predict shorterm market. Only useable to select stocks
+
+
 
 
     RESULT INTERPRETATION:
@@ -99,9 +172,9 @@ def predict(df_result, d_preload, debug=0, index="sh"):
     Volume: crazy time high, normal time low
     overma: crazy time high, normal time low
     => in crazy time, use different strategy and higher freq
+    => if UP trend is SURE, then buy low sell high. if trend is not sure, wait for confirmation to buy
     
     The mistake in my previous research was to seek and define bull and bear market. When in reality. One must first define crazy and normal time.
-    
 
     PORTFOLIO:
     Crazy and normal time can both have 100% portfolio. You can not choose how market gives 60% return or 600%. You can only choose your portfolio size, buy or not buy. Don't miss even if market returns 20%. 
@@ -116,29 +189,29 @@ def predict(df_result, d_preload, debug=0, index="sh"):
     level 3 = level 2 + junk
     
     
-    TODO
+    Design TODO
     MANUAL CORRECTION
-    works well on sh index, buy not so well on cy and sz index because the trend is too strong and r3+4 have not found a good time to buy. Maybe the portfolio need to be adjustd using a trend strongess
-    distinguish index vs d_preload
-    which index is leading the market?
-    which industry is leading the market?
+    combination of two theories
+    a pquote tester that varifies the result
     tweak accuracy
-    This is ONLY the market prediction. You need to combine it with industry and individual stock prediction to get a better image.
+    strength of a trend, to check how strong the turning point must be to turn over the trend
+    variable frequency. At high volatile time, use smaller freq
     find a better and more reliable time classifier to replace the hard coded sh version
-    manage efficiency
-    update data flow to become smooth and in one run. send email out when finished
+    idea to use cummulative signals during normal time. e.g. signals from last 5 to 10 days together combined show me how strong sell should be instead of one single.
+    add the idea that in bear market, holing period is short and in bull, holding period is long
+    
+    Technical TODO
+    naming conventions
+    manage efficiency of the code, less redundant
     maybe interface to see more clear the final result
-    Find industry or stocks that are suited for macd. = > long trend, high volatility
-    What is the opposite of MACD? A signal that buys low, sells high, in cycle mode.
-    MACD works very well on CY stocks 
     """
 
-    # 0 START PREDICT
+    # START PREDICT
     print(f"START PREDICT ---> {index} <---")
     print()
 
-    df_result[f"r:buy_sell"] = 0.0
-    df_result[f"ra:buy_sell"] = 0.0
+    df_result[f"{index}_r:buy_sell"] = 0.0
+    df_result[f"{index}_ra:buy_sell"] = 0.0
 
     # 0 MACD  (on single index) CRAZY
     step0(df_result=df_result, index=index, debug=debug)
@@ -149,85 +222,38 @@ def predict(df_result, d_preload, debug=0, index="sh"):
     # 4 OVERMA (on all stocks) NORMAL
     step4(df_result=df_result, index=index, d_preload=d_preload, debug=debug)
 
-    # 5 TOP N Stock (on some stocks)
-    # step5(df_result=df_result, d_preload=d_preload,debug=debug)
-
-    # 6 TOP INDUSTRY
-    # step6(df_result=df_result)
-
-    # 8 SEASONAL
-    # step8(df_result=df_result)
-
-    # 10 RSI
-    # step10(df_result=df_result,debug=debug)
-
-    # 13 combine NORMAL TIME buy and sell signal into one.
-    normaltime_signal(df_result)
+    # Combine NORMAL TIME buy and sell signal into one.
+    normaltime_signal(df_result,index=index)
 
     # Add CRAZY TIME signal into the normal time signal = > all time signal.
-    alltime_signal(df_result)
+    alltime_signal(df_result,index=index)
 
-    # smooth the result to have less whipsaw
+    # OPTIONAL: smooth the result to have less whipsaw
     # df_result["ra:buy_sell"]=Alpha.zlema(df=df_result, abase="ra:buy_sell", freq=5, inplace=False ,gain=0)
 
     # portfolio strategies
-    port_strat2(df_result=df_result)
+    to_cyclemode_pquota(df_result=df_result, abase=f"{index}_ra:buy_sell", index=index)
 
     # check only after year 2000
     df_result = LB.trade_date_to_calender(df=df_result, add=["year"])
     df_result = df_result[df_result["year"] >= 2000]
     del df_result["year"]
-
-    # Save excel
-    a_path = LB.a_path(f"Market/CN/PredictMarket/Predict_{index}")
-    LB.to_csv_feather(df=df_result, a_path=a_path)
+    return
 
 
-def port_strat1(df_result):
-    # normal time portfolio change can be seen in a longer term
-    # crazy time, portfolio change must be done very frequently
-
-    # One interpretation:
-    # value from 0 to (-1). If you have portfolio, sell.
-    # value from 0 to 1.If you have no portfolio buy.
-
-    # second interpretation:
-    # signals shows remaining portfolio size from 0 to 100%
-    # signals shows the net add or minus pct of the portfolio
-
-    # third interpretation:
-    # use kelly formula.
-    # -1 means 100% lose , 0% win
-    #  1 means 100% win  , 0% lose
-    # calculate portfolio using this formular then
-    # naive kelly would not work as the signal is not 100% accurate. might cause man whipsaw
-    # hence : 0 means 50% win, 50% lose. Kelly would bet 0 portfolio. Hence all values under 0 are useless for this method.
-    # But the signals range is -1 to 1, so kelly would not match the signal and lose half the information
-
-    # fourth interpretation:
-    # the signals shows that to do with remaining portfolio.
-    # 0 means 50%, -1 means 0, 1 means 100%
-    # problem: even during small bear market, we don't even want to have 20%. we want to have 0% portfolio.
-    #
-
-    df_result["ra:buy_sell_diff"] = df_result["ra:buy_sell"].diff(1)
-    df_result["port1"] = df_result["ra:buy_sell_diff"].cumsum()
-    df_result["port1"] = df_result["port1"].clip(0, 100)
-
-
-def port_strat2(df_result):
+def to_cyclemode_pquota(df_result, abase, index="sh"):
     """
     This portfolio strategy is simple: buy when > 0.2. Sell when <0.2
     buy until sell signal occurs
 
 
     """
-    df_result["port2"] = 0.0
+    df_result[f"{index}_cyclemode_pquota"] = 0.0
     portfolio = 0.0
 
     for trade_date in df_result.index:
         # loop over each day
-        signal = df_result.at[trade_date, "ra:buy_sell"]
+        signal = df_result.at[trade_date, abase]
         if signal > 0:
             portfolio = builtins.max(portfolio, signal)
         elif signal < 0:
@@ -239,62 +265,22 @@ def port_strat2(df_result):
             pass
 
         # assign value at end of day
-        df_result.at[trade_date, "port2"] = portfolio
+        df_result.at[trade_date, f"{index}_cyclemode_pquota"] = portfolio
 
 
-def timeclassifier():
-    # many many ways to define crazy time
-    # external factors
-    # baidu search
-    # margin account
-    # us stock
-
-    # internal factors
-    # volume high
-    # overma high
-    # price very high
-    #
-
-    return
 
 
-def single_test_deprecated_1():
-    """
-    create a sumarized time series to see the overall vol of the complete market
-
-    RESULT: The summarized volume is Exactly same as the sh index volume
-    """
-
-    # load in all the stocks
-    d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
-
-    df_market = DB.get_asset(ts_code="000001.SH", asset="I", freq="D", market="CN")
-    df_market = df_market[["close", "vol", "amount"]]
-    df_market["agg_abs_amount"] = 0.0
-    df_market["agg_rel_amount"] = 0.0
-    df_market["agg_stocks"] = 0.0
-
-    print("lengh of preload", len(d_preload))
-
-    for ts_code, df_asset in d_preload.items():
-        print(ts_code)
-
-        df_asset["count_helper"] = 1.0
-        df_market["agg_stocks"] = df_market["agg_stocks"].add(df_asset["count_helper"], fill_value=0)
-        df_market["agg_abs_amount"] = df_market["agg_abs_amount"].add(df_asset["amount"], fill_value=0)
-
-    df_market["agg_rel_amount"] = df_market["agg_abs_amount"] / df_market["agg_stocks"]
-    a_path = LB.a_path(f"Market/CN/PredictMarket/Market")
-    LB.to_csv_feather(df=df_market, a_path=a_path)
 
 
 def step0(df_result, debug=0, index="sh"):
     """MACD"""
 
+    result_name=f"{index}_r0:buy_sell"
+
     # create all macd
     a_results_col = []
-    for sfreq in [60, 120, 180, 240]:
-        for bfreq in [180, 240, 300, 360, 500]:
+    for sfreq in [60, 120, 180,240]:
+        for bfreq in [ 180, 240, 300,360]:
             if sfreq < bfreq:
                 print(f"{index}: step0 sfreq{sfreq} bfreq{bfreq}")
                 a_cols = macd(df=df_result, abase=f"close_{index}", freq=sfreq, freq2=bfreq, inplace=True, type=4, score=1)
@@ -306,36 +292,37 @@ def step0(df_result, debug=0, index="sh"):
                         del df_result[a_cols[counter]]
 
     # add all macd results together
-    df_result["r0:buy_sell"] = 0.0
+    df_result[result_name] = 0.0
     for counter, result_col in enumerate(a_results_col):
-        df_result["r0:buy_sell"] = df_result["r0:buy_sell"].add(df_result[result_col], fill_value=0)
+        df_result[result_name] = df_result[result_name].add(df_result[result_col], fill_value=0)
         if debug < 2:
             del df_result[result_col]
 
     # normalize
-    df_result["r0:buy_sell"] = df_result["r0:buy_sell"] / (counter + 1)
+    df_result[result_name] = df_result[result_name] / (counter + 1)
 
     # calculate overlay freq volatility: adjust the result with volatility (because macd works best on high volatile time)
     # df_result["r0:buy_sell"] = df_result["r0:buy_sell"] * df_result["volatility"]
 
 
-def step3(df_result, index="sh", debug=0, ):
+def step3(df_result, index="sh", debug=0 ):
     """volume
 
     volume is best used to predict start of crazy time. in normal time, there is not so much information in volume.
     """
 
-    def step3_single(df_result, on_index, freq_close=240, freq_vol=360, debug=0):
+
+    def step3_single(df_result, index, freq_close=240, freq_vol=360, debug=0):
         """
         This can detect 3 signals:
         1. high volume and high gain -> likely to reverse to bear
         2. low volume and high gain -> even more likely to reverse to bear
-        3. high volume and low gain -> ikely to reverse to bull
+        3. high volume and low gain -> likely to reverse to bull
         """
 
-        vol_name = f"vol_{on_index}"
-        close_name = f"close_{on_index}"
-        result_name = f"r3:{on_index}_vol{freq_vol}_close{freq_close}"
+        vol_name = f"vol_{index}"
+        close_name = f"close_{index}"
+        result_name = f"r3:{index}_vol{freq_vol}_close{freq_close}"
 
         # normalize volume and close first with rolling 240 days
         norm_vol_name = Alpha.rollingnorm(df=df_result, abase=vol_name, freq=freq_vol, inplace=True)
@@ -346,7 +333,7 @@ def step3(df_result, index="sh", debug=0, ):
         sell_signal1 = df_helper[norm_vol_name] + df_helper[norm_close_name]  # higher price, higher volume the more clear the signal
 
         # 2. Sell Signal: filter only days where vol < 0.5 and close > 0.8
-        df_helper = df_result.loc[(df_result[norm_vol_name] < 0.4) & (df_result[norm_close_name] > 0.85)]
+        df_helper = df_result.loc[(df_result[norm_vol_name] < 0.4) & (df_result[norm_close_name] > 0.80)]
         sell_signal2 = (1 - df_helper[norm_vol_name]) + df_helper[norm_close_name]  # higher price, lower volume the more clear the signal
 
         # combine both type of sell signals
@@ -364,52 +351,49 @@ def step3(df_result, index="sh", debug=0, ):
 
         return [f"{result_name}_buy", f"{result_name}_sell"]
 
+
+
+    result_name = f"{index}_r3:buy_sell"
+
     # loop over all frequency
-    df_result[f"r3:buy"] = 0.0
-    df_result[f"r3:sell"] = 0.0
+    df_result[f"{index}_r3:buy"] = 0.0
+    df_result[f"{index}_r3:sell"] = 0.0
     result_list = []
     counter = 0
     for freq_close in [240, 500]:
         for freq_vol in [120, 500]:
             print(f"{index}: step3 close{freq_close} vol{freq_vol}...")
             counter += 1
-            buy_sell_label = step3_single(df_result=df_result, freq_close=freq_close, freq_vol=freq_vol, on_index=index, debug=debug)
+            buy_sell_label = step3_single(df_result=df_result, freq_close=freq_close, freq_vol=freq_vol, index=index, debug=debug)
             result_list = result_list + [buy_sell_label]
 
     # combine all frequecies into one result for ONE index
     for buy_freq_signal, sell_freq_signal in result_list:
-        df_result[f"r3:buy"] = df_result[f"r3:buy"].add(df_result[buy_freq_signal], fill_value=0)
-        df_result[f"r3:sell"] = df_result[f"r3:sell"].add(df_result[sell_freq_signal], fill_value=0)
+        df_result[f"{index}_r3:buy"] = df_result[f"{index}_r3:buy"].add(df_result[buy_freq_signal], fill_value=0)
+        df_result[f"{index}_r3:sell"] = df_result[f"{index}_r3:sell"].add(df_result[sell_freq_signal], fill_value=0)
         if debug < 2:
             del df_result[buy_freq_signal]
             del df_result[sell_freq_signal]
 
     # normalize the result
-    df_result[f"r3:buy"] = df_result[f"r3:buy"] / (counter * 2)
-    df_result[f"r3:sell"] = df_result[f"r3:sell"] / (counter * 2)
+    df_result[f"{index}_r3:buy"] = df_result[f"{index}_r3:buy"] / (counter * 2)
+    df_result[f"{index}_r3:sell"] = df_result[f"{index}_r3:sell"] / (counter * 2)
 
     # combine buy and sell
-    df_result["r3:buy_sell"] = df_result[f"r3:buy"].add(df_result[f"r3:sell"] * (-1), fill_value=0)
+    df_result[result_name] = df_result[f"{index}_r3:buy"].add(df_result[f"{index}_r3:sell"] * (-1), fill_value=0)
 
     if debug < 3:
-        del df_result[f"r3:buy"]
-        del df_result[f"r3:sell"]
+        del df_result[f"{index}_r3:buy"]
+        del df_result[f"{index}_r3:sell"]
+    return
 
 
-def step4(df_result, d_preload, index="sh", a_ts_code=[], debug=0):
+
+
+
+def step4(df_result, d_preload, index="sh", a_ts_code=[],  a_freq_close=[240, 500],a_freq_overma=[120, 500],debug=0,):
     """Overma"""
 
-    if index in ["sh", "sz", "cy"] and not a_ts_code:
-        # generate matching list of ts_code for index to be used for overma later
-        if index == "sh":
-            a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="主板"))
-        elif index == "sz":
-            a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="中小板"))
-        elif index == "cy":
-            a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="创业板"))
-
-        a_ts_code = list(a_ts_code.index)
-        print(a_ts_code)
 
     def step4_single(df_result, d_preload, a_ts_code, freq_close=240, freq_overma=240, index="sh", debug=0):
         """calculate how many stocks are overma generally very useful
@@ -423,51 +407,72 @@ def step4(df_result, d_preload, index="sh", a_ts_code=[], debug=0):
 
         # 1. General ALL STOCK overma
         # 1.1 normalize overma series
-        if f"overma{freq_overma}" not in df_result.columns:
-            df_result[f"overma{freq_overma}"] = 0.0
-            df_result[f"counter{freq_overma}"] = 0.0
+        if f"{index}_overma{freq_overma}" not in df_result.columns:
+            df_result[f"{index}_overma{freq_overma}"] = 0.0
+            df_result[f"{index}_counter{freq_overma}"] = 0.0
 
             for ts_code, df_asset in d_preload.items():
                 if ts_code in a_ts_code:
                     # calculate if stocks is over its ma
-                    df_asset[f"ma{freq_overma}"] = df_asset["close"].rolling(freq_overma).mean()
-                    df_asset[f"overma{freq_overma}"] = (df_asset["close"] >= df_asset[f"ma{freq_overma}"]).astype(int)
-                    df_asset[f"counter{freq_overma}"] = 1
+                    df_asset[f"{index}_ma{freq_overma}"] = df_asset["close"].rolling(freq_overma).mean()
+                    df_asset[f"{index}_overma{freq_overma}"] = (df_asset["close"] >= df_asset[f"{index}_ma{freq_overma}"]).astype(int)
+                    df_asset[f"{index}_counter{freq_overma}"] = 1
 
-                    df_result[f"overma{freq_overma}"] = df_result[f"overma{freq_overma}"].add(df_asset[f"overma{freq_overma}"], fill_value=0)
+                    df_result[f"{index}_overma{freq_overma}"] = df_result[f"{index}_overma{freq_overma}"].add(df_asset[f"{index}_overma{freq_overma}"], fill_value=0)
                     # counter to see how many stocks are available
-                    df_result[f"counter{freq_overma}"] = df_result[f"counter{freq_overma}"].add(df_asset[f"counter{freq_overma}"], fill_value=0)
+                    df_result[f"{index}_counter{freq_overma}"] = df_result[f"{index}_counter{freq_overma}"].add(df_asset[f"{index}_counter{freq_overma}"], fill_value=0)
 
             # finally: calculate the percentage of stocks overma
-            df_result[f"overma{freq_overma}"] = df_result[f"overma{freq_overma}"] / df_result[f"counter{freq_overma}"]
+            df_result[f"{index}_overma{freq_overma}"] = df_result[f"{index}_overma{freq_overma}"] / df_result[f"{index}_counter{freq_overma}"]
+
 
         # 1.2 normalize close series
         norm_close_name = Alpha.rollingnorm(df=df_result, freq=freq_close, abase=f"close_{index}", inplace=True)
 
         # 1.3 generate  Buy Signal: price < 0.25 and overma < 0.25
-        df_helper = df_result.loc[(df_result[f"overma{freq_overma}"] < 0.25) & (df_result[norm_close_name] < 0.25)]
-        df_result[f"r4:overma{freq_overma}_close{freq_close}_{index}_buy"] = (1 - df_helper[f"overma{freq_overma}"]) + (1 - df_helper[norm_close_name])  # the lower the price, the lower overma, the better
+        df_helper = df_result.loc[(df_result[f"{index}_overma{freq_overma}"] < 0.25) & (df_result[norm_close_name] < 0.25)]
+        df_result[f"{index}_r4:overma{freq_overma}_close{freq_close}_{index}_buy"] = (1 - df_helper[f"{index}_overma{freq_overma}"]) + (1 - df_helper[norm_close_name])  # the lower the price, the lower overma, the better
 
         # 1.4 generate  Sell Signal: price > 0.75 and overma > 0.75
-        df_helper = df_result.loc[(df_result[f"overma{freq_overma}"] > 0.75) & (df_result[norm_close_name] > 0.75)]
-        df_result[f"r4:overma{freq_overma}_close{freq_close}_{index}_sell"] = df_helper[f"overma{freq_overma}"] + df_helper[norm_close_name]  # the lower the price, the lower overma, the better
+        df_helper = df_result.loc[(df_result[f"{index}_overma{freq_overma}"] > 0.75) & (df_result[norm_close_name] > 0.75)]
+        df_result[f"{index}_r4:overma{freq_overma}_close{freq_close}_{index}_sell"] = df_helper[f"{index}_overma{freq_overma}"] + df_helper[norm_close_name]  # the lower the price, the lower overma, the better
 
         # 1.5 delete unessary columns
         if debug < 3:
-            del df_result[f"overma{freq_overma}"]
-            del df_result[f"counter{freq_overma}"]
+            del df_result[f"{index}_overma{freq_overma}"]
+            del df_result[f"{index}_counter{freq_overma}"]
             del df_result[norm_close_name]
 
-        return [f"r4:overma{freq_overma}_close{freq_close}_{index}_buy", f"r4:overma{freq_overma}_close{freq_close}_{index}_sell"]
+        return [f"{index}_r4:overma{freq_overma}_close{freq_close}_{index}_buy", f"{index}_r4:overma{freq_overma}_close{freq_close}_{index}_sell"]
 
-    df_result[f"r4:buy"] = 0.0
-    df_result[f"r4:sell"] = 0.0
+
+    # generate matching list of ts_code for index to be used for overma later
+    if index == "sh":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="主板"))
+    elif index == "sz":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="中小板"))
+    elif index == "cy":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="创业板"))
+    else:
+        group=f"{index.split('_')[0]}_{index.split('_')[1]}"
+        instance = index.split("_")[-1]
+
+        df_group_lookup=DB.get_ts_code(a_asset=[group])
+        a_ts_code=df_group_lookup[df_group_lookup[group]==instance]
+
+
+    a_ts_code = list(a_ts_code.index)
+    print("df_ts_code ",a_ts_code)
+
+
+    df_result[f"{index}_r4:buy"] = 0.0
+    df_result[f"{index}_r4:sell"] = 0.0
 
     # loop over all frequency
     result_list = []
     counter = 0
-    for freq_close in [240, 500]:
-        for freq_overma in [120, 500]:
+    for freq_close in a_freq_close:
+        for freq_overma in a_freq_overma:
             print(f"{index}: step4 close{freq_close} overma{freq_overma}...")
             buy_sell_label = step4_single(df_result=df_result, d_preload=d_preload, a_ts_code=a_ts_code, freq_close=freq_close, freq_overma=freq_overma, index=index, debug=debug)
             result_list = result_list + [buy_sell_label]
@@ -475,24 +480,25 @@ def step4(df_result, d_preload, index="sh", a_ts_code=[], debug=0):
 
     # combine all frequecies into one result for ONE index
     for buy_signal, sell_signal in result_list:
-        df_result[f"r4:buy"] = df_result[f"r4:buy"].add(df_result[buy_signal], fill_value=0)
-        df_result[f"r4:sell"] = df_result[f"r4:sell"].add(df_result[sell_signal], fill_value=0)
+        df_result[f"{index}_r4:buy"] = df_result[f"{index}_r4:buy"].add(df_result[buy_signal], fill_value=0)
+        df_result[f"{index}_r4:sell"] = df_result[f"{index}_r4:sell"].add(df_result[sell_signal], fill_value=0)
         if debug < 2:
             del df_result[buy_signal]
             del df_result[sell_signal]
 
     # normalize the result
-    df_result[f"r4:buy"] = df_result[f"r4:buy"] / (counter * 2)  # why times 2 actually
-    df_result[f"r4:sell"] = df_result[f"r4:sell"] / (counter * 2)
+    df_result[f"{index}_r4:buy"] = df_result[f"{index}_r4:buy"] / (counter * 2)  # why times 2 actually
+    df_result[f"{index}_r4:sell"] = df_result[f"{index}_r4:sell"] / (counter * 2)
 
     # combine buy and sell
-    df_result["r4:buy_sell"] = df_result[f"r4:buy"].add(df_result[f"r4:sell"] * (-1), fill_value=0)
+    df_result[f"{index}_r4:buy_sell"] = df_result[f"{index}_r4:buy"].add(df_result[f"{index}_r4:sell"] * (-1), fill_value=0)
 
     # debug
     if debug < 3:
-        del df_result[f"r4:buy"]
-        del df_result[f"r4:sell"]
+        del df_result[f"{index}_r4:buy"]
+        del df_result[f"{index}_r4:sell"]
 
+    return f"{index}_r4:buy_sell"
 
 def step5(df_result, d_preload, debug=0):
     """check if top n stocks (low beta stocks stocks) are doing well or not
@@ -594,7 +600,7 @@ def step5(df_result, d_preload, debug=0):
         df_result["r5:buy_sell"] = df_result["r5:buy_sell"] / counter
 
         # adjust with sh_index volatility
-        df_result["r5:buy_sell"] = df_result["r5:buy_sell"] * df_result["volatility"]
+        df_result["r5:buy_sell"] = df_result["r5:buy_sell"] * df_result["sh_volatility"]
 
         return
 
@@ -635,17 +641,174 @@ def step5(df_result, d_preload, debug=0):
     step5_single_v2(df_result=df_result, debug=debug)
 
 
-def step6(df_result):
-    """Check how the 3 best industries are doing
-    If even they are bad, then the market is bad for sure
-    Best 4 industry: Biotech, consume defensive, electronics
-    Step 5 and 6 are a bit correlated
+
+
+
+
+def cy_mode(df_result, abase="close"):
+    """
+    this function detects in what mode/phase the cy stock is
     """
 
-    return
+    # add all freq of rolling norm together
+    df_result["fol_close_norm"] = 0.0
+    a_del_cols = []
+    counter = 0
+    for freq in range(10, 510, 10):
+        print(f"freq is {freq}")
+        name = Alpha.rollingnorm(df=df_result, abase=abase, freq=freq, inplace=True)
+        df_result["fol_close_norm"] = df_result["fol_close_norm"] + df_result[name]
+        counter += 1
+        a_del_cols += [name]
+    df_result["fol_close_norm"] = df_result["fol_close_norm"] / counter
+
+    # produce bull or bear market. 1 means bull, -1 means bear.
+    bull_bear = 0.0
+    for trade_date in df_result.index:
+
+        # loop over each day
+        signal = df_result.at[trade_date, "fol_close_norm"]
+        if signal > 0.8:  # bull
+            bull_bear = 1
+        elif signal < 0.2:
+            bull_bear = -1  # reset portfolio to 0
+        else:
+            # variation 1: no nothing and use previous high as guideline
+            # variation 2: interpret it as sell signal if previous signal was buy. interpret as buy if previous signal was sell.
+            # variation 3: use a low freq strategy to take a deeper look into it
+            pass
+
+        # assign value at end of day
+        df_result.at[trade_date, "bull_bear"] = bull_bear
+
+    df_result.drop(a_del_cols, axis=1, inplace=True)
+    # df_result.to_csv("egal.csv")
 
 
-def step8(df_result, debug=0):
+def all(withupdate=False):
+    """
+
+
+    """
+
+    # Step 0: UPDATE DATA and INIT
+    if withupdate: DB.update_all_in_one_cn_v2()
+    df_result = DB.get_stock_market_overview()
+    df_result["sh_volatility"] = Alpha.detect_cycle(df=df_result, abase=f"close_sh", inplace=False)  # use sh index to calculate volatility no matter what
+    df_result["cy_trend"] = Alpha.detect_bull(df=df_result, abase=f"close_cy", inplace=False)  # use cy index to detect macro trends
+    df_result["market_trend"]=0.0# reserved for usage later
+    df_result_copy = df_result.copy()
+    d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
+
+
+    # Step 1.1: predict SH index Portfolio Quota: defines how much portfolio you can max spend
+    predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload)
+
+    # Step 1.2: predict CY index Portfolio Quota: defines how much portfolio you can max spend
+    predict_trendmode(df_result=df_result, index="cy", d_preload=d_preload)
+
+    # Step 1.3: predict SZ index
+    #predict_cyclemode(df_result=df_result, index="sz", d_preload=d_preload)
+    #predict_trendmode(df_result=df_result, index="sz", d_preload=d_preload)
+
+
+
+    #Step 2: Industry Score
+    df_ts_code_G=DB.get_ts_code(a_asset=["G"],d_queries=LB.c_G_queries_small_groups())
+
+
+    #Step 2.1: Industry Long Time Score
+    """df_longtime_score = Atest.asset_bullishness(df_ts_code=df_ts_code_G)
+    df_longtime_score =df_longtime_score [df_longtime_score["period"]>2000]
+    df_longtime_score.sort_values(by="final_position",ascending=True,inplace=True)
+    """
+    df_longtime_score=pd.read_csv("temp.csv")
+    df_longtime_score.to_csv("temp.csv", encoding="utf-8_sig")
+    df_longtime_score=df_longtime_score.set_index("ts_code")
+
+
+    #Step 2.2: Industry Short Time Score
+    fields = ["close", "vol"]
+    result_col=[]
+    for ts_code in df_ts_code_G.index:
+        print("calculate short time score",ts_code)
+        #create asset aligned with sh and cy index
+        try:
+            df_asset=DB.get_asset(ts_code=ts_code,asset="G",a_columns=fields)
+        except:
+            continue
+
+        # check for duplicated axis
+        duplicate = df_asset[df_asset.index.duplicated()]
+        if not duplicate.empty:
+            print(ts_code, " has duplicated bug, check out G creation")
+            continue
+
+        # calculate trendmode pquota
+        df_asset = df_asset.rename(columns={key: f"{key}_{ts_code}" for key in fields})
+        df_asset = pd.merge(df_result_copy, df_asset, how='left', on="trade_date", suffixes=["", ""], sort=False)
+        predict_trendmode(df_result=df_asset, index=ts_code, d_preload=d_preload)
+
+        #add asset result to result table
+        df_result[f"{ts_code}_trendmode_pquota"]=df_asset[f"{ts_code}_trendmode_pquota"]
+        result_col+=[f"{ts_code}_trendmode_pquota"]
+
+
+    #general market condition
+    for column in result_col:
+        df_result["market_trend"]=df_result["market_trend"].add(df_result[column])
+    df_result["market_trend"]=df_result["market_trend"]/len(result_col)
+
+
+    #rank the industry short score. Rank the bigger the better
+    d_score_short={}
+    for column in result_col:
+        d_score_short[column]=df_result[column].iat[-1]
+
+    df_final_industry_rank=pd.Series(d_score_short,name="ts_code_trendmode_pquota")
+    df_final_industry_rank=df_final_industry_rank.to_frame()
+    df_final_industry_rank["short_score"]=df_final_industry_rank["ts_code_trendmode_pquota"].rank(ascending=False)
+
+    #rank the industry long score
+    d_score_long={}
+    for column in result_col:
+        ts_code=column[:-17]# 17 because the name is "_trendmode_pquota"
+        if ts_code in df_longtime_score.index:
+            d_score_long[column]=df_longtime_score.at[ts_code,"final_position"]
+            print("correct", column)
+        else:
+            print("oopse ts_code wrong or something. or substring removal wrong?", ts_code)
+    s_long_score = pd.Series(d_score_long, name="ts_code_trendmode_pquota")
+
+
+    #Step 2.3: Industry Current Final Score
+    df_final_industry_rank["long_score"]=s_long_score
+    df_final_industry_rank["final_score"]=df_final_industry_rank["long_score"]*0.4+df_final_industry_rank["short_score"]*0.6
+
+
+    # Step 5: Select Concept
+    for ts_code in df_ts_code_G.index:
+        print(ts_code)
+
+
+    # Step 6: Select Stock
+
+
+
+    # Step 7.1: Save Predict Table
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Predict")
+    LB.to_csv_feather(df=df_result, a_path=a_path)
+
+    # Step 7.2: Save Industry Score
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Industry_Score")
+    LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
+
+
+
+
+
+
+def _deprecated_seasonal_effect(df_result, debug=0):
     """
     currently no use of seasonal effect because they are too periodic.
     Seasonal effect are interesting, but deviation are too big.
@@ -690,7 +853,7 @@ def step8(df_result, debug=0):
     # overlay first and last week of year
 
 
-def step10(df_result, debug=0):
+def _deprecated_rsi(df_result, debug=0):
     """
     rsi freq: this step is to check if different freq combination of rsi would make a better rsi signal
     """
@@ -718,7 +881,7 @@ def step10(df_result, debug=0):
     df_result["r10:sell"] = df_result["r10:sell"] / (counter + 1)
 
 
-def step11(df_result, debug=0, index="sh"):
+def _deprecated_volatility(df_result, debug=0, index="sh"):
     """
     Different kind of volatility: against past, intraday, against other stock
 
@@ -793,7 +956,7 @@ def step11(df_result, debug=0, index="sh"):
     # 3. Volatility intraday
 
 
-def step13():
+def _deprecated_support_resistance():
     """
     two things  to be done with support and resistance:
     1. calculate actual support and resistance
@@ -806,7 +969,7 @@ def step13():
     """
 
 
-def step16():
+def _deprecated_search_engine():
     """
     using baidu, weibo, google trend data to predict.
 
@@ -818,7 +981,7 @@ def step16():
     """
 
 
-def step17():
+def _deprecated_fundamentals():
     """
     Fundamentals
     This is a big topic, lets break it down to think what indicators could be useful
@@ -845,76 +1008,47 @@ def step17():
     :return:
     """
 
-
-def predict_industry():
-    return
-
-
-def predict_stock():
-    return
-
-
-def cy_mode(df_result, abase="close"):
+def _deprecated_cummulative_volume_vs_sh():
     """
-    this function detects in what mode/phase the cy stock is
+    create a sumarized time series to see the overall vol of the complete market
+
+    RESULT: The summarized volume is Exactly same as the sh index volume
+
     """
 
-    # add all freq of rolling norm together
-    df_result["fol_close_norm"] = 0.0
-    a_del_cols = []
-    counter = 0
-    for freq in range(10, 510, 10):
-        print(f"freq is {freq}")
-        name = Alpha.rollingnorm(df=df_result, abase=abase, freq=freq, inplace=True)
-        df_result["fol_close_norm"] = df_result["fol_close_norm"] + df_result[name]
-        counter += 1
-        a_del_cols += [name]
-    df_result["fol_close_norm"] = df_result["fol_close_norm"] / counter
-
-    # produce bull or bear market. 1 means bull, -1 means bear.
-    bull_bear = 0.0
-    for trade_date in df_result.index:
-
-        # loop over each day
-        signal = df_result.at[trade_date, "fol_close_norm"]
-        if signal > 0.8:  # bull
-            bull_bear = 1
-        elif signal < 0.2:
-            bull_bear = -1  # reset portfolio to 0
-        else:
-            # variation 1: no nothing and use previous high as guideline
-            # variation 2: interpret it as sell signal if previous signal was buy. interpret as buy if previous signal was sell.
-            # variation 3: use a low freq strategy to take a deeper look into it
-            pass
-
-        # assign value at end of day
-        df_result.at[trade_date, "bull_bear"] = bull_bear
-
-    df_result.drop(a_del_cols, axis=1, inplace=True)
-    # df_result.to_csv("egal.csv")
-
-
-def all(withupdate=False):
-    if withupdate:
-        update_data()
-
-    # init before predict
+    # load in all the stocks
     d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
-    df_result = DB.get_stock_market_overview()
-    df_result["volatility"] = Alpha.detect_crazy(df=df_result, abase=f"close_sh", inplace=False)  # use sh index to calculate volatility no matter what
-    df_result["cy_bull_bear"] = Alpha.detect_bull(df=df_result, abase=f"close_cy", inplace=False)  # use cy index to detect macro trends
 
-    # index
-    for index in ["sh", "sz", "cy"]:
-        predict(df_result=df_result, index=index, d_preload=d_preload)
+    df_market = DB.get_asset(ts_code="000001.SH", asset="I", freq="D", market="CN")
+    df_market = df_market[["close", "vol", "amount"]]
+    df_market["agg_abs_amount"] = 0.0
+    df_market["agg_rel_amount"] = 0.0
+    df_market["agg_stocks"] = 0.0
 
-    # industry
+    print("lengh of preload", len(d_preload))
 
-    # individual stock (now thats complicated)
+    for ts_code, df_asset in d_preload.items():
+        print(ts_code)
+
+        df_asset["count_helper"] = 1.0
+        df_market["agg_stocks"] = df_market["agg_stocks"].add(df_asset["count_helper"], fill_value=0)
+        df_market["agg_abs_amount"] = df_market["agg_abs_amount"].add(df_asset["amount"], fill_value=0)
+
+    df_market["agg_rel_amount"] = df_market["agg_abs_amount"] / df_market["agg_stocks"]
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Market")
+    LB.to_csv_feather(df=df_market, a_path=a_path)
+
 
 
 if __name__ == '__main__':
-    update_data()
+    all(withupdate=False)
+
+
+
+
+
+
+
 
 """
 

@@ -112,7 +112,7 @@ def my_fund_daily(ts_code,start_date="00000000", end_date="30000000"):
 def my_fund_nav(ts_code,market="O"):
     return get(func=pro.fund_nav, fname="pro.fund_nav", kwargs=locals())
 
-def my_fund_portfolo(ts_code=""):
+def my_fund_portfolio(ts_code=""):
     return get(func=pro.fund_portfolio, fname="pro.fund_portfolio", kwargs=locals())
 
 

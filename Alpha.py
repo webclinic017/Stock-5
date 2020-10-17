@@ -171,8 +171,8 @@ def sharp(df, abase, freq, re, inplace, name, cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def slope(df, abase, freq, re, inplace, name, cols):
-    df[f"{name}"] = re(df[abase],freq).apply(apply_poly_fit)
+def slope(df, abase, freq, re, inplace, name, cols, degree=1):
+    df[f"{name}"] = re(df[abase],freq).apply(apply_poly_fit, kwargs={"degree":degree})
     return alpha_return(locals())
 
 
@@ -346,6 +346,8 @@ def rollingnorm_slow(df, abase, inplace, name, cols, freq, min=0, max=1):
     return alpha_return(locals())
     """
 
+
+
 @alpha_wrap
 def rollingnorm(df, abase, inplace, name, cols, freq, min=0, max=1):
     #quicker version without using apply
@@ -374,6 +376,25 @@ def rollingnorm(df, abase, inplace, name, cols, freq, min=0, max=1):
     df.drop(a_cols,inplace=True,axis=1)
 
     return alpha_return(locals())
+
+@alpha_wrap
+def fol_rolling_norm(df, abase, inplace, name, cols, freq_obj=range(10, 510, 10) ):
+
+    """creates frequency overlay of rolling norm"""
+    df[name] = 0.0
+    a_del_cols = []
+
+    # create fol for rolling norm
+    for divideby, freq in enumerate(freq_obj):
+        one_rolling_norm = rollingnorm(df=df, abase=abase, freq=freq, inplace=True)
+        df[name] += df[one_rolling_norm]
+        a_del_cols += [one_rolling_norm]
+
+    # normalize
+    df[name] = df[name] / (divideby + 1)
+    df.drop(a_del_cols, axis=1, inplace=True)
+    return alpha_return(locals())
+
 
 @alpha_wrap
 def FT(df, abase, inplace, name, cols, min=0, max=1):
@@ -1761,7 +1782,7 @@ def macd_tor(df, abase, freq, inplace, name, cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def detect_crazy(df, abase, inplace, name, cols, a_freqs=[60, 120, 240, 360]):
+def detect_cycle(df, abase, inplace, name, cols, a_freqs=[60, 120, 240, 360]):
     """use volatility to distinguish between normal time and crazy time
     Very useful, especially together with macd. Some indicator are good on bull, some are bad. This function distinguishes the time and creates space for usage.
 
@@ -1801,7 +1822,7 @@ def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_itera
     this function detects in what mode/phase the cy stock is
     """
 
-    #init
+    """#init
     fol_rolling_norm=f"fol_{abase}_{a_iteration}"
     df[fol_rolling_norm] = 0.0
     a_del_cols=[]
@@ -1813,16 +1834,18 @@ def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_itera
         df[fol_rolling_norm] +=  df[one_rolling_norm]
         a_del_cols+=[one_rolling_norm]
 
-
     #normalize
     df[fol_rolling_norm] = df[fol_rolling_norm] / (divideby+1)
+    """
+
+    fol_rolling_name=fol_rolling_norm(df=df,abase=abase,inplace=True, freq_obj=range(10,510,10))
 
     #produce bull or bear market. 1 means bull, -1 means bear.
     bull_bear = 0.0
     for trade_date in df.index:
 
         # loop over each day
-        signal = df.at[trade_date, fol_rolling_norm]
+        signal = df.at[trade_date, fol_rolling_name]
         if signal > 0.8:  # bull
             bull_bear = bull_val
         elif signal < 0.2:
@@ -1834,12 +1857,11 @@ def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_itera
             pass
 
         # assign value at end of day
-        df.at[trade_date, "bull_bear"] = bull_bear
+        df.at[trade_date, name] = bull_bear
 
 
     # delete waste columns
-    df.drop(a_del_cols, axis=1, inplace=True)
-    del df[fol_rolling_norm]
+    del df[fol_rolling_name]
 
     return alpha_return(locals())
 
