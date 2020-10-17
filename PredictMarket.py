@@ -18,89 +18,176 @@ import builtins
 import Atest
 from functools import partial
 
+def a_ts_code_helper(index):
+    if index == "sh":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="主板"))
+    elif index == "sz":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="中小板"))
+    elif index == "cy":
+        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="创业板"))
+    else:
+        group=f"{index.split('_')[0]}_{index.split('_')[1]}"
+        instance = index.split("_")[-1]
 
+        df_group_lookup=DB.get_ts_code(a_asset=[group])
+        a_ts_code=df_group_lookup[df_group_lookup[group]==instance]
+
+    return a_ts_code
+
+
+def predict_industry(df_result_copy):
+    # Step 2: Industry Score
+    df_ts_code_G = DB.get_ts_code(a_asset=["G"], d_queries=LB.c_G_queries_small_groups())
+
+    # Step 2.1: Industry Long Time Score
+    """df_longtime_score = Atest.asset_bullishness(df_ts_code=df_ts_code_G)
+    df_longtime_score =df_longtime_score [df_longtime_score["period"]>2000]
+    df_longtime_score.sort_values(by="final_position",ascending=True,inplace=True)
+    """
+    df_longtime_score = pd.read_csv("temp.csv")
+    df_longtime_score.to_csv("temp.csv", encoding="utf-8_sig")
+    df_longtime_score = df_longtime_score.set_index("ts_code")
+
+    # Step 2.2: Industry Short Time Score
+    fields = ["close", "vol"]
+    result_col = []
+    for ts_code in df_ts_code_G.index:
+        print("calculate short time score", ts_code)
+        # create asset aligned with sh and cy index
+        try:
+            df_asset = DB.get_asset(ts_code=ts_code, asset="G", a_columns=fields)
+        except:
+            continue
+
+        # check for duplicated axis
+        duplicate = df_asset[df_asset.index.duplicated()]
+        if not duplicate.empty:
+            print(ts_code, " has duplicated bug, check out G creation")
+            continue
+
+        # calculate trendmode pquota
+        df_asset = df_asset.rename(columns={key: f"{key}_{ts_code}" for key in fields})
+        df_asset = pd.merge(df_result_copy, df_asset, how='left', on="trade_date", suffixes=["", ""], sort=False)
+        predict_trendmode(df_result=df_asset, index=ts_code, d_preload=d_preload)
+
+        # add asset result to result table
+        df_result[f"{ts_code}_trendmode_pquota"] = df_asset[f"{ts_code}_trendmode_pquota"]
+        result_col += [f"{ts_code}_trendmode_pquota"]
+
+    # general market condition
+    for column in result_col:
+        df_result["market_trend"] = df_result["market_trend"].add(df_result[column])
+    df_result["market_trend"] = df_result["market_trend"] / len(result_col)
+
+    # rank the industry short score. Rank the bigger the better
+    d_score_short = {}
+    for column in result_col:
+        d_score_short[column] = df_result[column].iat[-1]
+
+    df_final_industry_rank = pd.Series(d_score_short, name="ts_code_trendmode_pquota")
+    df_final_industry_rank = df_final_industry_rank.to_frame()
+    df_final_industry_rank["short_score"] = df_final_industry_rank["ts_code_trendmode_pquota"].rank(ascending=False)
+
+    # rank the industry long score
+    d_score_long = {}
+    for column in result_col:
+        ts_code = column[:-17]  # 17 because the name is "_trendmode_pquota"
+        if ts_code in df_longtime_score.index:
+            d_score_long[column] = df_longtime_score.at[ts_code, "final_position"]
+            print("correct", column)
+        else:
+            print("oopse ts_code wrong or something. or substring removal wrong?", ts_code)
+    s_long_score = pd.Series(d_score_long, name="ts_code_trendmode_pquota")
+
+    # Step 2.3: Industry Current Final Score
+    df_final_industry_rank["long_score"] = s_long_score
+    df_final_industry_rank["final_score"] = df_final_industry_rank["long_score"] * 0.4 + df_final_industry_rank["short_score"] * 0.6
+
+    return df_final_industry_rank
 
 
 def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
 
-    def portfolio1():
-        """
-        doesn't work well, deprecated
-        :return:
-        """
+    """1. RULE BASED:
+     base pquota is used by counting the days since bull or bear. The longer it goes on the more crazy it becomes"""
+    df_result[f"{index}_trendmode_pquota"] = 0.0
+    df_result[f"{index}_trendmode_pquota_days_counter"] = 0
 
-        # use the cy trend signal as base (= cy fol rollingnorm)
-        fol_rolling_name = f"{index}_fol_rolling_norm"
-        df_result[fol_rolling_name] = fol_rolling_norm(df=df_result, abase=f"close_{index}", inplace=False, freq_obj=range(10, 510, 10))
+    trend_duration=0
+    last_trend=0
+    for trade_date,today_trend in zip(df_result.index,df_result["cy_trend"]):
 
-        """
-        port folio 1 tries to use fol rolling norm to generate buy and sell signals
-        
-        :return: 
-        """
-        df_result[f"{index}_trendmode_buy_sell"]=0.0
-
-        #tracks the highest or lowest signal since this trend happens
-        max_value = 0
-
-        for trade_date in df_result.index:
-            today_trend=df_result.at[trade_date,"cy_trend"]
-            today_trend_thresh=df_result.at[trade_date, fol_rolling_name]
-
-            #check the rollin max threshhold since start of this trend
-            if today_trend>0 and max_value>=0:# not first day bull
-                max_value=builtins.max(max_value,today_trend_thresh)
-            elif today_trend>0 and max_value<=0:# first day bull
-                max_value = 0 # reset since new trend started
-            elif today_trend<0 and max_value<=0:#not first day bear
-                max_value=builtins.min(max_value,today_trend_thresh)
-            elif today_trend<0 and max_value>=0:# first day bear
-                max_value = 0 # reset since new trend started
-
-            # after having updated the max_value, generate signal
-            # in bull market, buy if thresh is lower than 0.6
-            # in bear market, sell if thresh is higher than 0.4
-            today_max_value_diff = max_value - today_trend_thresh
-            if today_trend>0:
-                if today_trend_thresh>0.9:#sell in uptrend
-                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = -today_trend_thresh*0.25
-                elif today_max_value_diff > 0.5:#buy in uptrend
-                    df_result.at[trade_date,f"{index}_trendmode_buy_sell"] = today_max_value_diff
+        if today_trend==1 and last_trend in [0,1]: # continue bull
+            trend_duration+=1
+        elif today_trend==1 and last_trend in [0,-1]: # bear becomes bull
+            trend_duration=0
+            last_trend=1
+        elif today_trend==-1 and last_trend in [0,1]: # bull becomes bear
+            trend_duration=0
+            last_trend = -1
+        elif today_trend==-1 and last_trend in [0,-1]: # continue bear
+            trend_duration+=1
+        else:#not initialized
+            pass
 
 
-            elif today_trend<0:
-                if today_trend_thresh<0.1: # buy in downtrend
-                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = (1-today_trend_thresh)*0.25
-                if today_max_value_diff < -0.5: #sell in downtrend
-                    df_result.at[trade_date, f"{index}_trendmode_buy_sell"] = today_max_value_diff
+        df_result.at[trade_date,f"{index}_trendmode_pquota_days_counter"]=trend_duration
+
+    #assign base portfolio size: bottom time 0% max time 80%
+    #note one year is 240, but minus -20 days to start because the signal detects turning point with delay
+
+    #bull
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"]<220), f"{index}_trendmode_pquota"] = 0.6
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(220,460)), f"{index}_trendmode_pquota"] = 0.7
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(460,700)),f"{index}_trendmode_pquota"] = 0.8
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(700,1000)),f"{index}_trendmode_pquota"] = 0.9
+
+    #bear
+    df_result.loc[(df_result["cy_trend"] == -1) & (df_result[f"{index}_trendmode_pquota_days_counter"] < 220),f"{index}_trendmode_pquota"] = 0.2
+    df_result.loc[(df_result["cy_trend"] == -1) & (df_result[f"{index}_trendmode_pquota_days_counter"].between(220, 460)),f"{index}_trendmode_pquota"] = 0.1
+    df_result.loc[(df_result["cy_trend"] == -1) & (df_result[f"{index}_trendmode_pquota_days_counter"].between(460, 700)),f"{index}_trendmode_pquota"] = 0.0
+    df_result.loc[(df_result["cy_trend"] == -1) & (df_result[f"{index}_trendmode_pquota_days_counter"].between(700, 1000)),f"{index}_trendmode_pquota"] = 0.0
+
+    del df_result[f"{index}_trendmode_pquota_days_counter"]
 
 
-        #to_cyclemode_pquota(df_result=df_result, abase=f"{index}_trendmode_buy_sell", index=index)
+    """2. EVENT BASED: OVERMA
+    Ruse Overma to define buy and sell signals"""
+    overma_name=step4(df_result=df_result, d_preload=d_preload, a_freq_close=[ 60,80,100, 120], a_freq_overma=[ 60, 80,100,120], index=index)
 
 
 
-    def to_trendmode_pquota(index):
-        """portfolio 2 tries to use a smaller overma to generate buy and sell signals"""
-        overma_name=step4(df_result=df_result, d_preload=d_preload, a_freq_close=[ 60, 120], a_freq_overma=[ 60, 120], index=index)
-        #in bad time, sell except if overma shows buy
-        #in good time, buy except if overma shows sell
-        #portfolio ranges from 0 to 1
+    #step 3 detect overbought or oversold in bull and bear using high pass filter
+    """3. EVENT BASED ROLLING NORM
+    to see if all stocks are too high or not to generate trade signals
+    """
+    a_ts_code = a_ts_code_helper(index=index)
+    a_ts_code = list(a_ts_code.index)
 
-        df_result[f"{index}_trendmode_pquota"]=0.0
-        df_result.loc[df_result["cy_trend"]>0,f"{index}_trendmode_pquota"]=0.8
+    df_result[f"{index}_trendmode_pquota_fol"]=0.0
+    df_result[f"{index}_trendmode_pquota_fol_counter"]=0
+    for ts_code, df_asset in d_preload.items():
+        if ts_code in a_ts_code:
+            print(f"predict_trendmode calculate fol ",ts_code)
+            fol_name=Alpha.fol_rolling_norm(df=df_asset,abase="close",inplace=True, freq_obj=[60,80,100,120])
+            df_asset["counter_helper"]=1
+            df_result[f"{index}_trendmode_pquota_fol"]=df_result[f"{index}_trendmode_pquota_fol"].add(df_asset[fol_name],fill_value=0)
+            df_result[f"{index}_trendmode_pquota_fol_counter"]=df_result[f"{index}_trendmode_pquota_fol_counter"].add(df_asset["counter_helper"],fill_value=0)
 
-        #sell in good time:
-        df_helper=df_result[ df_result["cy_trend"]>0]
-        df_result[f"{index}_trendmode_pquota"]=df_result[f"{index}_trendmode_pquota"].add(df_helper[overma_name]*1,fill_value=0)
+    df_result[f"{index}_trendmode_pquota_fol"]=df_result[f"{index}_trendmode_pquota_fol"]/df_result[f"{index}_trendmode_pquota_fol_counter"]
+    df_result[f"{index}_trendmode_pquota_fol"]=Alpha.norm(df=df_result,abase=f"{index}_trendmode_pquota_fol",inplace=False,min=-1,max=1)#normalize to range [-1:1]
+    del df_result[f"{index}_trendmode_pquota_fol_counter"]
 
-        #buy in bad time:
-        df_helper = df_result[ df_result["cy_trend"]<0]
-        df_result[f"{index}_trendmode_pquota"]=df_result[f"{index}_trendmode_pquota"].add(df_helper[overma_name]*0.25,fill_value=0)
 
-        df_result[f"{index}_trendmode_pquota"].clip(0,1,inplace=True)
+    #add all steps together
+    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].add(df_result[overma_name] * 0.10, fill_value=0)
+    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].subtract(df_result[f"{index}_trendmode_pquota_fol"] * 0.10, fill_value=0)
+    df_result.loc[(df_result["sh_volatility"]>0.35)&(df_result["cy_trend"]==1),f"{index}_trendmode_pquota"] = 1
+    df_result[f"{index}_trendmode_pquota"].clip(0,1,inplace=True)
 
-    to_trendmode_pquota(index=index)
-    return
+
+
+
 
 
 def predict_cyclemode(df_result, d_preload, debug=0, index="sh"):
@@ -447,22 +534,9 @@ def step4(df_result, d_preload, index="sh", a_ts_code=[],  a_freq_close=[240, 50
 
 
     # generate matching list of ts_code for index to be used for overma later
-    if index == "sh":
-        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="主板"))
-    elif index == "sz":
-        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="中小板"))
-    elif index == "cy":
-        a_ts_code = DB.get_ts_code(d_queries=LB.c_market_queries(market="创业板"))
-    else:
-        group=f"{index.split('_')[0]}_{index.split('_')[1]}"
-        instance = index.split("_")[-1]
-
-        df_group_lookup=DB.get_ts_code(a_asset=[group])
-        a_ts_code=df_group_lookup[df_group_lookup[group]==instance]
-
-
+    a_ts_code=a_ts_code_helper(index=index)
     a_ts_code = list(a_ts_code.index)
-    print("df_ts_code ",a_ts_code)
+
 
 
     df_result[f"{index}_r4:buy"] = 0.0
@@ -687,9 +761,12 @@ def cy_mode(df_result, abase="close"):
 
 def all(withupdate=False):
     """
-
-
+    Goal: Predict market, generate concrete detailed buy and sell signals
+    1. When to buy/sell/: If market is good => predict macro market bull or bear
+    2. How much to buy/sell: If market is micro market overbought or underbought
+    3. What to buy/sell: Check stocks, etfs, industries, concepts
     """
+
 
     # Step 0: UPDATE DATA and INIT
     if withupdate: DB.update_all_in_one_cn_v2()
@@ -702,7 +779,7 @@ def all(withupdate=False):
 
 
     # Step 1.1: predict SH index Portfolio Quota: defines how much portfolio you can max spend
-    predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload)
+    #predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload)
 
     # Step 1.2: predict CY index Portfolio Quota: defines how much portfolio you can max spend
     predict_trendmode(df_result=df_result, index="cy", d_preload=d_preload)
@@ -713,86 +790,29 @@ def all(withupdate=False):
 
 
 
-    #Step 2: Industry Score
-    df_ts_code_G=DB.get_ts_code(a_asset=["G"],d_queries=LB.c_G_queries_small_groups())
+    #defines the max portfolio size the can be used during a time. It depends on the market mood.
 
 
-    #Step 2.1: Industry Long Time Score
-    """df_longtime_score = Atest.asset_bullishness(df_ts_code=df_ts_code_G)
-    df_longtime_score =df_longtime_score [df_longtime_score["period"]>2000]
-    df_longtime_score.sort_values(by="final_position",ascending=True,inplace=True)
-    """
-    df_longtime_score=pd.read_csv("temp.csv")
-    df_longtime_score.to_csv("temp.csv", encoding="utf-8_sig")
-    df_longtime_score=df_longtime_score.set_index("ts_code")
+
+    # Inudstry
+    #df_final_industry_rank = predict_industry(df_result_copy=df_result_copy)
 
 
-    #Step 2.2: Industry Short Time Score
-    fields = ["close", "vol"]
-    result_col=[]
-    for ts_code in df_ts_code_G.index:
-        print("calculate short time score",ts_code)
-        #create asset aligned with sh and cy index
-        try:
-            df_asset=DB.get_asset(ts_code=ts_code,asset="G",a_columns=fields)
-        except:
-            continue
 
-        # check for duplicated axis
-        duplicate = df_asset[df_asset.index.duplicated()]
-        if not duplicate.empty:
-            print(ts_code, " has duplicated bug, check out G creation")
-            continue
-
-        # calculate trendmode pquota
-        df_asset = df_asset.rename(columns={key: f"{key}_{ts_code}" for key in fields})
-        df_asset = pd.merge(df_result_copy, df_asset, how='left', on="trade_date", suffixes=["", ""], sort=False)
-        predict_trendmode(df_result=df_asset, index=ts_code, d_preload=d_preload)
-
-        #add asset result to result table
-        df_result[f"{ts_code}_trendmode_pquota"]=df_asset[f"{ts_code}_trendmode_pquota"]
-        result_col+=[f"{ts_code}_trendmode_pquota"]
-
-
-    #general market condition
-    for column in result_col:
-        df_result["market_trend"]=df_result["market_trend"].add(df_result[column])
-    df_result["market_trend"]=df_result["market_trend"]/len(result_col)
-
-
-    #rank the industry short score. Rank the bigger the better
-    d_score_short={}
-    for column in result_col:
-        d_score_short[column]=df_result[column].iat[-1]
-
-    df_final_industry_rank=pd.Series(d_score_short,name="ts_code_trendmode_pquota")
-    df_final_industry_rank=df_final_industry_rank.to_frame()
-    df_final_industry_rank["short_score"]=df_final_industry_rank["ts_code_trendmode_pquota"].rank(ascending=False)
-
-    #rank the industry long score
-    d_score_long={}
-    for column in result_col:
-        ts_code=column[:-17]# 17 because the name is "_trendmode_pquota"
-        if ts_code in df_longtime_score.index:
-            d_score_long[column]=df_longtime_score.at[ts_code,"final_position"]
-            print("correct", column)
-        else:
-            print("oopse ts_code wrong or something. or substring removal wrong?", ts_code)
-    s_long_score = pd.Series(d_score_long, name="ts_code_trendmode_pquota")
-
-
-    #Step 2.3: Industry Current Final Score
-    df_final_industry_rank["long_score"]=s_long_score
-    df_final_industry_rank["final_score"]=df_final_industry_rank["long_score"]*0.4+df_final_industry_rank["short_score"]*0.6
+    #Portfolio max size
+    #based on previous statistic. 6-8 years 1 cycle. bull market = 2.5 year, neutral = 1.5, bear = 2 year
+    #the longer the bull, the crazier it becomes
 
 
     # Step 5: Select Concept
-    for ts_code in df_ts_code_G.index:
-        print(ts_code)
+
 
 
     # Step 6: Select Stock
-
+    #according to its industry rank 1-100
+    #accoding to its fundamental 1-100
+    #according to fund holding 1-100
+    #according to its current technical analysis 1-100
 
 
     # Step 7.1: Save Predict Table
@@ -801,7 +821,7 @@ def all(withupdate=False):
 
     # Step 7.2: Save Industry Score
     a_path = LB.a_path(f"Market/CN/PredictMarket/Industry_Score")
-    LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
+    #LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
 
 
 
