@@ -231,10 +231,7 @@ def c_G_queries():
     return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2','zj_industry1','jq_industry1','jq_industry2','concept','market'] "]}
 
 def c_G_queries_small_groups():
-    return {"G": ["on_asset == 'E'", "group in ['sw_industry2', 'jq_industry2','zj_industry1'] "]}
-
-def c_G_queries_mini_groups():
-    return {"G": ["on_asset == 'E'", "group in ['sw_industry2'] "]}
+    return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2', 'jq_industry1','jq_industry2','zj_industry1'] "]} #, 'jq_industry2','jq_industry2','zj_industry1'
 
 
 def c_index_queries(market="CN"):
@@ -399,19 +396,19 @@ def c_d_groups(assets=c_assets(), a_ignore=[], market="CN"):
         for column in a_columns:
             if column == "concept":
                 df_ts_code_concept = DB.get_ts_code(["concept"], market=market)
-                d_e[column] = list(df_ts_code_concept[column].unique())
+                d_e[column] = [x for x in list(df_ts_code_concept[column].unique()) if x != None]
             else:
-                d_e[column] = list(df_ts_code_E[column].unique())
+                d_e[column] = [x for x in list(df_ts_code_E[column].unique()) if x != None]
 
         asset = {**asset, **d_e}
     if "I" in assets:
         df_ts_code_I = DB.get_ts_code(["I"], market=market)
         if market == "CN":
-            a_columns = [x for x in df_ts_code_I.columns if x in ["category", "publisher"]]
+            a_columns = [x for x in df_ts_code_I.columns if x in ["category", "publisher"] ]
         elif market == "US":
             a_columns = []
 
-        d_i = {column: list(df_ts_code_I[column].unique()) for column in a_columns}
+        d_i = {column:[x for x in list(df_ts_code_I[column].unique()) if x != None ]for column in a_columns}
 
         asset = {**asset, **d_i}
     if "FD" in assets:
@@ -421,10 +418,10 @@ def c_d_groups(assets=c_assets(), a_ignore=[], market="CN"):
         elif market == "US":
             a_columns = [x for x in df_ts_code_FD.columns if x in ["sector", "industry", "country"]]
 
-        d_fd = {column: list(df_ts_code_FD[column].unique()) for column in a_columns}
+        d_fd = {column: [x for x in list(df_ts_code_FD[column].unique()) if x != None ]for column in a_columns}
 
         asset = {**asset, **d_fd}
-    return {key: value for key, value in asset.items() if key not in a_ignore}
+    return {key: value for key, value in asset.items() if key not in a_ignore }
 
 
 def c_index_name():
@@ -527,6 +524,17 @@ def df_switch_trade_date(trade_date):
         return str(trade_date).replace("-", "")
     else:
         return str(str(trade_date)[0:4] + "-" + str(trade_date)[4:6] + "-" + str(trade_date)[6:8])
+
+
+def df_ts_code_index_to_market(df):
+    """takes a df and returns 3 rows if the ts code belongs to sh, sz or cy market"""
+    df["index_copy"]=df.index.copy()
+    df["sh"]=df["index_copy"].str.slice(0,3).isin(["600","601","603","000"])
+    df["sz"]=df["index_copy"].str.slice(0,3).isin(["002"])
+    df["cy"]=df["index_copy"].str.slice(0,3).isin(["300"])
+    df["kc"]=df["index_copy"].str.slice(0,3).isin(["688"])
+    del df["index_copy"]
+
 
 # returns only numeric volumns in a df
 def df_to_numeric(df):

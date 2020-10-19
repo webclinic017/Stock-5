@@ -312,6 +312,11 @@ def comp_chg(df, abase, inplace, name, cols,start=1):
     df[name] = (1 + (df[abase] / 100)).cumprod() + (start-1)
     return alpha_return(locals())
 
+@alpha_wrap
+def comp_chg2(df, abase, inplace, name, cols,start=1):
+    """this comp_chg is for version pct_chg in form of 1.02 means 2%"""
+    df[name] = df[abase].cumprod()
+    return alpha_return(locals())
 
 """NOTE!: This function requires df to have range index and not date!"""
 
@@ -1817,28 +1822,12 @@ def detect_cycle(df, abase, inplace, name, cols, a_freqs=[60, 120, 240, 360]):
     return alpha_return(locals())
 
 @alpha_wrap
-def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_iteration=[10, 510, 10]):
+def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, range_obj=range(10, 510, 10)):
     """
     this function detects in what mode/phase the cy stock is
     """
 
-    """#init
-    fol_rolling_norm=f"fol_{abase}_{a_iteration}"
-    df[fol_rolling_norm] = 0.0
-    a_del_cols=[]
-
-    #create fol for rolling norm
-    for divideby, freq in enumerate(range(10, 510, 10)):
-        print(f"freq is {freq}")
-        one_rolling_norm = rollingnorm(df=df, abase=abase, freq=freq, inplace=True)
-        df[fol_rolling_norm] +=  df[one_rolling_norm]
-        a_del_cols+=[one_rolling_norm]
-
-    #normalize
-    df[fol_rolling_norm] = df[fol_rolling_norm] / (divideby+1)
-    """
-
-    fol_rolling_name=fol_rolling_norm(df=df,abase=abase,inplace=True, freq_obj=range(10,510,10))
+    fol_rolling_name=fol_rolling_norm(df=df,abase=abase,inplace=True, freq_obj=range_obj)
 
     #produce bull or bear market. 1 means bull, -1 means bear.
     bull_bear = 0.0
@@ -1858,6 +1847,23 @@ def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_itera
 
         # assign value at end of day
         df.at[trade_date, name] = bull_bear
+
+    #manual special treatment for crazy time to find turning point earlier
+    if abase == "close_cy": # fine tuning only for cy_trend
+        df["rolling_max_60"] = df[abase].rolling(60).max()
+        df["off_rolling_max_60"] = df[abase] / df["rolling_max_60"]
+        df.loc[(df["sh_volatility"] > 0.35) & (df[name] == 1) & (df["off_rolling_max_60"] < 0.88), name] = -1
+
+        del df["rolling_max_60"]
+        del df["off_rolling_max_60"]
+
+    # cut the first 240 days of signal as they are usually not accurate
+    range_max=range_obj[-1]
+    for trade_date,  abase_result in zip(df.index,df[abase]):
+        if (not math.isnan(float(abase_result)))  and (not np.isnan(abase_result)):
+            if range_max>0:
+                range_max =range_max- 1
+                df.at[trade_date, name] = 0
 
 
     # delete waste columns
@@ -2460,8 +2466,8 @@ def dft_music():
 
 
 if __name__ == '__main__':
-    df_result = DB.get_asset(ts_code="399001.SZ", asset="I")
-    df_result = LB.df_ohlcpp(df_result)
+    df_result_copy = DB.get_asset(ts_code="399001.SZ", asset="I")
+    df_result_copy = LB.df_ohlcpp(df_result_copy)
 
 
     #mini=minima(df=df, abase="close", n=60, inplace=True)
@@ -2469,20 +2475,20 @@ if __name__ == '__main__':
     #extrema=extrema_diff(df=df, abase="close", n=60, n2=120,inplace=True)
     import matplotlib as plt
 
-    label_240=cj(df=df_result, abase="close", inplace=True, freq=240)
-    df_result=df_result.reset_index()
-    df_result["close"].plot()
-    df_result[label_240].plot(secondary_y=True)
+    label_240=cj(df=df_result_copy, abase="close", inplace=True, freq=240)
+    df_result_copy=df_result_copy.reset_index()
+    df_result_copy["close"].plot()
+    df_result_copy[label_240].plot(secondary_y=True)
     plt.show()
-    UI.plot_chart(df_result, ["close", label_240], {})
-    df_result.to_csv("test.csv")
+    UI.plot_chart(df_result_copy, ["close", label_240], {})
+    df_result_copy.to_csv("test.csv")
 
-    maxima_l=maxima(df=df_result, abase="close", n=120, inplace=True)
-    minima_l=minima(df=df_result, abase="close", n=120, inplace=True)
-    maxima_d=extrema_dis(df=df_result, abase=maxima_l, inplace=True)
-    minima_d=extrema_dis(df=df_result, abase=minima_l, inplace=True)
-    df_result["diff"]= df_result[maxima_d] - df_result[minima_d]
-    UI.plot_chart(df_result, ["close", "diff", maxima_d, minima_d, maxima_l, minima_l], {maxima_l: "x", minima_l: "o"})
+    maxima_l=maxima(df=df_result_copy, abase="close", n=120, inplace=True)
+    minima_l=minima(df=df_result_copy, abase="close", n=120, inplace=True)
+    maxima_d=extrema_dis(df=df_result_copy, abase=maxima_l, inplace=True)
+    minima_d=extrema_dis(df=df_result_copy, abase=minima_l, inplace=True)
+    df_result_copy["diff"]= df_result_copy[maxima_d] - df_result_copy[minima_d]
+    UI.plot_chart(df_result_copy, ["close", "diff", maxima_d, minima_d, maxima_l, minima_l], {maxima_l: "x", minima_l: "o"})
     pass
 
 

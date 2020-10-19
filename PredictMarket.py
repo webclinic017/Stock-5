@@ -35,18 +35,107 @@ def a_ts_code_helper(index):
     return a_ts_code
 
 
-def predict_industry(df_result_copy):
+def validate(df_result, index="cy"):
+    df_result[f"pct_chg_{index}"] = df_result[f"close_{index}"].pct_change()
+    df_result[f"pct_chg_{index}"] = df_result[f"pct_chg_{index}"] + 1
+    df_validate = df_result.copy()
+
+    for column in df_validate.columns:
+        col_min = df_validate[column].min()
+        col_max = df_validate[column].max()
+
+        if col_min in [0, 1] and col_max in [0, 1]:
+            # already in portfolio form [0:1]
+            pass
+        elif col_min in [-1, 1] and col_max in [-1, 1]:
+            # needs to be adjusted to [0:1]
+
+            df_validate[column] = Alpha.norm(df=df_validate, abase=column, inplace=False, min=0, max=1)
+        else:
+            # not in standard form, not adjustable
+            continue
+
+        df_validate[column] = df_validate[column].shift(1)  # to make todays signal used for tomorrow.
+        df_validate[f"pct_change_x_{column}"] = ((df_validate[f"pct_chg_{index}"]-1) * df_validate[column])+1  # todays pct_chg x pquota
+        df_validate[f"{column}_comp_chg"] =  df_validate[f"pct_change_x_{column}"].cumprod() # compound together
+
+        #remove trash column
+        #del df_validate[f"pct_change_x_{column}"]
+
+    return df_validate
+
+
+def predict_stock_score(df_final_industry_rank, d_preload):
+    """
+    for each stock, calculate its overall rank in:
+
+    sw_lv1 (all time score)
+    sw_lv2 (all time score)
+    jq_lv1 (all time score)
+    jq_lv2 (all time score)
+    zj_lv1 (all time score)
+
+    fundamental (all time score)
+    technical (all time score)
+    fund_holding
+    """
+
+    df_stock_score= pd.DataFrame()
+
+    #group score
+    df_ts_code_G = DB.get_ts_code(a_asset=["G"], d_queries=LB.c_G_queries_small_groups())
+    df_ts_code_E = DB.get_ts_code(a_asset=["E"])
+    available_industries = df_ts_code_G["group"].unique()
+
+    for ts_code, df_asset in d_preload.items():
+        for group in available_industries:
+
+            try:
+                instance = df_ts_code_E.at[ts_code,group]
+                id=f"{group}_{instance}_trendmode_pquota"
+                score= df_final_industry_rank.at[id,"final_score"]
+                df_stock_score.at[ts_code,group]=score
+
+                print(f"{ts_code}, {group}, {instance} success")
+            except:
+                pass
+
+    # add all industry score together (rank lower the better) (long term + short term)
+    df_stock_score["industry_rank"] = df_stock_score.mean(axis=1)
+    df_stock_score["industry_rank"] = df_stock_score["industry_rank"].rank(ascending=True)
+    #fundamental (rank lower the better) todo
+
+
+    #technical score of the individual asset (all time until today)
+    df_technical=Atest.asset_bullishness( a_asset=["E"])
+    df_stock_score["technical_rank"]=df_technical["final_rank"]
+
+    #fund holding (rank lower the better) (latest point)
+    df_fund_portfolio = Atest.asset_fund_portfolio()
+    df_fund_portfolio.set_index("ts_code",inplace=True)
+    df_stock_score["fund_portfolio_rank"]=df_fund_portfolio[f"{pd.datetime.now().date().year}_rank"]
+
+    #add everything together
+    df_stock_score["final_score"]=df_stock_score["industry_rank"] *0.3 + df_stock_score["fund_portfolio_rank"]*0.2 + df_stock_score["technical_rank"]*0.5
+    df_stock_score["period"]=df_technical["period"]
+    df_stock_score["name"]=df_ts_code_E["name"]
+    return df_stock_score
+
+
+
+
+def predict_industry(df_result_copy,d_preload):
     # Step 2: Industry Score
     df_ts_code_G = DB.get_ts_code(a_asset=["G"], d_queries=LB.c_G_queries_small_groups())
 
     # Step 2.1: Industry Long Time Score
-    """df_longtime_score = Atest.asset_bullishness(df_ts_code=df_ts_code_G)
+    df_longtime_score = Atest.asset_bullishness(df_ts_code=df_ts_code_G)
     df_longtime_score =df_longtime_score [df_longtime_score["period"]>2000]
     df_longtime_score.sort_values(by="final_position",ascending=True,inplace=True)
-    """
+
+    """df_longtime_score.to_csv("temp.csv", encoding="utf-8_sig")
     df_longtime_score = pd.read_csv("temp.csv")
-    df_longtime_score.to_csv("temp.csv", encoding="utf-8_sig")
-    df_longtime_score = df_longtime_score.set_index("ts_code")
+    df_longtime_score = df_longtime_score.set_index("ts_code")"""
 
     # Step 2.2: Industry Short Time Score
     fields = ["close", "vol"]
@@ -71,24 +160,25 @@ def predict_industry(df_result_copy):
         predict_trendmode(df_result=df_asset, index=ts_code, d_preload=d_preload)
 
         # add asset result to result table
-        df_result[f"{ts_code}_trendmode_pquota"] = df_asset[f"{ts_code}_trendmode_pquota"]
+        df_result_copy[f"{ts_code}_trendmode_pquota"] = df_asset[f"{ts_code}_trendmode_pquota"]
         result_col += [f"{ts_code}_trendmode_pquota"]
 
     # general market condition
     for column in result_col:
-        df_result["market_trend"] = df_result["market_trend"].add(df_result[column])
-    df_result["market_trend"] = df_result["market_trend"] / len(result_col)
+        df_result_copy["market_trend"] = df_result_copy["market_trend"].add(df_result_copy[column])
+    df_result_copy["market_trend"] = df_result_copy["market_trend"] / len(result_col)
 
     # rank the industry short score. Rank the bigger the better
     d_score_short = {}
     for column in result_col:
-        d_score_short[column] = df_result[column].iat[-1]
+        d_score_short[column] = df_result_copy[column].iat[-1]
 
     df_final_industry_rank = pd.Series(d_score_short, name="ts_code_trendmode_pquota")
     df_final_industry_rank = df_final_industry_rank.to_frame()
-    df_final_industry_rank["short_score"] = df_final_industry_rank["ts_code_trendmode_pquota"].rank(ascending=False)
+    df_final_industry_rank["short_score"] = df_final_industry_rank["ts_code_trendmode_pquota"].rank(ascending=False)#the higher pquota the better
 
     # rank the industry long score
+    print("df long score is ",df_longtime_score)
     d_score_long = {}
     for column in result_col:
         ts_code = column[:-17]  # 17 because the name is "_trendmode_pquota"
@@ -101,7 +191,7 @@ def predict_industry(df_result_copy):
 
     # Step 2.3: Industry Current Final Score
     df_final_industry_rank["long_score"] = s_long_score
-    df_final_industry_rank["final_score"] = df_final_industry_rank["long_score"] * 0.4 + df_final_industry_rank["short_score"] * 0.6
+    df_final_industry_rank["final_score"] = df_final_industry_rank["long_score"] * 0.7 + df_final_industry_rank["short_score"] * 0.3
 
     return df_final_industry_rank
 
@@ -137,10 +227,10 @@ def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
     #note one year is 240, but minus -20 days to start because the signal detects turning point with delay
 
     #bull
-    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"]<220), f"{index}_trendmode_pquota"] = 0.6
-    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(220,460)), f"{index}_trendmode_pquota"] = 0.7
-    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(460,700)),f"{index}_trendmode_pquota"] = 0.8
-    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(700,1000)),f"{index}_trendmode_pquota"] = 0.9
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"]<220), f"{index}_trendmode_pquota"] = 0.5
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(220,460)), f"{index}_trendmode_pquota"] = 0.6
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(460,700)),f"{index}_trendmode_pquota"] = 0.7
+    df_result.loc[(df_result["cy_trend"]==1)&(df_result[f"{index}_trendmode_pquota_days_counter"].between(700,1000)),f"{index}_trendmode_pquota"] = 0.8
 
     #bear
     df_result.loc[(df_result["cy_trend"] == -1) & (df_result[f"{index}_trendmode_pquota_days_counter"] < 220),f"{index}_trendmode_pquota"] = 0.2
@@ -153,7 +243,7 @@ def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
 
     """2. EVENT BASED: OVERMA
     Ruse Overma to define buy and sell signals"""
-    overma_name=step4(df_result=df_result, d_preload=d_preload, a_freq_close=[ 60,80,100, 120], a_freq_overma=[ 60, 80,100,120], index=index)
+    overma_name=step4(df_result=df_result, d_preload=d_preload, a_freq_close=[ 60,120], a_freq_overma=[ 60,120], index=index)
 
 
 
@@ -168,8 +258,16 @@ def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
     df_result[f"{index}_trendmode_pquota_fol_counter"]=0
     for ts_code, df_asset in d_preload.items():
         if ts_code in a_ts_code:
-            print(f"predict_trendmode calculate fol ",ts_code)
-            fol_name=Alpha.fol_rolling_norm(df=df_asset,abase="close",inplace=True, freq_obj=[60,80,100,120])
+
+            kwargs={"df":df_asset,"abase":"close","inplace":True,"freq_obj":[60,120]}# 80,100,120
+            func=Alpha.fol_rolling_norm
+            fol_name = Alpha.alpha_name(kwargs, func.__name__)
+            if fol_name in df_asset.columns:
+                print(f"{index} predict_trendmode ALREADY HAS fol ",ts_code)
+            else:
+                print(f"{index} predict_trendmode calculate fol ", ts_code)
+                fol_name=Alpha.fol_rolling_norm(**kwargs)
+
             df_asset["counter_helper"]=1
             df_result[f"{index}_trendmode_pquota_fol"]=df_result[f"{index}_trendmode_pquota_fol"].add(df_asset[fol_name],fill_value=0)
             df_result[f"{index}_trendmode_pquota_fol_counter"]=df_result[f"{index}_trendmode_pquota_fol_counter"].add(df_asset["counter_helper"],fill_value=0)
@@ -180,10 +278,27 @@ def predict_trendmode(df_result, d_preload, debug=0, index="cy"):
 
 
     #add all steps together
-    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].add(df_result[overma_name] * 0.10, fill_value=0)
-    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].subtract(df_result[f"{index}_trendmode_pquota_fol"] * 0.10, fill_value=0)
+    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].add(df_result[overma_name] * 0.15, fill_value=0)
+    df_result[f"{index}_trendmode_pquota"] = df_result[f"{index}_trendmode_pquota"].subtract(df_result[f"{index}_trendmode_pquota_fol"] * 0.15, fill_value=0)
+
+    #special treatment for crazy time, portfolio to be 1
     df_result.loc[(df_result["sh_volatility"]>0.35)&(df_result["cy_trend"]==1),f"{index}_trendmode_pquota"] = 1
+
+    #special treatnebt for crazy time, if the price has fall off more than 12% from local max, then start sell
+    df_result["rolling_max_60"]=df_result[f"close_{index}"].rolling(60).max()
+    df_result["off_rolling_max_60"]=df_result[f"close_{index}"]/ df_result["rolling_max_60"]
+    df_result.loc[(df_result["sh_volatility"]>0.35)&(df_result["cy_trend"]==1)&(df_result["off_rolling_max_60"]<0.88) ,f"{index}_trendmode_pquota"]=0
+    del df_result["rolling_max_60"]
+    del df_result["off_rolling_max_60"]
+
+    #todo invest in single sh stocks, bonds, us stocks or stock unrelated stuff in bear time
+
+
+    #cut final result to be between 0 and 1
     df_result[f"{index}_trendmode_pquota"].clip(0,1,inplace=True)
+
+
+
 
 
 
@@ -759,6 +874,8 @@ def cy_mode(df_result, abase="close"):
     # df_result.to_csv("egal.csv")
 
 
+
+
 def all(withupdate=False):
     """
     Goal: Predict market, generate concrete detailed buy and sell signals
@@ -767,8 +884,7 @@ def all(withupdate=False):
     3. What to buy/sell: Check stocks, etfs, industries, concepts
     """
 
-
-    # Step 0: UPDATE DATA and INIT
+    # 0: UPDATE DATA and INIT
     if withupdate: DB.update_all_in_one_cn_v2()
     df_result = DB.get_stock_market_overview()
     df_result["sh_volatility"] = Alpha.detect_cycle(df=df_result, abase=f"close_sh", inplace=False)  # use sh index to calculate volatility no matter what
@@ -778,53 +894,33 @@ def all(withupdate=False):
     d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
 
 
-    # Step 1.1: predict SH index Portfolio Quota: defines how much portfolio you can max spend
+    # 1: PREDICT MARKET
     #predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload)
-
-    # Step 1.2: predict CY index Portfolio Quota: defines how much portfolio you can max spend
     predict_trendmode(df_result=df_result, index="cy", d_preload=d_preload)
-
-    # Step 1.3: predict SZ index
     #predict_cyclemode(df_result=df_result, index="sz", d_preload=d_preload)
     #predict_trendmode(df_result=df_result, index="sz", d_preload=d_preload)
-
-
-
-    #defines the max portfolio size the can be used during a time. It depends on the market mood.
-
-
-
-    # Inudstry
-    #df_final_industry_rank = predict_industry(df_result_copy=df_result_copy)
-
-
-
-    #Portfolio max size
-    #based on previous statistic. 6-8 years 1 cycle. bull market = 2.5 year, neutral = 1.5, bear = 2 year
-    #the longer the bull, the crazier it becomes
-
-
-    # Step 5: Select Concept
-
-
-
-    # Step 6: Select Stock
-    #according to its industry rank 1-100
-    #accoding to its fundamental 1-100
-    #according to fund holding 1-100
-    #according to its current technical analysis 1-100
-
-
-    # Step 7.1: Save Predict Table
     a_path = LB.a_path(f"Market/CN/PredictMarket/Predict")
     LB.to_csv_feather(df=df_result, a_path=a_path)
 
-    # Step 7.2: Save Industry Score
+
+    # 2: PREDICT INDUSTRY
+    #df_final_industry_rank = predict_industry(df_result_copy=df_result_copy,d_preload=d_preload)
+    df_final_industry_rank = pd.read_csv("Market/CN/PredictMarket/Industry_Score.csv")
+    df_final_industry_rank.set_index("index",inplace=True)
     a_path = LB.a_path(f"Market/CN/PredictMarket/Industry_Score")
-    #LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
+    LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
 
 
+    # 3: PREDICT STOCK
+    df_stock_score = predict_stock_score(df_final_industry_rank=df_final_industry_rank, d_preload=d_preload)
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Stock_Score")
+    LB.to_csv_feather(df=df_stock_score, a_path=a_path)
 
+
+    # 4: validate PREDICTION
+    df_validate = validate(df_result=df_result, index="cy")
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Validate")
+    LB.to_csv_feather(df=df_validate, a_path=a_path)
 
 
 

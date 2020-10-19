@@ -1202,7 +1202,7 @@ def asset_volatility(start_date, end_date, assets, freq):
 
 
 
-def asset_FD_portfolio_stock():
+def asset_fund_portfolio():
     """
     this function creates a statistic about the most hold stock by fund
 
@@ -1254,6 +1254,7 @@ def asset_FD_portfolio_stock():
     a_path = LB.a_path(f"Market/CN/ATest/fund_portfolio/all_time_statistic")
     LB.to_csv_feather(df=df_result, a_path=a_path)
 
+    return df_result
 
 
 
@@ -1262,8 +1263,9 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
     # init
 
     if df_ts_code.empty:
-        df_ts_code = DB.get_ts_code(a_asset=[a_asset], market=market)[::1]
-
+        print("is empty")
+        df_ts_code = DB.get_ts_code(a_asset=a_asset, market=market)[::1]
+    print("df_ts_code",df_ts_code)
     df_result = pd.DataFrame()
 
     #preload 3 main index
@@ -1283,7 +1285,6 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
             asset_full_len=len(df_asset)
             df_asset=df_asset[(df_asset.index > start_date)&(df_asset.index < end_date)]
 
-            print("full len vs cut len",asset_full_len,len(df_asset))
         except:
             continue
 
@@ -1433,7 +1434,7 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
     df_result["final_rank"]=df_result["geomean_rank"]*0.5+df_result["trend_rank"]*0.5
     df_result["final_position"]=df_result["final_rank"].rank(ascending=True)
 
-    df_result.to_csv(f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}.csv", encoding='utf-8_sig')
+    df_result.to_csv(f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}_{a_asset}.csv", encoding='utf-8_sig')
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}.xlsx", group_result=True, market=market)
     return df_result
 

@@ -220,11 +220,29 @@ def update_ts_code(asset="E", market="CN", night_shift=True):
             df = pd.DataFrame()
             for on_asset in LB.c_asset():
                 for group, a_instance in LB.c_d_groups(assets=[on_asset]).items():
+                    if group in ['sw_industry1','sw_industry2','sw_industry3','zj_industry1','jq_industry1','jq_industry2',]:
+                        #prepare for statistic about the group to be added later
+                        df_group=get_ts_code(a_asset=[group])
+                        LB.df_ts_code_index_to_market(df=df_group)
+                        df_group_grouped=df_group.groupby(group).sum()
+
                     for instance in a_instance:
                         df.at[f"{group}_{instance}", "name"] = f"{group}_{instance}"
                         df.at[f"{group}_{instance}", "on_asset"] = on_asset
                         df.at[f"{group}_{instance}", "group"] = str(group)
                         df.at[f"{group}_{instance}", "instance"] = str(instance)
+
+                        if group in ['sw_industry1', 'sw_industry2', 'sw_industry3', 'zj_industry1', 'jq_industry1', 'jq_industry2', ]:
+                            #add statistic about how the group composition is: what % are sh, sz, cy, stocks
+                            df.at[f"{group}_{instance}", "sh"]=df_group_grouped.at[instance,"sh"]
+                            df.at[f"{group}_{instance}", "sz"]=df_group_grouped.at[instance,"sz"]
+                            df.at[f"{group}_{instance}", "cy"]=df_group_grouped.at[instance,"cy"]
+                            df.at[f"{group}_{instance}", "kc"]=df_group_grouped.at[instance,"kc"]
+
+            #calculate group size and convert absolute number into percentage
+            df["size"]=df["sh"]+df["sz"]+df["cy"]+df["kc"]
+            for cnmarket in ["sh","sz","cy","kc"]:
+                df[cnmarket]=df[cnmarket]/df["size"]
             df.index.name = "ts_code"
 
         elif asset == "F":
@@ -1647,10 +1665,7 @@ if __name__ == '__main__':
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
-        for asset in ["FD"]:
-            a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "night_shift": False, "a_asset": [asset], "skip_csv":False}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
-
+        update_ts_code(asset="G")
         #update_all_in_one_cn()
 
 
