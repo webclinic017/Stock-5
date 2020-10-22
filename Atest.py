@@ -1213,10 +1213,11 @@ def asset_fund_portfolio():
     #INIT
     df_ts_code=DB.get_ts_code(a_asset=["FD"])
     df_result = DB.get_ts_code(a_asset=["E"])
-    range_obj=range(1990,pd.datetime.now().date().year+1)
+    range_obj=range(1990,LB.get_today_year()+1)
     for year in range_obj:
-        df_result[f"{year}_count"] = 0
-        df_result[f"{year}_rank"] = 0
+        for season in [1,2,3,4]:
+            df_result[f"{year}_{season}_count"] = 0
+            df_result[f"{year}_{season}_rank"] = 0
 
 
     #loop over each fund
@@ -1234,21 +1235,24 @@ def asset_fund_portfolio():
 
         df_asset["count"]=1
         df_asset=df_asset[df_asset["stk_mkv_ratio"]>0]#remove IPO stocks that are not on market yet. I don't know why and funds buy them.
-        LB.trade_date_to_calender(df=df_asset,add=["year"])
+        LB.trade_date_to_calender(df=df_asset,add=["year","season"])
 
         for year in range_obj:
-            #check only one particular year
             df_asset_filtered=df_asset[df_asset["year"]==year]
-
-            #group by counts
-            df_asset_count=df_asset_filtered.groupby("symbol").sum()
-
-            df_result[f"{year}_count"]=df_result[f"{year}_count"].add(df_asset_count["count"],fill_value=0)
+            for season in [1,2,3,4]:
+                df_asset_filtered2=df_asset_filtered[df_asset_filtered["season"]==season ]
+                df_asset_count=df_asset_filtered2.groupby("symbol").sum()
+                df_result[f"{year}_{season}_count"]=df_result[f"{year}_{season}_count"].add(df_asset_count["count"],fill_value=0)
 
     #rank these results
     for year in range_obj:
-        df_result[f"{year}_rank"]=df_result[f"{year}_count"].rank(ascending=False)
-        del df_result[f"{year}_count"]
+        for season in [1,2,3,4]:
+            column_total=df_result[f"{year}_{season}_count"].sum()
+            if column_total>0:#this removes future seasons that have not published any report yet
+                df_result[f"{year}_{season}_rank"]=df_result[f"{year}_{season}_count"].rank(ascending=False)
+            else:
+                del df_result[f"{year}_{season}_rank"]
+            del df_result[f"{year}_{season}_count"]
 
     #save
     a_path = LB.a_path(f"Market/CN/ATest/fund_portfolio/all_time_statistic")
@@ -1588,7 +1592,7 @@ if __name__ == '__main__':
     #     lol["period"]=Alpha.period(df=lol,inplace=False)
     #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
 
-    asset_FD_portfolio_stock()
+    asset_fund_portfolio()
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 

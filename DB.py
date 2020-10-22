@@ -645,48 +645,54 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True
                         latest_adj = df_adj.at[0, "adj_factor"]
                         df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]] / latest_adj
 
+                    # 2.1 get daily basic
+                    if complete_new_update:
+                        df_fun_1 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=start_date, end_date=middle_date)
+                        df_fun_2 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=middle_date, end_date=end_date)
+                        df_fun = df_fun_1.append(df_fun_2, ignore_index=True, sort=False)
+                    else:
+                        df_fun = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=asset_latest_trade_date, end_date=end_date)
+
+                    try:  # new stock can cause error here
+                        df_fun = df_fun[["trade_date", "turnover_rate", "pe_ttm", "pb", "ps_ttm", "dv_ttm", "total_share", "total_mv"]]
+                        df_fun["total_share"] = df_fun["total_share"] * 10000
+                        df_fun["total_mv"] = df_fun["total_mv"] * 10000
+                        df_fun["trade_date"] = df_fun["trade_date"].astype(int)
+                        df = pd.merge(df, df_fun, how='left', on=["trade_date"], suffixes=[False, False], sort=False).set_index("trade_date")
+                    except Exception as e:
+                        print("error fun", e)
 
                     #skip fundamentals and other indicator in minified version
-                    if not miniver:
-                        # 2.1 get daily basic
-                        if complete_new_update:
-                            df_fun_1 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=start_date, end_date=middle_date)
-                            df_fun_2 = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=middle_date, end_date=end_date)
-                            df_fun = df_fun_1.append(df_fun_2, ignore_index=True, sort=False)
-                        else:
-                            df_fun = _API_Tushare.my_query(api_name="daily_basic", ts_code=ts_code, start_date=asset_latest_trade_date, end_date=end_date)
-
-                        try:  # new stock can cause error here
-                            df_fun = df_fun[["trade_date", "turnover_rate", "pe_ttm", "pb", "ps_ttm", "dv_ttm", "total_share", "total_mv"]]
-                            df_fun["total_share"] = df_fun["total_share"] * 10000
-                            df_fun["total_mv"] = df_fun["total_mv"] * 10000
-                            df_fun["trade_date"] = df_fun["trade_date"].astype(int)
-                            df = pd.merge(df, df_fun, how='left', on=["trade_date"], suffixes=[False, False], sort=False).set_index("trade_date")
-                        except Exception as e:
-                            print("error fun", e)
-
+                    if False:
+                        """the following used df_fun has a problem that is it not time series
+                        consequently, they can not be put together with trade_date as ann_date might not even be trade_date
+                        you can also not interpolate between these stats. so we treat them seperately and not as time series
+                        """
 
                         # 2.2 add FUN financial report aka fina
                         # 流动资产合计,非流动资产合计,资产合计，   流动负债合计,非流动负债合计,负债合计
-                        # old df_balancesheet = get_asset_E_D_Fun("balancesheet", ts_code=ts_code, columns=["total_cur_asset", "total_asset", "total_cur_liab", "total_liab"])
-                        df_balancesheet = get_asset(ts_code=ts_code, freq="balancesheet", a_columns=["total_cur_asset", "total_asset", "total_cur_liab", "total_liab"])
+                        #replaced by debt_to_asset
+                        #df_balancesheet = get_asset(ts_code=ts_code, freq="balancesheet", a_columns=["total_cur_asset", "total_asset", "total_cur_liab", "total_liab"])
 
                         # 营业活动产生的现金流量净额	，投资活动产生的现金流量净额,筹资活动产生的现金流量净额
-                        # old df_cashflow = get_asset_E_D_Fun("cashflow", ts_code=ts_code, columns=["n_cashflow_act", "n_cashflow_inv_act", "n_cash_flows_fnc_act"])
-                        df_cashflow = get_asset(ts_code=ts_code, freq="cashflow", a_columns=["n_cashflow_act", "n_cashflow_inv_act", "n_cash_flows_fnc_act"])
-
-                        # 扣除非经常性损益后的净利润,净利润同比增长(netprofit_yoy instead of q_profit_yoy on the doc)，营业收入同比增长,销售毛利率，销售净利率,资产负债率,存货周转天数(should be invturn_days,but casted to turn_days in the api for some reasons)
-                        # old df_indicator = get_asset_E_D_Fun("fina_indicator", ts_code=ts_code, columns=["profit_dedt", "netprofit_yoy", "or_yoy", "grossprofit_margin", "netprofit_margin", "debt_to_asset", "turn_days"])
-                        df_indicator = get_asset(ts_code=ts_code, freq="fina_indicator", a_columns=["profit_dedt", "netprofit_yoy", "or_yoy", "grossprofit_margin", "netprofit_margin", "debt_to_asset", "turn_days"])
+                        #replaced by salescash_to_or
+                        #df_cashflow = get_asset(ts_code=ts_code, freq="cashflow", a_columns=["n_cashflow_act", "n_cashflow_inv_act", "n_cash_flows_fnc_act"])
+                        # 扣除非经常性损益后的净利润,净利润同比增长(netprofit_yoy instead of q_profit_yoy on the doc)，营业收入同比增长,销售毛利率增长，销售净利率,资产负债率,存货周转天数(should be invturn_days,but casted to turn_days in the api for some reasons)
+                        df_indicator = get_asset(ts_code=ts_code, freq="fina_indicator", a_columns=LB.c_indicator_rank().keys())
 
                         # 股权质押比例
-                        # old df_pledge_stat = get_asset_pledge_stat(ts_code=ts_code, columns=["pledge_ratio"])
-                        df_pledge_stat = get_asset(ts_code=ts_code, freq="W_pledge_stat", a_columns=["pledge_ratio"])
+                        #df_pledge_stat = get_asset(ts_code=ts_code, freq="W_pledge_stat", a_columns=["pledge_ratio"])
 
                         # add fina to df
-                        for df_fun, fun_name in zip([df_balancesheet, df_cashflow, df_indicator, df_pledge_stat], ["bala", "cash", "indi", "pledge"]):
+                        #for df_fun, fun_name in zip([  df_indicator, df_pledge_stat], ["indi", "pledge"]):
+                        for df_fun, fun_name in zip([  df_indicator], ["indi"]):
+
+                            if df_fun.empty:
+                                continue
                             df_fun.index.name = "trade_date"
+
                             df_fun.index = df_fun.index.astype(int)
+                            df_fun = df_fun.loc[~df_fun.index.duplicated(keep="last")]#important
                             df[list(df_fun.columns)] = df_fun[list(df_fun.columns)]
                             # df = pd.merge(df, df_fun, how="left", on="trade_date", sort=False).set_index("trade_date")  # just added might be wrong
 
@@ -696,12 +702,12 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True
                         df = df.loc[~df.index.duplicated(keep="last")]  # important
 
                         # interpolate/fill between empty fina and pledge_stat values
-                        all_report_label = list(df_balancesheet.columns.values) + list(df_cashflow.columns.values) + list(df_indicator.columns.values) + ["pledge_ratio"]
+                        """all_report_label = list(df_balancesheet.columns.values) + list(df_cashflow.columns.values) + list(df_indicator.columns.values) + ["pledge_ratio"]
                         for label in all_report_label:
                             try:
                                 df[label] = df[label].fillna(method='ffill')
                             except:
-                                pass
+                                pass"""
 
 
             elif (asset == "I" and freq == "D"):
@@ -732,7 +738,8 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True
 
             """the problem above is df(new) has trade date as column. df_saved has trade_date as index right?"""
             # 3. add my derivative indices and save it
-            if not df.empty and not miniver:
+            #if not df.empty and not miniver:
+            if False:
                 update_asset_point(df=df, asset=asset)
                 update_asset_re(df=df, asset=asset)
             else:
@@ -772,6 +779,7 @@ def update_asset_G(asset=["E"], night_shift=True, step=1):
     df_ts_code = get_ts_code(a_asset=["E"])
     d_preload = preload(asset="E")
     example_column = get_example_column(asset="E", freq="D", numeric_only=True, notna=False)
+    print("creating groups, might take a bit... maybe 5 mins")
 
     # preparation. operations that has to be done for all stocks ONCE
     for ts_code, df_asset in d_preload.items():
@@ -803,7 +811,7 @@ def update_asset_G(asset=["E"], night_shift=True, step=1):
                     pass  # in df_ts_code but not in preload. maybe not met condition of preload like period > 240
 
                 if not df_asset.empty:
-                    print(f"creating group: {group, instance}: {counter} - {ts_code} - len {len(df_asset)}")
+                    #print(f"creating group: {group, instance}: {counter} - {ts_code} - len {len(df_asset)}")
                     # all_columns=df_asset.columns
                     # df_asset = LB.get_numeric_df(df_asset)
                     # not_numeric_columns = [x for x in all_columns if x not in df_asset.columns]
@@ -1493,10 +1501,10 @@ def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=
         bar.set_description(f"{i}: {asset}: {index}")
         try:
             df = func(index, **kwargs)
+            if query_df:
+                df = df.query(expr=query_df) # "trade_date > 20050101"
             if asset in ["E", "I", "FD"]:  # not work for G, F
                 df = df[(df["period"] > period_abv)]
-            if query_df:
-                df = df.query(expr=query_df)
             if df.empty:
                 continue
             else:  # only take df that satisfy ALL conditions and is non empty
@@ -1587,7 +1595,7 @@ def update_all_in_one_cn(night_shift=False):
     # update_asset_stock_market_all(start_date="19990101", end_date=today(), night_shift=night_shift, asset=["E"])  # SMART
 
 
-def update_all_in_one_cn_v2(night_shift=False):
+def update_all_in_one_cn_v2(night_shift=False, until=999):
     # 0. ALWAYS UPDATE
     # 1. ONLY ON BIG UPDATE: OVERRIDES EVERY THING EVERY TIME
     # 2. ON BOTH BIG AND SMALL UPDATE: OVERRIDES EVERYTHING EVERY TIME
@@ -1595,22 +1603,19 @@ def update_all_in_one_cn_v2(night_shift=False):
 
     # 1.0. ASSET - Indicator bundle (MANUALLY UPDATE)
 
+    if until<=0:
+        return print(f"update_all_in_one_cn2 finished until {until}")
+
 
     # 1.0. ASSET - Indicator bundle
-    """if False:
+    if night_shift:
         # E: update each E asset one after another
         for asset in ["E", "FD"]:
-            for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle(asset=asset).items()):
+            for counter, (bundle_name, bundle_func) in enumerate(LB.c_asset_E_bundle_mini(asset=asset).items()):
                 LB.multi_process(func=update_asset_bundle, a_kwargs={"bundle_name": bundle_name, "bundle_func": bundle_func, "night_shift": False, "a_asset": [asset]}, a_partial=LB.multi_steps(2))  # SMART does not alternate step, but alternates fina_name+fina_function
 
-
-    else:
-        # update all E asset at same time
-        for asset in ["FD"]:
-            a_partial = [{"bundle_name": bundle_name, "bundle_func": bundle_func} for bundle_name, bundle_func in LB.c_asset_E_bundle(asset=asset).items()]
-            LB.multi_process(func=update_asset_bundle, a_kwargs={"step": 1, "night_shift": False, "a_asset": [asset]}, a_partial=a_partial)  # SMART does not alternate step, but alternates fina_name+fina_function
-"""
-
+    if until <= 1:
+        return print(f"update_all_in_one_cn2 finished until {until}")
 
     # 1.0. GENERAL - CAL_DATE
     update_trade_cal()  # always update
@@ -1626,13 +1631,16 @@ def update_all_in_one_cn_v2(night_shift=False):
     for freq in ["D"]:  # Currently only update D and W, because W is needed for pledge stats
         update_trade_date(freq)  # ALWAYS UPDATE
 
+    if until <= 2:
+        return print(f"update_all_in_one_cn2 finished until {until}")
+
     # 2.2. ASSET
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "miniver":True}, a_partial=LB.multi_steps(4))  # 40 mins
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":True}, a_partial=LB.multi_steps(4))  # 60 mins
-    update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 40 mins
+    #LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
+    #update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
 
-
-
+    if until <= 3:
+        return print(f"update_all_in_one_cn2 finished until {until}")
 
 
 fast_load = {}
@@ -1665,8 +1673,9 @@ if __name__ == '__main__':
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
-        update_ts_code(asset="G")
+
         #update_all_in_one_cn()
+
 
 
 

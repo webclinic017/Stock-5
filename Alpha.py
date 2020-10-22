@@ -1713,7 +1713,7 @@ def crossma(df, abase, freq, freq2, inplace,name,cols):
     return alpha_return(locals())
 
 @alpha_wrap
-def overma(df, abase, freq, freq2,inplace,name,cols):
+def overma(df, abase, freq, freq2,inplace,name,cols): # freq1 small freq2 big
     df[name] = (df[abase].rolling(freq).mean() > df[abase].rolling(freq2).mean()).astype(float)
     return alpha_return(locals())
 

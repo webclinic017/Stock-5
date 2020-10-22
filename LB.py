@@ -74,7 +74,22 @@ def deco_wrap_line(func):
 
     return this_function_will_never_be_seen
 
+def get_today_year():
+    return pd.datetime.now().date().year
 
+def get_today_month():
+    return pd.datetime.now().date().month
+
+def get_today_season():
+    today_month = get_today_month()
+    if today_month in [1,2,3]:
+        return 1
+    elif today_month in [4,5,6]:
+        return 2
+    elif today_month in [7,8,9]:
+        return 3
+    elif today_month in [10,11,12]:
+        return 4
 
 def trade_date_to_datetime(trade_date):
     return datetime.strptime(str(trade_date), '%Y%m%d')
@@ -233,6 +248,8 @@ def c_G_queries():
 def c_G_queries_small_groups():
     return {"G": ["on_asset == 'E'", "group in ['sw_industry1','sw_industry2', 'jq_industry1','jq_industry2','zj_industry1'] "]} #, 'jq_industry2','jq_industry2','zj_industry1'
 
+def c_groups():
+    return ['sw_industry1','sw_industry2', 'jq_industry1','jq_industry2','zj_industry1']
 
 def c_index_queries(market="CN"):
     return {"I": [f"ts_code in {c_index(market=market)}"]}
@@ -275,7 +292,37 @@ def c_group_score_weight():
 def c_index_label():
     """this returns an ordered list of prioritized columns for df index
     NOT to confuse with index asset"""
-    return ["trade_date", "date", "ann_date", "end_date", "cal_date"]
+    # this version has ann_date before end_date return ["trade_date", "date", "ann_date", "end_date", "cal_date"]
+    return ["trade_date", "date", "end_date", "ann_date", "cal_date"]
+
+
+def c_indicator_rank():
+    """		higher better is ascending= False
+            lower better is ascending = True
+    """
+    return {
+            "debt_to_assets": True,  # debt
+            "debt_to_eqt": True,  # debt
+            "current_ratio":False, # debt
+            "quick_ratio":False, # debt
+            "roe":False, #efficiency
+            "roa":False, #efficiency
+            "roic":False, #efficiency
+            "turn_days": True, #efficiency
+            "grossprofit_margin": False,  # efficiency
+            "netprofit_margin": False, # efficiency
+            "ocf_to_or":False, #cashflow
+            "op_to_ebt":False, #cashflow
+            "salescash_to_or":False, #cashflow
+            "opincome_of_ebt":False, #cashflow
+            "or_yoy":False, #growth
+            "op_yoy":False, #growth
+            "ebt_yoy":False, #growth
+            "ocf_yoy":False, #growth
+            "tr_yoy":False, #growth
+            "basic_eps_yoy": True,#growth
+
+    }
 
 
 def c_asset_E_bundle(asset="E"):
@@ -303,6 +350,18 @@ def c_asset_E_bundle(asset="E"):
         return {"fund_portfolio": _API_Tushare.my_fund_portfolio
                 }
 
+def c_asset_E_bundle_mini(asset="E"):
+    if asset=="E":
+        return {
+                # financial
+                "fina_indicator": _API_Tushare.my_fina_indicator,
+                #"pledge_stat": _API_Tushare.my_pledge_stat(),
+
+                }
+
+    if asset== "FD":
+        return {"fund_portfolio": _API_Tushare.my_fund_portfolio
+                }
 
 def c_op():
     return {"plus": operator.add,
@@ -693,6 +752,9 @@ def df_empty(query):
 
 
 def set_index(df,set_index):
+    """if set_index not in df.columns:
+        raise AssertionError(f"set_index {set_index} is not in columns {df.columns}")
+       """
     if set_index:
         return df.set_index(set_index,drop=True)
     else:
@@ -860,7 +922,11 @@ def handle_save_exception(e, path):
 
 # reset index no matter what because of feather format. Drop index depends if index is relevant. CSV store index is always false
 def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv=False):  # utf-8_sig
-    df.reset_index(drop=(not index_relevant), inplace=True)  # reset index no matter what because feather can only store normal index. if index relevant then dont drop
+    try:
+        df.reset_index(drop=(not index_relevant), inplace=True)  # reset index no matter what because feather can only store normal index. if index relevant then dont drop
+    except Exception as e:
+        print("small anomaly in saving csv feather")
+
     df = df.infer_objects()
     if not skip_csv:
         for _ in range(10):
