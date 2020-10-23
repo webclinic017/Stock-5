@@ -476,7 +476,7 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True
                         df[column] = df[column] * df["adj_factor"] / latest_adj
 
                 df = LB.df_reverse_reindex(df)
-                LB.remove_columns(df, ["pre_close", "amount", "change", "adj_factor"])
+                LB.df_columns_remove(df, ["pre_close", "amount", "change", "adj_factor"])
             return df
 
     # add technical indicators. but us stock still might use it .maybe change later
@@ -1434,8 +1434,9 @@ def get_example_column(asset="E", freq="D", numeric_only=False, notna=True, mark
 
 
 # path =["column_name", True]
-def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_asset=["I", "E", "FD", "F", "G"], group_result=True, market="CN"):
-    df_ts_code = add_static_data(df_ts_code, asset=a_asset, market=market)
+def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_asset=["I", "E", "FD", "F", "G"], group_result=True, market="CN", add_static= True):
+    if add_static:
+        df_ts_code = add_static_data(df_ts_code, asset=a_asset, market=market)
     d_df = {"Overview": df_ts_code}
 
     # tab group
@@ -1461,7 +1462,7 @@ def to_excel_with_static_data(df_ts_code, path, sort: list = [], a_asset=["I", "
                 df_group = df_group.sort_values(by=sort[0], ascending=sort[1])
             d_df[group] = df_group
     LB.to_excel(path=path, d_df=d_df, index=True)
-
+    return d_df
 
 # needs to be optimized for speed and efficiency
 def add_static_data(df, asset=["E", "I", "FD"], market="CN"):
@@ -1636,11 +1637,20 @@ def update_all_in_one_cn_v2(night_shift=False, until=999):
 
     # 2.2. ASSET
     LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 40 mins
-    #LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
+    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
     #update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
 
     if until <= 3:
         return print(f"update_all_in_one_cn2 finished until {until}")
+
+
+    # 2.3 UPDATE FUND HOLDING
+    import Atest
+    Atest.asset_fund_portfolio()
+    if until <= 4:
+        return print(f"update_all_in_one_cn2 finished until {until}")
+
 
 
 fast_load = {}

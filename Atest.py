@@ -12,7 +12,7 @@ import matplotlib
 import itertools
 import matplotlib.pyplot as plt
 from scipy.signal import argrelextrema
-
+import builtins
 # from Alpha import supersmoother_3p, highpass, cg_Oscillator, macd, ismax, ismin
 
 sys.setrecursionlimit(1000000)
@@ -1271,6 +1271,7 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
         df_ts_code = DB.get_ts_code(a_asset=a_asset, market=market)[::1]
     print("df_ts_code",df_ts_code)
     df_result = pd.DataFrame()
+    a_freq=[20,60,120,240]
 
     #preload 3 main index
     preload_index = DB.preload_index(market=market)
@@ -1279,7 +1280,7 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
 
     # loop
     for ts_code, asset in zip(df_ts_code.index[::step], df_ts_code["asset"][::step]):
-        print("doing bullishness", market, asset, ts_code)
+        print("calc bullishness", market, asset, ts_code)
 
         try:
             df_asset = DB.get_asset(ts_code=ts_code, asset=asset, market=market)
@@ -1300,26 +1301,38 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
             df_asset["close"] = df_asset["close"] / df_asset.at[df_asset.index[0], "close"]
 
             # assed gained from lifetime. bigger better
-            df_result.at[ts_code, "comp_gain"] = comp_gain = df_asset["close"].iat[len(df_asset) - 1]
+            #df_result.at[ts_code, "comp_gain"] = comp_gain = df_asset["close"].iat[len(df_asset) - 1]
 
             # period. the longer the better
-            df_result.at[ts_code, "period"] = period = len(df_asset)
+            #df_result.at[ts_code, "period"] = period = len(df_asset)
 
             # gain / period
-            df_result.at[ts_code, "gain"] = gain = df_result.at[ts_code, "comp_gain"] / len(df_asset)
+            #df_result.at[ts_code, "gain"] = gain = df_result.at[ts_code, "comp_gain"] / len(df_asset)
 
-            # Geomean.
-
+            # Geomean
             for freq, df_asset_freq in d_asset_freq.items():
                 df_asset_freq["pct_change"] = 1 + df_asset_freq["close"].pct_change()
                 df_result.at[ts_code, f"{freq}_geomean"] = gmean(df_asset_freq["pct_change"].dropna())
 
-
             #check how long a stock is abv ma 5,10,20,60,120,240
-
-            for freq in [20,60,240]:
+            for freq in a_freq:
                 abvma_name=Alpha.abv_ma(df=df_asset,abase="close",freq=freq,inplace=True)
                 df_result.at[ts_code, f"abv_ma{freq}"]=df_asset[abvma_name].mean()
+
+            # technical freqhigh = ability to create 240d high
+            for freq in a_freq:
+                df_asset[f"rolling_max{freq}"] = df_asset["close"].rolling(freq).max()
+                df_helper = df_asset.loc[df_asset[f"rolling_max{freq}"] == df_asset["close"]]
+                df_asset[f"{freq}high"] = df_helper[f"rolling_max{freq}"]
+                df_result.at[ts_code, f"{freq}high"] = df_asset[f"{freq}high"].clip(0, 1).sum() / len(df_asset)
+
+            # technical freqlow = ability to avoid 240d low
+            for freq in a_freq:
+                df_asset[f"rolling_min{freq}"] = df_asset["close"].rolling(freq).min()
+                df_helper = df_asset.loc[df_asset[f"rolling_min{freq}"] == df_asset["close"]]
+                df_asset[f"{freq}low"] = df_helper[f"rolling_min{freq}"]
+                df_result.at[ts_code, f"{freq}low"] = df_asset[f"{freq}low"].clip(0, 1).sum() / len(df_asset)
+
 
             #monotonie: how monotone the
 
@@ -1407,36 +1420,14 @@ def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99
                     df_result.at[ts_code, "qdii_grade_pos(not counted)"] = len(df_qdii_grade[(df_qdii_grade["grade"] == "买入") | (df_qdii_grade["grade"] == "增持")]) / len(df_qdii_grade)
 
     # aggregate and rank
-    D_gmean_rank = df_result["D_geomean"].rank(ascending=False)
-    M_gmean_rank = df_result["M_geomean"].rank(ascending=False)
-    Y_gmean_rank = df_result["Y_geomean"].rank(ascending=False)
-    Abv_ma20=df_result[f'abv_ma20'].rank(ascending=False)
-    Abv_ma60=df_result[f'abv_ma60'].rank(ascending=False)
-    Abv_ma240=df_result[f'abv_ma240'].rank(ascending=False)
-    gain_rank= df_result["gain"].rank(ascending=False)
-    # D_sharp_rank = df_result["D_sharp"].rank(ascending=False)
-    # M_sharp_rank = df_result["M_sharp"].rank(ascending=False)
-    # Y_sharp_rank = df_result["Y_sharp"].rank(ascending=False)
-    #a_beta = [df_result[f"{ts_code_index}_beta"].rank(ascending=True) for ts_code_index in preload_index]
-    df_result["trend_rank"] = Abv_ma20 * 0.20 + \
-                         Abv_ma60 * 0.30 + \
-                         Abv_ma240 * 0.50
 
-    df_result["geomean_rank"] = D_gmean_rank * 0.20 + \
-                                M_gmean_rank * 0.30 + \
-                                Y_gmean_rank * 0.50
+    df_result["final_rank"]= builtins.sum([df_result[f"abv_ma{freq}"].rank(ascending=False) for freq in a_freq]) * 0.1 \
+                            + builtins.sum([df_result[f"{freq}_geomean"].rank(ascending=False) for freq in ["D","M","Y"]]) * 0.60 \
+                            + builtins.sum([df_result[f"{freq}high"].rank(ascending=False) for freq in a_freq]) * 0.15 \
+                            + builtins.sum( [df_result[f"{freq}low"].rank(ascending=True) for freq in a_freq] ) * 0.15
 
-    #df_result["final_rank"] = D_gmean_rank * 0.15 +  M_gmean_rank * 0.15 + Y_gmean_rank * 0.30 + \
-                              #Abv_ma20 * 0.10 + \
-                              #Abv_ma60 * 0.10 + \
-                              #Abv_ma240 * 0.20
-                              #gain_rank * 0.10
-                              # a_beta[0] * 0.05 + \
-                              # a_beta[1] * 0.05 + \
-                              # a_beta[2] * 0.05
-
-    df_result["final_rank"]=df_result["geomean_rank"]*0.5+df_result["trend_rank"]*0.5
     df_result["final_position"]=df_result["final_rank"].rank(ascending=True)
+
 
     df_result.to_csv(f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}_{a_asset}.csv", encoding='utf-8_sig')
     DB.to_excel_with_static_data(df_ts_code=df_result, sort=["final_rank", True], path=f"Market/{market}/Atest/bullishness/bullishness_{market}_{start_date}_{end_date}.xlsx", group_result=True, market=market)
@@ -1579,20 +1570,9 @@ def date_volatility():
 
 
 if __name__ == '__main__':
-
-
     pr = cProfile.Profile()
     pr.enable()
-
-    # df_ts_code=DB.get_ts_code(a_asset=["E"],market="US")
-    # for ts_code in df_ts_code.index:
-    #     print(ts_code)
-    #     lol =pd.read_feather(f"Market/US/Asset/E/D/{ts_code}.feather")
-    #     lol["trade_date"]=lol["trade_date"].apply(lambda x: (x[0:8]))
-    #     lol["period"]=Alpha.period(df=lol,inplace=False)
-    #     lol.to_feather(f"Market/US/Asset/E/new/{ts_code}.feather")
-
-    asset_fund_portfolio()
+    asset_bullishness(a_asset=["E","FD","I"],step=1)
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 

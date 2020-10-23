@@ -36,6 +36,59 @@ def a_ts_code_helper(index):
 
     return a_ts_code
 
+def pe_overview(df_result,d_preload):
+
+
+
+    df_ts_code=DB.get_ts_code(a_asset=["E"])
+    d_market_name=LB.c_index_name()
+
+    #pe for index
+    for indicator in ["pe_ttm"]:
+        #initialize with 0
+        for index in ["sh", "sz", "cy"]:
+            df_result[f"{indicator}_a{index}"]=0
+            df_result[f"{indicator}_a{index}_counter"]=0
+
+        #loop over all stocks and sum to their related index
+        for ts_code, df_asset in d_preload.items():
+            print(f"CREATE PE VIEW WITH {ts_code}")
+            for index in ["sh","sz","cy"]:
+                market = df_ts_code.at[ts_code,"market"]
+                if d_market_name[market]==index:
+                    df_result[f"{indicator}_a{index}"]=df_result[f"{indicator}_a{index}"].add(df_asset[indicator].clip(0,200),fill_value=0)
+
+                    df_asset["counter"] = 1
+                    df_result[f"{indicator}_a{index}_counter"] = df_result[f"{indicator}_a{index}_counter"].add(df_asset["counter"], fill_value=0)
+
+        #finalize
+        for index in ["sh", "sz", "cy"]:
+            df_result[f"{indicator}_a{index}"]=df_result[f"{indicator}_a{index}"]/df_result[f"{indicator}_a{index}_counter"]
+            del df_result[f"{indicator}_a{index}_counter"]
+
+    #pe for industry
+    df_pe = df_result.copy()
+    for indicator in ["pe_ttm"]:
+        for group in LB.c_groups():
+            for instance in df_ts_code[group].unique():
+                print(f"calc pe for {group} {instance}")
+                a_ts_code = df_ts_code[df_ts_code[group]==instance]
+
+                df_pe[f"{indicator}_{group}_{instance}"]=0
+                df_pe[f"{indicator}_{group}_{instance}_counter"]=0
+                for ts_code, df_asset in d_preload.items():
+                    if ts_code in a_ts_code.index: # member of the group_instance
+                        df_asset["counter"]=1
+                        df_pe[f"{indicator}_{group}_{instance}_counter"]=df_pe[f"{indicator}_{group}_{instance}_counter"].add(df_asset["counter"],fill_value=0)
+
+                        df_pe[f"{indicator}_{group}_{instance}"]=df_pe[f"{indicator}_{group}_{instance}"].add(df_asset[indicator].clip(0,200),fill_value=0)
+
+                df_pe[f"{indicator}_{group}_{instance}"]=df_pe[f"{indicator}_{group}_{instance}"]/ df_pe[f"{indicator}_{group}_{instance}_counter"]
+                del df_pe[f"{indicator}_{group}_{instance}_counter"]
+
+        df_pe.to_csv(f"Market/CN/PredictMarket/{indicator}.csv",encoding="utf-8_sig")
+
+
 
 def validate(df_result, index="cy"):
     df_result[f"pct_chg_{index}"] = df_result[f"close_{index}"].pct_change()
@@ -66,8 +119,54 @@ def validate(df_result, index="cy"):
 
     return df_validate
 
+def create_portfolio(df_result, df_stock_long_term, end_date):
+    """a good portfolio must fullfill these conditions
+    -reactive to the market(df_result)
+    -good stock
+    -diversity of industry
+    -diversity of size
+    -diversity of market
 
-def predict_stock_long(df_result, d_preload, end_date=LB.today(), step=10):
+    rule:
+    if CY is good, portfolio size more of :
+    small stock, cy stocks, certain industries, high market related stocks
+
+    """
+    a_groups = LB.c_groups()
+    psize=7
+
+    cy_trend=df_result.at[end_date,"cy_trend"]
+    cy_trend_pquota=df_result.at[end_date,"cy_trendmode_pquota"]
+    df_portfolio=pd.DataFrame()
+
+
+    df_stock_long_term=df_stock_long_term.sort_values(by="final_rank",ascending=True,inplace=False,)
+
+    #find psize pairs of stocks with least industry overlay
+    """
+     algorithm:
+     size =1 : trivial, find stock with highest rank
+     size =2 : n². two for loop. for each stock check against each other stock
+     pentality: -1 for each stock in the same group/ industry, 
+     problem: two independent axis, how to discount?  
+    
+        if all industry are different, then no penality
+        if all are same, then 100% penality
+        solution: since we only do long term investment, the industry are fixed:
+        we just choose the best 3 industry
+        
+    """
+
+
+
+
+
+
+
+    df_portfolio.to_csv(f"Market/CN/PredictMarket/Portfolio/stock_all_time_until_{end_date}.csv", encoding="utf-8_sig")
+
+
+def predict_stock_long( d_preload, end_date=LB.today(), a_freq = [20, 60, 120, 240]):
     """
     general compare concept:
 
@@ -108,50 +207,19 @@ def predict_stock_long(df_result, d_preload, end_date=LB.today(), step=10):
 
     5. Define which industry is relatively better = (How other stocks in the same industry are doing)
 
-    #todo distinguish long vs short, add fundamental
+    #todo distinguish long vs short
     calculate stock score for all period since 3000
 
 
     note:
     fundamental time series part in df
     fundamental non time series part is NOT in df but seperated
-    """
+    fundamental note:
+    -This way of ranking biases overall big and good stocks, mostly big sh stocks because all stats are taking into account
+    -good growth stocks usually have high growth, but other things are bad.
 
-    # INIT
-    a_freq = [20, 60, 120, 240]
-    df_stock_long_term = DB.get_ts_code(a_asset=["E"])
-    d_fun_indicator = LB.c_indicator_rank()
 
-    # SINGLE STOCK LONG TERM PREP
-    for ts_code, df_asset in d_preload.items():
-        print(f"STOCK SHORT TERM {end_date} {ts_code}")
-        if df_asset.empty:
-            continue
-
-        # TECHNICAL
-        for freq in a_freq:
-            df_asset[f"abvma{freq}"] = Alpha.abv_ma(df=df_asset, abase="close", freq=freq, inplace=False)
-            # df_asset[f"gmean{freq}"] = Alpha.geomean(df=df_asset, abase="close",freq=freq, re=pd.Series.rolling ,inplace=False)
-
-        # ability to create new all time record high
-        """max_close=0.0
-        for trade_date, close in zip (df_asset.index, df_asset["close"]):
-            if close> max_close:
-                max_close=close
-                df_asset.at[trade_date, "alltimehigh"]=max_close
-        """
-
-        # ability to avoid 240d low and create 240d high
-        for freq in a_freq:
-            df_asset[f"rolling_min{freq}"] = df_asset["close"].rolling(freq).min()
-            df_helper = df_asset.loc[df_asset[f"rolling_min{freq}"] == df_asset["close"]]
-            df_asset[f"{freq}low"] = df_helper[f"rolling_min{freq}"]
-
-            df_asset[f"rolling_max{freq}"] = df_asset["close"].rolling(freq).max()
-            df_helper = df_asset.loc[df_asset[f"rolling_max{freq}"] == df_asset["close"]]
-            df_asset[f"{freq}high"] = df_helper[f"rolling_max{freq}"]
-
-        """technical note
+    technical note
         1. The higher the gmean, the higher the overall(gain + volatility) stats
         2. the higher the overma, the less volatile the stock.
         3. If a stocks gmean is ranked high, but overma is middle. this means the stock has some very strong and weak periods.
@@ -161,77 +229,123 @@ def predict_stock_long(df_result, d_preload, end_date=LB.today(), step=10):
         7. if market is good for sure for all, then bg high volatile stock, go after gmean high industry like 传媒，军工
         8. if market is normal or even bad, go for industry that can stay long over ma like 建筑材料，综合
         9. There are 2 Industry that are EXTREM good at BOTH. 食品饮料 and 医药
-        """
 
-        # FUNDAMENTAL are already there. no need to create
+    """
 
-    # SINGLE STOCK LONG TERM = summary of short term
+    if os.path.isfile(f"Market/CN/PredictMarket/Stock/stock_all_time_until_{end_date}.csv"):
+        return print(f"STOCK LONG TERM already done for {end_date}")
+
+
+    # 0. INIT
+    df_stock_long_term = DB.get_ts_code(a_asset=["E"])
+    d_fun_indicator = LB.c_indicator_rank()
+
+    # 1. SINGLE STOCK ALL TIME PREP
     for ts_code, df_asset in d_preload.items():
-        print(f"STOCK LONG TERM {end_date} {ts_code}")
-
+        print(f"STOCK ALL TIME PREP {end_date} {ts_code}")
         if df_asset.empty:
             continue
 
+        # technical abvma = ability to stay over ma as long as possible
+        for freq in a_freq:
+            df_asset[f"abvma{freq}"] = Alpha.abv_ma(df=df_asset, abase="close", freq=freq, inplace=False)
+
+        # technical freqhigh = ability to create 240d high
+        for freq in a_freq:
+            df_asset[f"rolling_max{freq}"] = df_asset["close"].rolling(freq).max()
+            df_helper = df_asset.loc[df_asset[f"rolling_max{freq}"] == df_asset["close"]]
+            df_asset[f"{freq}high"] = df_helper[f"rolling_max{freq}"]
+
+        # technical freqlow = ability to avoid 240d low
+        for freq in a_freq:
+            df_asset[f"rolling_min{freq}"] = df_asset["close"].rolling(freq).min()
+            df_helper = df_asset.loc[df_asset[f"rolling_min{freq}"] == df_asset["close"]]
+            df_asset[f"{freq}low"] = df_helper[f"rolling_min{freq}"]
+
+        # fundamentals are already there, no need to create
+
+
+
+    # 2. SINGLE STOCK ALL TIME SUMMARY
+    for ts_code, df_asset in d_preload.items():
+        print(f"STOCK ALL TIME SUMMARY {end_date} {ts_code}")
+        if df_asset.empty:
+            continue
+
+        # period
         df_stock_long_term.at[ts_code, "period"] = len(df_asset)
 
-        # 1. TECHNICAL
+        # technical abvma
         for freq in a_freq:
-            for indicator in ["abvma"]:
-                df_stock_long_term.at[ts_code, f"{indicator}{freq}_mean"] = df_asset[f"{indicator}{freq}"].mean()  # the higher the better
+            df_stock_long_term.at[ts_code, f"abvma{freq}_mean"] = df_asset[f"abvma{freq}"].mean()  # the higher the better
 
-        # gmean
+        # technical gmean
         df_asset["pct_change"] = 1 + df_asset["close"].pct_change()
         df_stock_long_term.at[ts_code, f"gmean_mean"] = gmean(df_asset["pct_change"].dropna())
 
-        # all time high and 240d low
-        #df_stock_long_term.at[ts_code, f"alltimehigh"] = df_asset["alltimehigh"].clip(0, 1).sum() / len(df_asset)
+        # technical freqhigh
         for freq in a_freq:
-            df_stock_long_term.at[ts_code, f"{freq}low"] = df_asset[f"{freq}low"].clip(0, 1).sum() / len(df_asset)
             df_stock_long_term.at[ts_code, f"{freq}high"] = df_asset[f"{freq}high"].clip(0, 1).sum() / len(df_asset)
 
-        # 2. FUNDAMENTAL from time series
+        # technical freqlow
+        for freq in a_freq:
+            df_stock_long_term.at[ts_code, f"{freq}low"] = df_asset[f"{freq}low"].clip(0, 1).sum() / len(df_asset)
+
+        # fundamental from time series
         for indicator in ["pe_ttm", "pb", "ps_ttm", "dv_ttm"]:
             df_stock_long_term.at[ts_code, f"{indicator}_mean"] = df_asset[f"{indicator}"].mean()
 
-        # 3. FUNDAMENTAL from NON time series
+        # fundamental from NON time series
         df_fina = DB.get_asset(ts_code=ts_code, freq="fina_indicator", asset="E", )
         for indicator in d_fun_indicator.keys():
             df_stock_long_term.at[ts_code, f"{indicator}_mean"] = df_fina[indicator].mean()
-            # df_stock_long_term.at[ts_code,f"{indicator}_mean"]=gmean(df_fina[indicator])
-        """
-        fundamental note:
-        -This way of ranking biases overall big and good stocks, mostly big sh stocks because all stats are taking into account
-        -good growth stocks usually have high growth, but other things are bad.
-        """
 
-    # RANK LONG TERM TECHNICAL STATS
+
+
+    # 3. RANK SINGLE STOCK ONE TIME INSTITUTIONAL
+    #df_fund_portfolio = Atest.asset_fund_portfolio().set_index("ts_code", inplace=False)
+    df_fund_portfolio = DB.get(a_path=LB.a_path(r"Market\CN\ATest\fund_portfolio\all_time_statistic"), set_index="ts_code")
+    current_year=end_date[0:4]
+    current_month=end_date[4:6]
+    current_season=0
+    if current_month in ["01","02","03"]:
+        current_season = 1
+    elif current_month in ["04","05","06"]:
+        current_season = 2
+    elif current_month in ["07","08","09"]:
+        current_season = 3
+    elif current_month in ["10","11","12"]:
+        current_season = 4
+    column_name = f"{current_year}_{current_season}_rank"
+    df_stock_long_term["stock_irank"]=df_fund_portfolio[column_name] # already ranked
+    df_stock_long_term.loc[df_stock_long_term["period"].isna(),"stock_irank"]=df_stock_long_term["stock_irank"].max()
+
+
+    # 4. RANK SINGLE STOCK ALL TIME TECHNICAL
     df_stock_long_term["stock_trank"] = builtins.sum([df_stock_long_term[f"abvma{freq}_mean"].rank(ascending=False) for freq in a_freq]) * 0.1 \
                                         + df_stock_long_term[f"gmean_mean"].rank(ascending=False) * 0.60 \
                                         + builtins.sum([df_stock_long_term[f"{freq}high"].rank(ascending=False) for freq in a_freq]) * 0.15 \
                                         + builtins.sum([df_stock_long_term[f"{freq}low"].rank(ascending=True) for freq in a_freq]) * 0.15 \
 
-                                        # +  df_stock_long_term[f"alltimehigh"].rank(ascending=False)  *0.1 \
 
-    # RANK LONG TERM FUNDAMENTAL STATS: tricky as information are not complete.
-    d_fun1 = {"pe_ttm": True, "pb": True, "ps_ttm": True, "dv_ttm": False}
-    d_fun = {**d_fun1, **d_fun_indicator}
-
+    # 5. RANK SINGLE STOCK ALL TIME FUNDAMENTAL
+    d_fun = {**{"pe_ttm": True, "pb": True, "ps_ttm": True, "dv_ttm": False}, **d_fun_indicator}
     # check how many of these indicators are horizontally np.nan of a stock
     for ts_code in df_stock_long_term.index:
         df_stock_long_term.at[ts_code, "misssing_fun"] = df_stock_long_term[[f"{col}_mean" for col in d_fun]].loc[ts_code].isnull().sum()
-
-    # If one stock misses some indicator, we just don't count them: fill_value =0
+    # if one stock misses some indicator, we just don't count them: fill_value =0
     df_stock_long_term["stock_frank"] = 0.0
     for indicator, ascending in d_fun.items():
         df_stock_long_term["stock_frank"] = df_stock_long_term["stock_frank"].add(df_stock_long_term[f"{indicator}_mean"].rank(ascending=ascending), fill_value=0)
-
-    # the fundamental rank counts only categories where the stock HAS DATA.
+    # the fundamental rank counts only categories where the stock HAS DATA. = all possible cols - missing cols
     df_stock_long_term["stock_frank"] = df_stock_long_term["stock_frank"] / (len(d_fun) - df_stock_long_term["misssing_fun"])
 
-    # RANK TECHNICAL + FUNDAMENTAL STATS
-    df_stock_long_term["stock_tfrank"] = df_stock_long_term["stock_trank"] * 0.7 + df_stock_long_term["stock_frank"] * 0.3
 
-    # INDUSTRY LONG TERM TECHNICAL + FUNDAMENTAL STATS
+    # 6. RANK SINGLE STOCK ALL TIME TECHNICAL + FUNDAMENTAL + INSTITUTIONAL STATS
+    df_stock_long_term["stock_tifrank"] = df_stock_long_term["stock_trank"] * 0.7 + df_stock_long_term["stock_frank"] * 0.2 + df_stock_long_term["stock_irank"] * 0.1
+
+
+    # 7. RANK INDUSTRY ALL TIME TECHNICAL + FUNDAMENTAL + INSTITUTION
     a_group_results = []
     for group in LB.c_groups():
         df_grouped = df_stock_long_term.groupby(group, sort=False)
@@ -243,43 +357,118 @@ def predict_stock_long(df_result, d_preload, end_date=LB.today(), step=10):
         df_grouped_result = df_grouped_result.set_index("ts_code", inplace=False, drop=True)
         a_group_results += [df_grouped_result]
     df_industry_long_term = pd.concat(a_group_results, sort=False)
-    df_industry_long_term.to_csv(f"Market/CN/PredictMarket/industry_long_term_{end_date}.csv", encoding="utf-8_sig")
+    df_industry_long_term.to_csv(f"Market/CN/PredictMarket/Industry/industry_all_time_until_{end_date}.csv", encoding="utf-8_sig")
 
-    # update stock score with industry knowledge
+
+    # 8. UPDATE ALL TIME INDUSTRY STATS BACK TO SINGLE STOCK
     for ts_code in df_stock_long_term.index:
         for group in LB.c_groups():
             instance = df_stock_long_term.at[ts_code, group]
             if instance == None:
                 continue
-
             # map each group with their t, r, tr rank
-            for tf in ["t", "f", "tf"]:
+            for tf in ["t","i", "f","tif"]:
                 df_stock_long_term.at[ts_code, f"{group}_{tf}rank"] = df_industry_long_term.at[f"{group}_{instance}", f"stock_{tf}rank"]
-
     # summarize all group of one stock together into one industry overall rank
-    for tf in ["t", "f", "tf"]:
+    for tf in ["t", "i","f", "tif"]:
         df_stock_long_term[f"industry_{tf}rank"] = builtins.sum([df_stock_long_term[f"{group}_{tf}rank"] for group in LB.c_groups()])
 
-    # final rank = industry rank + stock's own rank
-    df_stock_long_term[f"final_rank"] = df_stock_long_term[f"stock_tfrank"] * 0.9 + df_stock_long_term[f"industry_tfrank"] * 0.10
 
-    # use Fund Holding only as a LONG TERM indicator because publication has lag and fund can be wrong very often too. It only shows the hotness of a stock.
+    # 9. CREATE SINGLE STOCK ALL TIME FINAL RANK
+    df_stock_long_term[f"final_rank"] = df_stock_long_term[f"stock_tifrank"] * 0.9 + df_stock_long_term[f"industry_tifrank"] * 0.10
 
-    df_stock_long_term.to_csv(f"Market/CN/PredictMarket/Stock/stock_long_term_{end_date}.csv", encoding="utf-8_sig")
+
+    df_stock_long_term.to_csv(f"Market/CN/PredictMarket/Stock/stock_all_time_until_{end_date}.csv", encoding="utf-8_sig")
     #todo add std into consideration of fundamentals rank
-
     #create stats for each stock: offensive= ability to gain, maximal high
     #defensive = year, volatility, minimal low,  year,
     #market condition: size, sh or cy market, good industry
     #general stats= good industry
+    return df_stock_long_term
 
-def predict_stock_short(df_final_industry_rank, d_preload):
+def predict_stock_short(df_result,d_preload):
+
+    """
+    indicator that stock could be good in short run
+    1. Stocks beats index (tried using that, no good result, short term seems too random)
+    2. Stock beats industry
+    3. Stock has low market correlation (The same applies to this. in short term it is too random. In long term it has no short term usage)
+    4. Stock has vol and is not too crazyly high
+    5. Stock industry as general is rising (same as beats index will not work because short term is too random)
+    6. Stock industry as general has vol (even if volume can be detected, reverse happens too quick)
+    """
+
+    df_overview=DB.get_ts_code(a_asset=["E"])# ts_code series
+    df_result_helper=df_result.copy() # time series
+
+    a_freq= [20,40]
+    a_index=["sh","cy"]
+    a_used_ts_code=[]
+    if True:
+        for index in a_index:
+            for freq in a_freq:
+                df_result_helper[f"pct_chg{freq}_{index}"]= 1 + df_result_helper[f"close_{index}"].pct_change(freq)
 
 
-    # fund holding (rank lower the better) (latest point)
-    df_fund_portfolio = Atest.asset_fund_portfolio()
-    df_fund_portfolio.set_index("ts_code", inplace=True)
-    df_stock_score["fund_portfolio_rank"] = df_fund_portfolio[f"{LB.get_today_season()}_{LB.get_today_season()}_rank"]
+        for ts_code, df_asset in d_preload.items():
+            #create past pct_change on the go
+            print(f"STOCK SHORT TERM {ts_code}")
+            if df_asset.empty:
+                continue
+
+            a_used_ts_code+=[ts_code]
+
+            #check what stock has gained in past freq
+            for freq in a_freq:
+                df_result_helper[f"pct_chg{freq}_{ts_code}"]= 1 + df_asset[f"close"].pct_change(freq)
+
+            #check if stock has gained more than three index
+            for index in a_index:
+                df_result_helper[f"{ts_code}_to_{index}"]=np.nan
+                for freq in a_freq:
+                    df_result_helper[f"{ts_code}_to_{index}_{freq}"]=df_result_helper[f"pct_chg{freq}_{ts_code}"]/df_result_helper[f"pct_chg{freq}_{index}"]
+                    df_result_helper[f"{ts_code}_to_{index}"]=df_result_helper[f"{ts_code}_to_{index}"].add(df_result_helper[f"{ts_code}_to_{index}_{freq}"],fill_value=0)
+                df_result_helper[f"{ts_code}_to_{index}"] =df_result_helper[f"{ts_code}_to_{index}"]/len(a_freq)
+
+            #combine all 3 index score together
+            df_result_helper[f"{ts_code}_to_index"]=np.nan
+            for index in a_index:
+                df_result_helper[f"{ts_code}_to_index"]=df_result_helper[f"{ts_code}_to_index"].add(df_result_helper[f"{ts_code}_to_{index}"],fill_value=0)
+            df_result_helper[f"{ts_code}_to_index"]=df_result_helper[f"{ts_code}_to_index"]/len(a_index)
+
+
+
+        #only relevant colums
+        a_relevant_col = [f"{ts_code}_to_index" for ts_code in a_used_ts_code]
+        df_result_helper = df_result_helper[a_relevant_col]
+
+        #rename f"{ts_code}_to_index" to f"ts_code"
+        df_result_helper=df_result_helper.transpose()
+        df_result_helper["ts_code"]=df_result_helper.index
+        df_result_helper["ts_code"]=df_result_helper["ts_code"].astype(str).str.slice(0,9)
+        df_result_helper=df_result_helper.set_index("ts_code", drop=True)
+
+        #a_path = LB.a_path(f"Market/CN/PredictMarket/Stock_Short_term/overview")
+        #LB.to_csv_feather(df=df_result_helper, a_path=a_path)
+    else:
+        df_result_helper=pd.read_csv("Market/CN/PredictMarket/Stock_Short_term/overview",encoding="utf-8_sig").set_index("trade_date")
+
+
+    #for each day create ts_code view and check which industy has most momentum
+    a_racing=[]
+    for trade_date in df_result.tail(500).index[::5]:
+        print(f"create date view {trade_date}")
+        df_date_view=df_overview.copy()
+        df_date_view[f"{trade_date}_mom"]=df_result_helper[trade_date]
+        d_df=DB.to_excel_with_static_data(df_ts_code=df_date_view,add_static=False, sort=[f"{trade_date}_mom",False], a_asset=["E"],path=f"Market/CN/PredictMarket/Stock_Short_Term/{trade_date}.xlsx")
+        df_group=d_df["sw_industry1"]
+        df_group[f"{trade_date}rank"]=df_group[f"{trade_date}_mom"].rank(ascending=False)
+        a_racing+=[df_group[f"{trade_date}rank"]]
+
+
+    df_racing=pd.DataFrame(a_racing)
+    a_path = LB.a_path(f"Market/CN/PredictMarket/Stock_Short_term/racing")
+    LB.to_csv_feather(df=df_racing, a_path=a_path)
 
 
 
@@ -1018,50 +1207,68 @@ def all(withupdate=False):
     1. When to buy/sell/: If market is good => predict macro market bull or bear
     2. How much to buy/sell: If market is micro market overbought or underbought
     3. What to buy/sell: Check stocks, etfs, industries, concepts
+
+
+    todo:
+    interface
+    industry PE
+    portfolio
+    validation
+    overall industry volume created by individual stock using sh_cyclemode_method or cy_trendmode
+    refactoring
+    improve FUN_Valuation
+
+    PE vs FUN and TEC RANK. how to discount pe and FUN AND TECHNICAL RANK
     """
 
     # 0: UPDATE DATA and INIT
-    if withupdate: DB.update_all_in_one_cn_v2()
+    if withupdate: DB.update_all_in_one_cn_v2(night_shift=True)
     df_result = DB.get_stock_market_overview()
     df_result["sh_volatility"] = Alpha.detect_cycle(df=df_result, abase=f"close_sh", inplace=False)  # use sh index to calculate volatility no matter what
     df_result["cy_trend"] = Alpha.detect_bull(df=df_result, abase=f"close_cy", inplace=False)  # use cy index to detect macro trends
     df_result["market_trend"] = 0.0  # reserved for usage later
     df_result_copy = df_result.copy()
-    # d_preload = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
+    d_preload_E = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN")
+    #d_preload_FD = DB.preload(asset="FD", freq="D", on_asset=True, step=1, market="CN")
 
+
+    #0.1 ADD PE, PB of all stock view
+    pe_overview(df_result=df_result,d_preload=d_preload_E)
+
+    return
 
     # 1. STOCK LONG TERM SCORE
-    for year in range(2000, 2021):
-        for month in [ "03", "06",  "09",  "12"]:
-            until_date = f"{year}{month}01"
-            print(f"calculate stock score until {until_date}")
-            d_preload_until = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN", query_df=f"trade_date < {until_date}")
-            predict_stock_long(df_result=df_result, d_preload=d_preload_until, end_date=until_date)
+    if True:
+        for trade_date in df_result.index[::240]:
+            #create stock rank for a given date
+            d_preload_E_until = DB.preload(asset="E", freq="D", on_asset=True, step=1, market="CN", query_df=f"trade_date <= {trade_date}")
+            df_long_term=predict_stock_long( d_preload=d_preload_E_until, end_date=trade_date)
+
+            #create portfolio strategy for a given date
+            create_portfolio(df_result=df_result,df_stock_long_term=df_long_term, end_date=trade_date)
 
     return
 
 
     # 2. STOCK SHORT TERM
-
-
-    # 2.1: FIRST PREDICT MARKET
-    """predict_trendmode(df_result=df_result, index="cy", d_preload=d_preload)
-    df_result=predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload)
-    df_result["market_pquota"]=df_result["cy_trendmode_pquota"]+df_result["sh_cyclemode_pquota"]
-
-    #delete volume as they will not be used later
-    for cn_market in ["sh","sz","cy"]:
-        if f"vol_{cn_market}"in df_result.columns:
-            del df_result[f"vol_{cn_market}"]
-    a_path = LB.a_path(f"Market/CN/PredictMarket/Predict_Market")
-    LB.to_csv_feather(df=df_result, a_path=a_path)
-    df_result = df_result.set_index("index")
-
-"""
-
-    # 2. 2: SECOND PREDICT INDUSTRY
+    # 2.1: first predict market
     if False:
-        df_final_industry_rank = predict_industry(df_result_copy=df_result_copy, d_preload=d_preload)
+        predict_trendmode(df_result=df_result, index="cy", d_preload=d_preload_E)
+        df_result=predict_cyclemode(df_result=df_result, index="sh", d_preload=d_preload_E)
+        df_result["market_pquota"]=df_result["cy_trendmode_pquota"]+df_result["sh_cyclemode_pquota"]
+
+        #delete volume as they will not be used later
+        for cn_market in ["sh","sz","cy"]:
+            if f"vol_{cn_market}"in df_result.columns:
+                del df_result[f"vol_{cn_market}"]
+        a_path = LB.a_path(f"Market/CN/PredictMarket/Predict_Market")
+        LB.to_csv_feather(df=df_result, a_path=a_path)
+        df_result = df_result.set_index("index")
+
+
+    # 2. 2: second predict industry
+    if False:
+        df_final_industry_rank = predict_industry(df_result_copy=df_result_copy, d_preload=d_preload_E)
         a_path = LB.a_path(f"Market/CN/PredictMarket/Industry_Score")
         LB.to_csv_feather(df=df_final_industry_rank, a_path=a_path)
     else:
@@ -1069,18 +1276,19 @@ def all(withupdate=False):
     df_final_industry_rank = df_final_industry_rank.set_index("index")
 
 
-    # 2. 3: THIRD STOCK SHORT TERM SCORE
-    df_stock_score = predict_stock_short(df_final_industry_rank=df_final_industry_rank, d_preload=d_preload)
-    a_path = LB.a_path(f"Market/CN/PredictMarket/Stock_Score")
-    LB.to_csv_feather(df=df_stock_score, a_path=a_path)
-    df_stock_score = df_stock_score.set_index("index")
+    # 2. 3: third calc stock short term
+    predict_stock_short(df_result=df_result,d_preload=d_preload_E)
 
-    return
 
     # 4: validate PREDICTION
-    df_validate = validate(df_result=df_result, index="cy")
-    a_path = LB.a_path(f"Market/CN/PredictMarket/Validate")
-    LB.to_csv_feather(df=df_validate, a_path=a_path)
+    if False:
+        df_validate = validate(df_result=df_result, index="cy")
+        a_path = LB.a_path(f"Market/CN/PredictMarket/Validate")
+        LB.to_csv_feather(df=df_validate, a_path=a_path)
+
+
+
+
 
 
 def _deprecated_seasonal_effect(df_result, debug=0):
@@ -1316,7 +1524,7 @@ def _deprecated_cummulative_volume_vs_sh():
 
 
 if __name__ == '__main__':
-    # DB.update_all_in_one_cn_v2(until=10,night_shift=False)
+    #DB.update_all_in_one_cn_v2(until=10,night_shift=False)
     all(withupdate=False)
 
 """
