@@ -905,7 +905,7 @@ def a_path(path: str = ""): # csv = 0. feather = 1
 
 
 def handle_save_exception(e, path):
-    if type(e) in [UnicodeDecodeError, FileNotFoundError, xlsxwriter.exceptions.FileCreateError]:
+    if type(e) in [UnicodeDecodeError, FileNotFoundError]:  # xlsxwriter.exceptions.CreatefileError
         folder = "/".join(path.rsplit("/")[:-1])
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -938,7 +938,7 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
     if not skip_feather:
         for _ in range(10):
             try:
-                df.to_feather(a_path[1])
+                df.to_feather(a_path[1],)
                 break
             except Exception as e:
                 handle_save_exception(e, a_path[1])

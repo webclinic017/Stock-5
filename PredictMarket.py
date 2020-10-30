@@ -1212,6 +1212,7 @@ def all(withupdate=False):
     todo:
     interface
     industry PE
+    pe if it can be used to calculate overall long term signal
     portfolio
     validation
     overall industry volume created by individual stock using sh_cyclemode_method or cy_trendmode
@@ -1524,8 +1525,8 @@ def _deprecated_cummulative_volume_vs_sh():
 
 
 if __name__ == '__main__':
-    #DB.update_all_in_one_cn_v2(until=10,night_shift=False)
-    all(withupdate=False)
+    DB.update_all_in_one_cn_v2(until=10, night_shift=True)
+    # all(withupdate=False)
 
 """
 

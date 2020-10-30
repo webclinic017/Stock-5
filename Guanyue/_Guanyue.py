@@ -3210,6 +3210,8 @@ def variable_to_string(var):
     content = str(var)
     if content == "nan":
         return "'',"
+    elif content in ["True", "False"]:
+        return "" + content.lower() + ","
     else:
         return "'" + content + "',"
 
@@ -3241,7 +3243,6 @@ for index, content in df_kiwi_anna.iterrows():
     ]
 
     talent_string = "".join(talent_string)
-
     result_string = result_string + talent_string
 
 print(result_string)

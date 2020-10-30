@@ -1621,12 +1621,12 @@ def update_all_in_one_cn_v2(night_shift=False, until=999):
     # 1.0. GENERAL - CAL_DATE
     update_trade_cal()  # always update
 
+    for asset in ["sw_industry1", "sw_industry2", "sw_industry3", "concept", "jq_industry1", "jq_industry2", "zj_industry1"]:
+        if night_shift: update_ts_code(asset)  # SOMETIMES UPDATE
+
     # # 1.3. GENERAL - TS_CODE
     for asset in ["I","E","G"]:#"F" sometimes bug
         update_ts_code(asset)  # ALWAYS UPDATE
-
-    for asset in ["sw_industry1", "sw_industry2","sw_industry3","concept"]:
-        if night_shift: update_ts_code(asset)  # SOMETIMES UPDATE
 
     # # 1.5. GENERAL - TRADE_DATE (later than ts_code because it counts ts_codes)
     for freq in ["D"]:  # Currently only update D and W, because W is needed for pledge stats
