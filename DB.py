@@ -746,7 +746,12 @@ def update_asset_CNHK(asset="E", freq="D", market="CN", step=1, night_shift=True
                 #add period for all stocks
                 Alpha.period(df=df, inplace=True)
 
-            LB.to_csv_feather(df=df, a_path=a_path, skip_csv=True)  # save space
+                #add abvma for all stocks
+                for freq in [240]:
+                    df[f"abvma{freq}"]=Alpha.abv_ma(df=df, abase="close",inplace=False,freq=freq)
+
+
+            LB.to_csv_feather(df=df, a_path=a_path, skip_csv=False, skip_feather=True)  # save space using feather, but cannot be opened by html
             print(asset, ts_code, freq, end_date, "UPDATED!", real_latest_trade_date)
             print("=" * 50)
             print()
@@ -784,11 +789,10 @@ def update_asset_G(asset=["E"], night_shift=True, step=1):
     # preparation. operations that has to be done for all stocks ONCE
     for ts_code, df_asset in d_preload.items():
         print("pre processing ts_code", ts_code)
-
         df_nummeric = LB.df_to_numeric(df_asset)
-
         df_nummeric["divide_helper"] = 1  # counts how many asset are there at one day
         d_preload[ts_code] = df_nummeric
+
 
     # loop over all stocks
     for group, a_instance in LB.c_d_groups(assets=["E"]).items():
@@ -823,6 +827,11 @@ def update_asset_G(asset=["E"], night_shift=True, step=1):
                     #in case there are inf or na values.
                     df_asset=df_asset.replace([np.inf, -np.inf], np.nan)
 
+                    #clip these 4 cols before they add crazy values to the group data
+                    for col in ["pe_ttm","pb","ps_ttm","dv_ttm"]:
+                        if col in df_asset.columns:
+                            df_asset[col]=df_asset[col].clip(0,200)
+
                     #add together
                     df_instance = df_instance.add(df_asset, fill_value=0)
 
@@ -833,10 +842,17 @@ def update_asset_G(asset=["E"], night_shift=True, step=1):
                 df_instance = df_instance[example_column]  # align columns
                 df_instance.insert(0, "ts_code", f"{group}_{instance}")
 
+                #create new ohlc because it will not be accurate. We must use total_mv as our only guide
+                if "total_mv" not in df_instance.columns:
+                    raise AssertionError
+                df_instance["open"]=df_instance["high"]=df_instance["low"]=df_instance["close"]=df_instance["total_mv"]/df_instance["total_mv"].iat[0]
+
+                df_instance["pct_chg"]=df_instance["close"].pct_change()*100
+
             #if this is not the case, then to feather will be error
             df_instance.index=df_instance.index.astype(int)
 
-            LB.to_csv_feather(df_instance, LB.a_path(f"Market/CN/Asset/G/D/{group}_{instance}"), skip_csv=True)
+            LB.to_csv_feather(df_instance, LB.a_path(f"Market/CN/Asset/G/D/{group}_{instance}"), skip_feather=True)
             print(f"{group}_{instance} UPDATED")
 
 
@@ -1305,9 +1321,10 @@ def get(a_path=[], set_index=""):  # read feather first
         try:
             return LB.set_index(func(a_path[counter]), set_index=set_index)
         except Exception as e:
-            print(f"read error {func.__name__}", e)
+            pass
+            #print(f"{func.__name__} error. now try", e)
     else:
-        print("DB READ File Not Exist!", f"{a_path[0]}.feather")
+        print("DB READ File Not Exist!", f"{a_path[0]}.feather or {a_path[1]}.csv")
         return pd.DataFrame()
 
 def get_trade_cal_D(start_date="00000000", end_date="30000000", a_is_open=[1], market="CN"):
@@ -1393,7 +1410,15 @@ def get_date(trade_date, a_asset=["E"], freq="D", market="CN"):  # might need ge
     return pd.concat(a_df, sort=False) if len(a_df) > 1 else a_df[0]
 
 
+#his returns the G TS_code like, asset_E, sw_industry3_机场
+def get_group_instance(group="sw_industry1"):
+    df= get_ts_code(a_asset=["G"])
+    return list(df[df["group"]==group].index)
 
+#his returns the E TS_code like, 600519.SH, 300136.SZ
+def get_group_members(group="sw_industry1", instance="食品饮料"):
+    df= get_ts_code(a_asset=["E"])
+    return list(df[df[group]==instance].index)
 
 
 def get_stock_market_all(market="CN"):
@@ -1517,7 +1542,7 @@ def preload(asset="E", freq="D", on_asset=True, step=1, query_df="", period_abv=
     bar.close()
 
     # print not loaded index
-    a_notloaded = [print(f"not loaded: {x}") for x in df_index.index if x not in d_result]
+    a_notloaded = [print(f"not in preload: {x}") for x in df_index.index if x not in d_result]
     print(f"LOADED : {len(d_result)}")
     print(f"NOT LOADED : {len(a_notloaded)}")
     return d_result
@@ -1621,7 +1646,7 @@ def update_all_in_one_cn_v2(night_shift=False, until=999):
     # 1.0. GENERAL - CAL_DATE
     update_trade_cal()  # always update
 
-    for asset in ["sw_industry1", "sw_industry2", "sw_industry3", "concept", "jq_industry1", "jq_industry2", "zj_industry1"]:
+    for asset in ["sw_industry1", "sw_industry2", "sw_industry3", "concept", ]:#"jq_industry1", "jq_industry2", "zj_industry1"
         if night_shift: update_ts_code(asset)  # SOMETIMES UPDATE
 
     # # 1.3. GENERAL - TS_CODE
@@ -1636,10 +1661,10 @@ def update_all_in_one_cn_v2(night_shift=False, until=999):
         return print(f"update_all_in_one_cn2 finished until {until}")
 
     # 2.2. ASSET
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "I", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 40 mins
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "E", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
-    LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": "FD", "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 60 mins
-    #update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
+    for asset in ["I","E","FD"]:
+        LB.multi_process(func=update_asset_CNHK, a_kwargs={"asset": asset, "freq": "D", "market": "CN", "night_shift": False, "miniver":False}, a_partial=LB.multi_steps(4))  # 40 mins
+    update_asset_G(night_shift=night_shift)  # update concept is very very slow. = Night shift
+
 
     if until <= 3:
         return print(f"update_all_in_one_cn2 finished until {until}")
@@ -1677,14 +1702,15 @@ if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
     try:
-        night_shift = False
+        night_shift = True
+         # update concept is very very slow. = Night shift
 
         # update_all_in_one_hk()
         # update_all_in_one_us()
         #update_all_in_one_us()
         #update_asset_stock_market_all()
 
-        #update_all_in_one_cn()
+        update_all_in_one_cn_v2()
 
 
 

@@ -1230,7 +1230,7 @@ def asset_fund_portfolio():
         if df_asset.empty:
             continue
         else:
-            print("counting from FD port folio ",ts_code)
+            print("asset_fund_portfolio counting from FD port folio ",ts_code)
 
 
         df_asset["count"]=1
@@ -1263,7 +1263,7 @@ def asset_fund_portfolio():
 
 
 # measures the overall bullishness of an asset using GEOMEAN. replaces bullishness
-def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99999999,market="CN", step=1, a_asset=["E", "I", "FD", "F", "G"]):
+def asset_bullishness(df_ts_code=pd.DataFrame(), start_date=00000000,end_date=99999999,market="CN", step=1, a_asset=["E", "I", "FD", "G"]):
     # init
 
     if df_ts_code.empty:
@@ -1569,10 +1569,33 @@ def date_volatility():
     df_result.to_csv("volatilty.csv")
 
 
+def stop_rule():
+    """this one time function tries to find the best time to buy or sell using 37% rule, stop rule.
+
+
+    short term distribution: random, rule of small number
+
+
+
+     variation 1: Look back freq days, see the highest
+
+
+     result by logic:
+     this is not possible because the rule of small number says that if the number is small ,the distribution is normal.
+     Only if the distribution is big enough, the distribution is equal distributed.
+
+     That's why even if you count the short term results, it will not predict the future result because short term is normal distributed and random.
+
+     """
+
+
+
+    pass
+
 if __name__ == '__main__':
     pr = cProfile.Profile()
     pr.enable()
-    asset_bullishness(a_asset=["E","FD","I"],step=1)
+    asset_bullishness(a_asset=["E","FD","I","G"],step=1)
 
     # todo 1. remove sh_index correlation when using us stock, add industry, add us index, add polyfit error into bullishness
 

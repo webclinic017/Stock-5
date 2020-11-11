@@ -222,6 +222,16 @@ def c_root_beta():
 def c_assets():
     return ["I", "E", "FD"]
 
+def c_pluarity():
+    return ["all","index","industry","stock"]
+"""
+all= all stocks
+index = major 3 index
+industry = group G
+stock - individual stock
+"""
+
+
 def c_asset():
     return ["I","E"]
 
@@ -251,6 +261,8 @@ def c_G_queries_small_groups():
 def c_groups():
     return ['sw_industry1','sw_industry2', 'jq_industry1','jq_industry2','zj_industry1']
 
+
+
 def c_index_queries(market="CN"):
     return {"I": [f"ts_code in {c_index(market=market)}"]}
 
@@ -265,6 +277,7 @@ def c_market_queries(market="主板"):
 
 def c_instance_queries(instance="高速公路"):
     return {"G": [f"instance == '{instance}'"]}
+
 
 
 def c_index(market="CN"):
@@ -922,6 +935,8 @@ def handle_save_exception(e, path):
 
 # reset index no matter what because of feather format. Drop index depends if index is relevant. CSV store index is always false
 def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv=False):  # utf-8_sig
+
+
     try:
         df.reset_index(drop=(not index_relevant), inplace=True)  # reset index no matter what because feather can only store normal index. if index relevant then dont drop
     except Exception as e:
@@ -942,6 +957,8 @@ def to_csv_feather(df, a_path, index_relevant=True, skip_feather=False, skip_csv
                 break
             except Exception as e:
                 handle_save_exception(e, a_path[1])
+
+
 
 
 def to_excel(path, d_df, index=True):

@@ -644,6 +644,27 @@ def main():
     #A: https://www.legulegu.com/stockdata/below-net-asset-statistics
     #A: it has some predictability, but it does not work 100%. I won't use it for now
 
+    #Q: What is the law of small number?
+    #A: probably the first and most important thing every trader should know
+    #A: If the number is small, the distribution is not poisson, but normal distributed.
+    #A: Some number can come up repeatedly and some number can not show up at all
+    #A: Only if the number is really really big, the law of big number apply, otherwise, the law of small number has its randomness effect in it.
+    #A: EVEN if knowing the current outcome, you can not predict the future outcome because the short run is random. It is called the Gambler's fallacy.
+    #A: So what do we do? Long Run Investment.
+
+    #Q: how to use PE, PB, PS?
+    #A: They are not good at predicting macro movements although they are very slow and represent value
+    #A: They are good at ranking industry or stocks by their value
+
+    #what is 20%-80% rule?
+    #A: 20% of the time contributes to 80% of the market movements (up or down).
+    #According to this rule, you can usually assume that we are in cycle mode.
+
+
+    #What are 3 most important rules:
+    #A: Rule of big number, rule of small number, 20%-80% rule
+
+
 
 
 """

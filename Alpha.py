@@ -247,9 +247,9 @@ def extrema_rdm(df,abase, inplace,name,cols,n=60):
     return alpha_return(locals())
 
 @alpha_wrap
-def minima(df, abase, inplace, name, cols, n=60):
+def minima(df, abase, inplace, name, cols, freq=60):
     #find minimum
-    min_index = argrelmin(df[abase].to_numpy(), order=n)[0]
+    min_index = argrelmin(df[abase].to_numpy(), order=freq)[0]
 
     #get index of these minimum
     index=pd.Series(df.index).loc[min_index]
@@ -259,9 +259,9 @@ def minima(df, abase, inplace, name, cols, n=60):
     return alpha_return(locals())
 
 @alpha_wrap
-def maxima(df, abase, inplace, name, cols, n=60):
+def maxima(df, abase, inplace, name, cols, freq=60):
     #find minimum
-    min_index = argrelmax(df[abase].to_numpy(), order=n)[0]
+    min_index = argrelmax(df[abase].to_numpy(), order=freq)[0]
 
     #get index of these minimum
     index=pd.Series(df.index).loc[min_index]
@@ -271,9 +271,9 @@ def maxima(df, abase, inplace, name, cols, n=60):
     return alpha_return(locals())
 
 @alpha_wrap
-def extrema(df, abase, inplace, name, cols, n=60):
-    helper_min=minima(df=df,abase=abase,n=n,inplace=False)
-    helper_max=maxima(df=df,abase=abase,n=n,inplace=False)
+def extrema(df, abase, inplace, name, cols, freq=60):
+    helper_min=minima(df=df, abase=abase, freq=freq, inplace=False)
+    helper_max=maxima(df=df, abase=abase, freq=freq, inplace=False)
     helper_max.update(helper_min.dropna())
     df[f"{name}"] =helper_max
     return alpha_return(locals())
@@ -335,6 +335,10 @@ def poly_fit(df, abase, inplace, name, cols, degree=1):
     df[f"{name}[residuals]"] = abs(df[name]-df[abase])
     return alpha_return(locals())
 
+@alpha_wrap
+def stan(df, abase, inplace, name, cols):
+    df[name] = (df[abase]-df[abase].mean())/df[abase].std()
+    return alpha_return(locals())
 
 @alpha_wrap
 def norm(df, abase, inplace, name, cols, min=0, max=1):
@@ -383,14 +387,14 @@ def rollingnorm(df, abase, inplace, name, cols, freq, min=0, max=1):
     return alpha_return(locals())
 
 @alpha_wrap
-def fol_rolling_norm(df, abase, inplace, name, cols, freq_obj=range(10, 510, 10) ):
+def fol_rolling_norm(df, abase, inplace, name, cols, a_freqs=range(10, 510, 10)):
 
     """creates frequency overlay of rolling norm"""
     df[name] = 0.0
     a_del_cols = []
 
     # create fol for rolling norm
-    for divideby, freq in enumerate(freq_obj):
+    for divideby, freq in enumerate(a_freqs):
         one_rolling_norm = rollingnorm(df=df, abase=abase, freq=freq, inplace=True)
         df[name] += df[one_rolling_norm]
         a_del_cols += [one_rolling_norm]
@@ -1822,12 +1826,12 @@ def detect_cycle(df, abase, inplace, name, cols, a_freqs=[60, 120, 240, 360]):
     return alpha_return(locals())
 
 @alpha_wrap
-def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, range_obj=range(10, 510, 10)):
+def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, a_freqs=range(10, 510, 10)):
     """
     this function detects in what mode/phase the cy stock is
     """
 
-    fol_rolling_name=fol_rolling_norm(df=df,abase=abase,inplace=True, freq_obj=range_obj)
+    fol_rolling_name=fol_rolling_norm(df=df, abase=abase, inplace=True, a_freqs=a_freqs)
 
     #produce bull or bear market. 1 means bull, -1 means bear.
     bull_bear = 0.0
@@ -1858,7 +1862,7 @@ def detect_bull(df, abase, inplace, name, cols, bull_val=1, bear_val=-1, range_o
         del df["off_rolling_max_60"]
 
     # cut the first 240 days of signal as they are usually not accurate
-    range_max=range_obj[-1]
+    range_max=a_freqs[-1]
     for trade_date,  abase_result in zip(df.index,df[abase]):
         if (not math.isnan(float(abase_result)))  and (not np.isnan(abase_result)):
             if range_max>0:
@@ -2483,8 +2487,8 @@ if __name__ == '__main__':
     UI.plot_chart(df_result_copy, ["close", label_240], {})
     df_result_copy.to_csv("test.csv")
 
-    maxima_l=maxima(df=df_result_copy, abase="close", n=120, inplace=True)
-    minima_l=minima(df=df_result_copy, abase="close", n=120, inplace=True)
+    maxima_l=maxima(df=df_result_copy, abase="close", freq=120, inplace=True)
+    minima_l=minima(df=df_result_copy, abase="close", freq=120, inplace=True)
     maxima_d=extrema_dis(df=df_result_copy, abase=maxima_l, inplace=True)
     minima_d=extrema_dis(df=df_result_copy, abase=minima_l, inplace=True)
     df_result_copy["diff"]= df_result_copy[maxima_d] - df_result_copy[minima_d]
